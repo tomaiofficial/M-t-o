@@ -1424,7 +1424,7 @@ async function displayWeatherData(weatherData) {
     const searchBtn = document.querySelector('.menu-btn');
     if (searchBtn) searchBtn.style.opacity = '0.5';
 
-    void (0); { // try replaced
+    { // Block to scope variables
         // Use data if available, else defaults handled below
         const current = weatherData?.current || {};
         
@@ -1798,6 +1798,7 @@ async function displayWeatherData(weatherData) {
         
         // Réinitialiser le bouton de recherche
         if (searchBtn) searchBtn.style.opacity = '1';
+    } // End block
 
 function updateBackground(weatherCode, isDay) {
     const bg = document.querySelector('.bg-layer');
