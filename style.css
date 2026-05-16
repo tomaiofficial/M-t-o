@@ -1430,3 +1430,14 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
         font-size: 24px !important;
     }
 }
+
+/* Mobile fixes - enable touch */
+@media (max-width: 480px) and (pointer: coarse) {
+    body {
+        touch-action: manipulation;
+    }
+    button, a, input {
+        min-height: 44px;
+        min-width: 44px;
+    }
+}
