@@ -3106,6 +3106,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, 8000); // Timeout plus long pour GPS
     } else {
+        // Immediate fallback - show Paris first while geolocation loads
+        updateWeather('Paris');
+        
         // Sur desktop, essayer geolocation avec timeout
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
@@ -3119,7 +3122,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     updateWeather('Paris');
                     startAutoRefresh();
                 },
-                { timeout: 8000 }
+                { timeout: 3000 }
             );
         } else {
             clearTimeout(loadingTimeout);
