@@ -1310,3 +1310,48 @@ body {
 .setting-value{color:#666}
 .toggle-btn{padding:8px 16px;border-radius:20px;border:1px solid #ddd;background:#fff;cursor:pointer}
 .toggle-btn.active{background:#00BFFF;color:#fff;border-color:#00BFFF}
+
+/* Settings Button */
+.settings-btn {
+    background: rgba(255,255,255,0.2);
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    font-size: 22px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.settings-btn:hover {
+    background: rgba(255,255,255,0.3);
+    transform: rotate(45deg);
+    border-color: rgba(255,255,255,0.5);
+}
+.settings-btn:active {
+    transform: scale(0.95) rotate(45deg);
+}
+
+/* Modal Animation */
+.modal {
+    animation: fadeIn 0.3s ease;
+}
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+.modal-content {
+    animation: slideUp 0.3s ease;
+}
+@keyframes slideUp {
+    from { transform: translateY(50px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+.setting-item {
+    transition: background 0.2s;
+}
+.setting-item:hover {
+    background: #f5f5f5;
+}
