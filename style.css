@@ -308,7 +308,8 @@ body {
     transition: all 0.5s ease;
 }
 
-.city {
+.city,
+.cities-weather .city {
     transition: all 0.3s ease;
 }
 
@@ -603,7 +604,8 @@ body {
     justify-content: flex-start;
 }
 
-.city {
+.city,
+.cities-weather .city {
     font-size: 32px;
     font-weight: 400;
     margin-bottom: 4px;
@@ -1240,7 +1242,8 @@ body {
         transform: none !important;
     }
 
-    #detail-view .city {
+    #detail-view .city,
+.cities-weather .city {
         font-size: clamp(28px, 7vw, 34px) !important;
         margin-bottom: 0 !important;
         text-align: center !important;
@@ -1278,7 +1281,8 @@ body {
         margin-bottom: 4px !important;
     }
 
-    #detail-view .city {
+    #detail-view .city,
+.cities-weather .city {
         font-size: 26px !important;
     }
 
@@ -1355,4 +1359,14 @@ body {
 }
 .setting-item:hover {
     background: #f5f5f5;
+}
+
+/* Force center city names */
+.cities-weather .city,
+.cities-weather .weather-hero .city,
+#detail-view .city,
+.city-name {
+    text-align: center !important;
+    display: block !important;
+    width: 100% !important;
 }
