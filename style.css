@@ -1409,3 +1409,24 @@ div, span, p, h1, h2, h3, h4, h5, h6 {
     flex-direction: column;
     align-items: center;
 }
+
+/* Mobile responsive */
+@media (max-width: 480px) {
+    body {
+        max-width: 100%;
+        padding: 10px;
+    }
+    .weather-container {
+        max-width: 100%;
+    }
+    .card, .weather-hero, .modal-content {
+        max-width: 100%;
+        margin: 5px;
+    }
+    .big-temp {
+        font-size: 60px !important;
+    }
+    .city {
+        font-size: 24px !important;
+    }
+}
