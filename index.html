@@ -54,7 +54,6 @@
                     <div class="cities-actions">
                         <button id="cities-edit" class="cities-edit" aria-label="Modifier" aria-pressed="false">✎</button>
                         <button id="settings-btn" class="settings-btn" aria-label="Paramètres">⚙</button>
-                        <button id="settings-btn" class="settings-btn" aria-label="Paramètres">⚙</button>
                         <button id="cities-close" class="cities-close" aria-label="Fermer">✕</button>
                     </div>
                 </div>
@@ -73,7 +72,6 @@
                             <div class="nav nav-detail">
                                 <button id="back-to-cities" class="back-btn" aria-label="Menu">☰</button>
                                 
-                                <button id="settings-btn" class="settings-btn" aria-label="Paramètres">⚙</button>
                                 <button id="settings-btn" class="settings-btn" aria-label="Paramètres">⚙</button>
                             </div>
                             
@@ -333,7 +331,6 @@
                     <div class="cities-actions">
                         <button id="cities-edit" class="cities-edit" aria-label="Modifier" aria-pressed="false">✎</button>
                         <button id="settings-btn" class="settings-btn" aria-label="Paramètres">⚙</button>
-                        <button id="settings-btn" class="settings-btn" aria-label="Paramètres">⚙</button>
                         <button id="cities-close" class="cities-close" aria-label="Fermer">✕</button>
                     </div>
                 </div>
@@ -554,3 +551,34 @@
     <script src="script.js?v=99"></script>
 </body>
 </html>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="modal hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Paramètres</h2>
+            <button id="close-settings" class="close-btn">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="setting-item">
+                <label>Température</label>
+                <div class="setting-toggle">
+                    <span>°C</span>
+                    <button class="toggle-btn active">°F</button>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>Notifications</label>
+                <button class="toggle-btn active">Activé</button>
+            </div>
+            <div class="setting-item">
+                <label>Dernière mise à jour</label>
+                <span class="setting-value">Il y a 2 min</span>
+            </div>
+            <div class="setting-item">
+                <label>Version</label>
+                <span class="setting-value">1.0.0</span>
+            </div>
+        </div>
+    </div>
+</div>

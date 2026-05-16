@@ -1296,3 +1296,17 @@ body {
 .city-card-delete{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:rgba(255,59,48,0.9);color:#fff;border:none;border-radius:50%;width:28px;height:28px;font-size:16px;cursor:pointer;opacity:0;transition:opacity 0.3s}
 .cities-edit-mode .city-card-delete{opacity:1}
 .nav-title{display:none}
+
+/* Settings Modal */
+.modal {position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center}
+.modal.hidden{display:none}
+.modal-content{background:#fff;border-radius:20px;width:90%;max-width:400px;max-height:80vh;overflow:auto}
+.modal-header{display:flex;justify-content:space-between;align-items:center;padding:20px;border-bottom:1px solid #eee}
+.modal-header h2{margin:0;color:#333}
+.close-btn{background:none;border:none;font-size:24px;cursor:pointer;color:#666}
+.modal-body{padding:20px}
+.setting-item{display:flex;justify-content:space-between;align-items:center;padding:15px 0;border-bottom:1px solid #eee}
+.setting-item label{color:#333;font-weight:500}
+.setting-value{color:#666}
+.toggle-btn{padding:8px 16px;border-radius:20px;border:1px solid #ddd;background:#fff;cursor:pointer}
+.toggle-btn.active{background:#00BFFF;color:#fff;border-color:#00BFFF}
