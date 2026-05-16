@@ -651,6 +651,7 @@ body {
     border-radius: 22px;
     padding: 14px;
     border: 0.5px solid rgba(255, 255, 255, 0.15);
+    overflow: hidden;
 }
 
 .card-label {
@@ -672,58 +673,64 @@ body {
 }
 
 /* Hourly */
-.hourly-scroll {
+.hourly-container {
     display: flex;
-    gap: 20px;
+    gap: 12px;
     overflow-x: auto;
-    padding: 20px 0;
+    padding: 8px 0;
     scrollbar-width: none;
     -ms-overflow-style: none;
 }
 
-.hourly-scroll::-webkit-scrollbar {
+.hourly-container::-webkit-scrollbar {
     display: none;
 }
 
-.hourly-item {
+.hour-card {
+    min-width: 60px;
+    flex-shrink: 0;
+    text-align: center;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
-    min-width: 50px;
-    padding: 8px;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 12px;
+    gap: 6px;
+    padding: 10px 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 14px;
     transition: all 0.3s ease;
 }
 
-.hourly-item .time {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.6);
-    text-align: center;
-    font-weight: 300;
+.hour-card:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: scale(1.05);
 }
 
-.hourly-item .temp {
-    font-size: 14px;
+.hour-card .time {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 300;
+    white-space: nowrap;
+}
+
+.hour-card .icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    width: 44px;
+    margin: 2px 0;
+}
+
+.hour-card .temp {
+    font-size: 15px;
     font-weight: 400;
     color: #fff;
 }
 
-.hourly-item .rain {
-    font-size: 10px;
+.hour-card .rain {
+    font-size: 11px;
     color: #87CEEB;
     text-align: center;
-    margin-top: 2px;
-}
-
-.hourly-item .icon {
-    font-size: 40px;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 50px;
 }
 
 /* Next Hour Forecast */

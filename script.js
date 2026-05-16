@@ -195,12 +195,12 @@ function renderHourly(hourly) {
     const h = new Date(times[i]).getHours();
     const label = i === 0 ? 'Maintenant' : `${h}h`;
     const icon = createWeatherIconSVG(codes[i], true, 28);
-    html += `<div class="hourly-item">
-      <div class="time">${label}</div>
-      <div class="icon">${icon}</div>
-      <div class="temp">${Math.round(temps[i] || 0)}°</div>
-      ${probs[i] != null ? `<div class="rain">${probs[i]}%</div>` : ''}
-    </div>`;
+      html += `<div class="hour-card">
+        <div class="time">${label}</div>
+        <div class="icon">${icon}</div>
+        <div class="temp">${Math.round(temps[i] || 0)}°</div>
+        ${probs[i] != null ? `<div class="rain">${probs[i]}%</div>` : ''}
+      </div>`;
   }
   container.innerHTML = html;
 }
