@@ -581,4 +581,57 @@
             </div>
         </div>
     </div>
-</div>
+
+    <script src="apple-weather-icons.js?v=3"></script>
+    <script src="weather-icons.js?v=11"></script>
+    <script src="script.js?v=101"></script>
+    
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Paramètres modal
+        var settingsBtn = document.getElementById('settings-btn');
+        var settingsBtnDetail = document.getElementById('settings-btn-detail');
+        var settingsModal = document.getElementById('settings-modal');
+        var closeSettings = document.getElementById('close-settings');
+        
+        function openSettings() {
+            if(settingsModal) settingsModal.classList.remove('hidden');
+            var now = new Date();
+            var lastUpdate = document.getElementById('last-update');
+            if(lastUpdate) lastUpdate.textContent = 'À ' + now.getHours() + 'h' + (now.getMinutes()<10?'0':'') + now.getMinutes();
+        }
+        
+        if(settingsBtn) settingsBtn.addEventListener('click', openSettings);
+        if(settingsBtnDetail) settingsBtnDetail.addEventListener('click', openSettings);
+        if(closeSettings) closeSettings.addEventListener('click', function() {
+            if(settingsModal) settingsModal.classList.add('hidden');
+        });
+        if(settingsModal) {
+            settingsModal.addEventListener('click', function(e) {
+                if(e.target === settingsModal) settingsModal.classList.add('hidden');
+            });
+        }
+        
+        // Toggle température
+        var tempToggle = document.getElementById('temp-unit-toggle');
+        if(tempToggle) {
+            tempToggle.addEventListener('click', function() {
+                var isCelsius = this.textContent === '°C';
+                this.textContent = isCelsius ? '°F' : '°C';
+                this.classList.toggle('active');
+            });
+        }
+        
+        // Toggle notifications
+        var notifToggle = document.getElementById('notifications-toggle');
+        if(notifToggle) {
+            notifToggle.addEventListener('click', function() {
+                var isActive = this.classList.contains('active');
+                this.classList.toggle('active');
+                this.textContent = isActive ? 'Désactivé' : 'Activé';
+            });
+        }
+    });
+    </script>
+</body>
+</html>
