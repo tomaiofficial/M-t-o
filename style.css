@@ -1370,3 +1370,16 @@ body {
     display: block !important;
     width: 100% !important;
 }
+
+/* Fix all city displays */
+[class*="city"] {
+    text-align: center !important;
+}
+.city-card,
+.city-name,
+.temp-card-label,
+.card-city {
+    text-align: center !important;
+    display: flex !important;
+    justify-content: center !important;
+}
