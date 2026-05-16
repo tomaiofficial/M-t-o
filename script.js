@@ -3182,3 +3182,30 @@ function displayTempRange(weatherData) {
     
     container.innerHTML = html;
 }
+
+// Settings Modal
+document.addEventListener('DOMContentLoaded', () => {
+    const settingsBtn = document.getElementById('settings-btn');
+    const settingsModal = document.getElementById('settings-modal');
+    const closeSettings = document.getElementById('close-settings');
+    
+    if (settingsBtn && settingsModal) {
+        settingsBtn.addEventListener('click', () => {
+            settingsModal.classList.remove('hidden');
+        });
+    }
+    
+    if (closeSettings && settingsModal) {
+        closeSettings.addEventListener('click', () => {
+            settingsModal.classList.add('hidden');
+        });
+    }
+    
+    if (settingsModal) {
+        settingsModal.addEventListener('click', (e) => {
+            if (e.target === settingsModal) {
+                settingsModal.classList.add('hidden');
+            }
+        });
+    }
+});
