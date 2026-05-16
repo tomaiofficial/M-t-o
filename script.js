@@ -1455,7 +1455,7 @@ async function displayWeatherData(weatherData) {
         }
         
         // Température actuelle
-        const tempElement = document.querySelector('.big-temp');
+        const tempElement = document.document.getElementById('current-temp') || document.querySelector('.big-temp');
         if (tempElement && current.temperature_2m !== undefined && current.temperature_2m !== null) {
             tempElement.textContent = `${Math.round(current.temperature_2m)}°`;
         }
@@ -2063,7 +2063,7 @@ function searchCity() {
     const input = document.getElementById('city-input');
     const city = input.value.trim();
     const cityElement = document.querySelector('.city');
-    const tempElement = document.querySelector('.big-temp');
+    const tempElement = document.document.getElementById('current-temp') || document.querySelector('.big-temp');
     const conditionElement = document.querySelector('.condition');
     
     if (city && city.length > 1) {
@@ -2999,7 +2999,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // État de chargement initial
     const cityElement = document.querySelector('.city');
-    const tempElement = document.querySelector('.big-temp');
+    const tempElement = document.document.getElementById('current-temp') || document.querySelector('.big-temp');
     const conditionElement = document.querySelector('.condition');
     
     if (cityElement) cityElement.textContent = 'Chargement...';
@@ -3010,7 +3010,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('Direct load Paris - fetching real API data');
     const cityElement2 = document.querySelector('.city');
     if (cityElement2) cityElement2.textContent = 'Paris';
-    const tempElement2 = document.querySelector('.big-temp');
+    const tempElement2 = document.document.getElementById('current-temp') || document.querySelector('.big-temp');
     if (tempElement2) tempElement2.textContent = '⏳';
     const conditionElement2 = document.querySelector('.condition');
     if (conditionElement2) conditionElement2.textContent = 'Chargement...';
@@ -3029,7 +3029,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (cityEl) cityEl.textContent = 'Paris';
         
         // Update temperature
-        const tempEl = document.querySelector('.big-temp');
+        const tempEl = document.document.getElementById('current-temp') || document.querySelector('.big-temp');
         if (tempEl && apiData.current?.temperature_2m !== undefined) {
             tempEl.textContent = Math.round(apiData.current.temperature_2m) + '°';
         }
