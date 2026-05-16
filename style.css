@@ -1383,3 +1383,19 @@ body {
     display: flex !important;
     justify-content: center !important;
 }
+/* All text centering */
+* {
+    text-align: center !important;
+}
+div, span, p, h1, h2, h3, h4, h5, h6 {
+    text-align: center !important;
+}
+.card,
+.suggestion-item,
+.temp-card,
+.city-temp {
+    text-align: center !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+}
