@@ -100,10 +100,15 @@ const state = {
   activeIdx: 0,
   geoTried: false,
   unit: "C",
-  notif: false
+  notif: false,
+  autoRefresh: false,
+  detailHourly: false,
+  airQuality: false
 };
 const LS_KEY = "meteo_v2";
 let lastWeather = null;   // cache pour partage/report
+let lastAirQuality = null;
+let lastRefreshMs = Date.now();
 
 function saveState() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {} }
 function loadState() {
@@ -116,6 +121,9 @@ function loadState() {
       state.activeIdx = Math.min(s.activeIdx || 0, s.cities.length - 1);
       state.unit = s.unit || "C";
       state.notif = !!s.notif;
+      state.autoRefresh = !!s.autoRefresh;
+      state.detailHourly = !!s.detailHourly;
+      state.airQuality = !!s.airQuality;
       return true;
     }
   } catch (e) {}
@@ -134,7 +142,7 @@ async function searchCities(q) {
   return (await res.json()).results || [];
 }
 async function fetchWeather(lat, lon) {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure&hourly=temperature_2m,weather_code,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max,precipitation_sum&timezone=auto&forecast_days=10`;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure&hourly=temperature_2m,apparent_temperature,weather_code,precipitation_probability,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max,precipitation_sum&timezone=auto&forecast_days=10`;
   const res = await fetch(url);
   return res.json();
 }
@@ -144,6 +152,17 @@ async function fetchWeather(lat, lon) {
 function getHourFromISO(iso) {
   const m = (iso || "").match(/T(\d{2})/);
   return m ? parseInt(m[1], 10) : null;
+}
+function findCurrentHourIndex(hourlyTimes, currentISO) {
+  if (!Array.isArray(hourlyTimes) || hourlyTimes.length === 0) return 0;
+  if (!currentISO) {
+    const nowH = new Date().getHours();
+    const i = hourlyTimes.findIndex(t => getHourFromISO(t) === nowH);
+    return i >= 0 ? i : 0;
+  }
+  const curH = getHourFromISO(currentISO);
+  const i = hourlyTimes.findIndex(t => getHourFromISO(t) === curH);
+  return i >= 0 ? i : 0;
 }
 function getMinutesFromISO(iso) {
   const m = (iso || "").match(/T(\d{2}):(\d{2})/);
@@ -262,13 +281,14 @@ function renderCity(city, w) {
     const tempDisplay = (i === 0) ? fmtTemp(cur.temperature_2m) : fmtTemp(hourly.temperature_2m[idx]);
     const popRaw = hourly.precipitation_probability[idx] || 0;
     const popVal = Math.max(0, Math.min(100, popRaw));
-    const popVisible = popVal >= 5;
-    // Étiquette d'heure au format Apple : "Maintenant" puis "10h", "11h", "12h", etc.
+    // Le % de précipitations n'apparaît QUE quand il y a vraiment un risque de pluie/neige/orage
+    // (codes WMO 51-99) ET que la probabilité est significative (>= 5%).
+    const isPrecipCode = [51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99].includes(hourly.weather_code[idx]);
+    const popVisible = isPrecipCode && popVal >= 5;
+    // Étiquette d'heure : "Maintenant" puis "00", "01", … "12", "13", … "23"
     let timeLabel;
     if (i === 0) timeLabel = "Maintenant";
-    else if (hourVal === 0) timeLabel = "Minuit";
-    else if (hourVal === 12) timeLabel = "Midi";
-    else timeLabel = `${hourVal}h`;
+    else timeLabel = `${String(hourVal).padStart(2, '0')}`;
     h.innerHTML = `
       <div class="hour-time">${timeLabel}</div>
       <div class="hour-icon">${icon(wi.icon, 28)}</div>
@@ -294,7 +314,9 @@ function renderCity(city, w) {
     const wi = wmoInfo(daily.weather_code[i], false);
     // Probabilité précipitations journalière (depuis daily si dispo, sinon 0)
     const popDay = daily.precipitation_probability_max?.[i] || 0;
-    const popVisible = popDay >= 10;
+    // Affiche le % uniquement si le code WMO du jour est un code de précipitations
+    const isPrecipCodeDay = [51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99].includes(daily.weather_code[i]);
+    const popVisible = isPrecipCodeDay && popDay >= 10;
     di.innerHTML = `
       <div class="day-name">${dayName(daily.time[i], i)}</div>
       <div class="day-icon-wrap">
@@ -329,6 +351,91 @@ function renderCity(city, w) {
   const uvLabels = ["Faible","Faible","Faible","Modéré","Modéré","Modéré","Élevé","Élevé","Très élevé","Extrême","Extrême"];
   $("airSub").textContent = uvLabels[Math.min(10, Math.round(uv))] || "—";
   $("aqBar").style.width = `${Math.min(100, uv * 10)}%`;
+
+  // Mémorise la dernière donnée pour les modules détaillés et l'heure de MAJ
+  lastWeather = w;
+  lastRefreshMs = Date.now();
+  if (state.detailHourly) renderHourlyDetail();
+  if (state.airQuality) loadAirQuality();
+  updateMetaTimers();
+}
+
+// ===== Détails horaires sur 24 h (4×6 grille) =====
+function renderHourlyDetail() {
+  if (!lastWeather) return;
+  const { hourly, current } = lastWeather;
+  const start = findCurrentHourIndex(hourly.time, current?.time);
+  const cells = [];
+  for (let i = start; i < start + 24 && i < hourly.time.length; i++) {
+    const hour = getHourFromISO(hourly.time[i]);
+    const isNight = hour < 6 || hour >= 21;
+    const temp = fmtTemp(hourly.temperature_2m[i]);
+    const feels = fmtTemp(hourly.apparent_temperature?.[i]);
+    const wind = Math.round(hourly.wind_speed_10m?.[i] || 0);
+    const pop = hourly.precipitation_probability?.[i] || 0;
+    const isPrecip = [51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99].includes(hourly.weather_code[i]);
+    const popStr = isPrecip ? `<span style="color:#4cc9ff;font-weight:500;">${pop}%</span>` : "—";
+    cells.push(`
+      <div class="hd-cell">
+        <div class="hd-hour">${String(hour).padStart(2,'0')}</div>
+        <div class="hd-row"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v10M12 14a3 3 0 100 6 3 3 0 000-6z"/></svg>${temp}</div>
+        <div class="hd-row"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01M9 15c1 1 2 1 3 1s2 0 3-1"/></svg>Ress. ${feels}</div>
+        <div class="hd-row"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h13a3 3 0 110 6H4M16 8l3-3M16 8h-5M16 8v5"/></svg>${wind} km/h</div>
+        <div class="hd-row">${popStr}</div>
+      </div>
+    `);
+  }
+  $("hourlyDetail").innerHTML = cells.join("");
+}
+
+// ===== Qualité de l'air (Open-Meteo Air Quality API) =====
+async function loadAirQuality() {
+  const city = state.cities[state.activeIdx];
+  if (!city) return;
+  $("airQualityMeta").textContent = "Chargement…";
+  try {
+    const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${city.lat}&longitude=${city.lon}&current=us_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,ozone&hourly=us_aqi&forecast_days=1`;
+    const res = await fetch(url);
+    const a = await res.json();
+    lastAirQuality = a;
+    renderAirQuality();
+  } catch (e) {
+    console.warn("Air quality fetch failed", e);
+    $("airQualityMeta").textContent = "Indisponible";
+  }
+}
+
+function renderAirQuality() {
+  if (!lastAirQuality || !lastAirQuality.current) return;
+  const c = lastAirQuality.current;
+  const aqi = Math.round(c.us_aqi || 0);
+  $("aqAqi").textContent = aqi;
+  const level = aqi <= 50 ? { label: "Bonne", advice: "Qualité de l'air satisfaisante", color: "#34C759" }
+              : aqi <= 100 ? { label: "Modérée", advice: "Acceptable pour la plupart", color: "#FFD60A" }
+              : aqi <= 150 ? { label: "Mauvaise", advice: "Personnes sensibles : limiter l'effort", color: "#FF9A3C" }
+              : aqi <= 200 ? { label: "Très mauvaise", advice: "Limitez les activités extérieures", color: "#FF5E3A" }
+              : aqi <= 300 ? { label: "Très mauvaise", advice: "Évitez les efforts prolongés", color: "#B14CFF" }
+              :                { label: "Dangereuse", advice: "Restez à l'intérieur si possible", color: "#7E1BCC" };
+  $("aqLevel").textContent = level.label;
+  $("aqLevel").style.color = level.color;
+  $("aqAdvice").textContent = level.advice;
+  $("aqBar2").style.width = `${Math.min(100, aqi / 5)}%`;
+  $("aqGrid").innerHTML = [
+    { k: "PM2.5", v: (c.pm2_5 ?? 0).toFixed(1), u: "µg/m³" },
+    { k: "PM10", v: (c.pm10 ?? 0).toFixed(1), u: "µg/m³" },
+    { k: "O₃", v: (c.ozone ?? 0).toFixed(0), u: "µg/m³" },
+    { k: "NO₂", v: (c.nitrogen_dioxide ?? 0).toFixed(0), u: "µg/m³" }
+  ].map(x => `<div class="aq-item"><div class="aq-key">${x.k}</div><div class="aq-val">${x.v}</div><div class="aq-key">${x.u}</div></div>`).join("");
+  const now = new Date();
+  $("airQualityMeta").textContent = `Mis à jour à ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+}
+
+// Met à jour l'indicateur "Mis à jour il y a X min" dans les sections
+function updateMetaTimers() {
+  const elapsed = Math.round((Date.now() - lastRefreshMs) / 60000);
+  const label = elapsed < 1 ? "il y a quelques secondes" : `il y a ${elapsed} min`;
+  const el = $("hourlyDetailMeta");
+  if (el) el.textContent = `Mis à jour ${label}`;
 }
 
 async function loadActive() {
@@ -448,6 +555,57 @@ $("notifToggle").onclick = () => {
   toast(state.notif ? "Notifications activées" : "Notifications désactivées");
 };
 
+// Actualisation automatique (1 h) toggle
+let autoRefreshTimer = null;
+$("autoRefreshToggle").onclick = () => {
+  state.autoRefresh = !state.autoRefresh;
+  $("autoRefreshToggle").classList.toggle("on", state.autoRefresh);
+  saveState();
+  if (state.autoRefresh) {
+    autoRefreshTimer = setInterval(async () => {
+      try {
+        await loadActive();
+        toast("Météo actualisée automatiquement");
+      } catch (e) {
+        console.warn("Auto-refresh failed", e);
+      }
+    }, 60 * 60 * 1000); // 1 heure
+    toast("Actualisation automatique activée (1 h)");
+  } else {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+    toast("Actualisation automatique désactivée");
+  }
+};
+
+// Détails horaires (24 h) toggle
+$("detailHourlyToggle").onclick = () => {
+  state.detailHourly = !state.detailHourly;
+  $("detailHourlyToggle").classList.toggle("on", state.detailHourly);
+  $("hourlyDetailSection").style.display = state.detailHourly ? "" : "none";
+  saveState();
+  if (state.detailHourly) {
+    if (typeof renderHourlyDetail === "function") renderHourlyDetail();
+    toast("Détails horaires activés");
+  } else {
+    toast("Détails horaires masqués");
+  }
+};
+
+// Qualité de l'air toggle
+$("airQualityToggle").onclick = async () => {
+  state.airQuality = !state.airQuality;
+  $("airQualityToggle").classList.toggle("on", state.airQuality);
+  $("airQualitySection").style.display = state.airQuality ? "" : "none";
+  saveState();
+  if (state.airQuality) {
+    await loadAirQuality();
+    toast("Qualité de l'air activée");
+  } else {
+    toast("Qualité de l'air masquée");
+  }
+};
+
 // Share
 $("shareBtn").onclick = async () => {
   $("settingsPanel").classList.remove("open");
@@ -524,6 +682,18 @@ function getCurrentIconName() {
 function syncUnitToggle() {
   document.querySelectorAll(".seg").forEach(b => b.classList.toggle("active", b.dataset.unit === state.unit));
   $("notifToggle").classList.toggle("on", state.notif);
+  $("autoRefreshToggle").classList.toggle("on", state.autoRefresh);
+  $("detailHourlyToggle").classList.toggle("on", state.detailHourly);
+  $("airQualityToggle").classList.toggle("on", state.airQuality);
+  $("hourlyDetailSection").style.display = state.detailHourly ? "" : "none";
+  $("airQualitySection").style.display = state.airQuality ? "" : "none";
+  // Si l'auto-refresh était activé, relance le timer
+  if (state.autoRefresh) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = setInterval(async () => {
+      try { await loadActive(); toast("Météo actualisée automatiquement"); } catch (e) {}
+    }, 60 * 60 * 1000);
+  }
 }
 
 (async function init() {
@@ -539,4 +709,6 @@ function syncUnitToggle() {
     state.geoTried = true;
     tryGeolocate();
   }
+  // Lance le timer de mise à jour du "Mis à jour il y a X min"
+  setInterval(updateMetaTimers, 30 * 1000);
 })();

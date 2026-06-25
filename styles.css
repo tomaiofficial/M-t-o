@@ -628,6 +628,68 @@ body {
   transition: width .5s;
 }
 
+/* ===== Section Détails horaires ===== */
+.hourly-detail-card { padding: 14px 14px 10px; }
+.hourly-detail {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+.hd-cell {
+  background: rgba(255,255,255,0.06);
+  border-radius: 10px;
+  padding: 8px 6px;
+  text-align: center;
+}
+.hd-cell .hd-hour {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.85;
+  margin-bottom: 4px;
+}
+.hd-cell .hd-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 13px;
+  margin-top: 2px;
+}
+.hd-cell .hd-row svg { width: 14px; height: 14px; }
+
+/* ===== Section Qualité de l'air ===== */
+.air-quality-card { padding: 14px; }
+.air-quality-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 8px 0 4px;
+}
+.aq-aqi {
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: -1px;
+  min-width: 64px;
+}
+.aq-label { font-size: 18px; font-weight: 600; }
+.aq-sub { font-size: 13px; opacity: 0.85; margin-top: 2px; }
+.aq-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+.aq-item {
+  background: rgba(255,255,255,0.06);
+  border-radius: 10px;
+  padding: 8px 6px;
+  text-align: center;
+}
+.aq-item .aq-key { font-size: 11px; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.4px; }
+.aq-item .aq-val { font-size: 16px; font-weight: 600; margin-top: 2px; }
+.card-meta { font-size: 11px; opacity: 0.7; }
+
 .app::-webkit-scrollbar { width: 0; }
 
 @media (max-width: 420px) {

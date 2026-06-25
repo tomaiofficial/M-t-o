@@ -667,6 +667,30 @@
           <div class="ios-toggle" id="notifToggle"><span></span></div>
         </div>
 
+        <div class="setting-row">
+          <span class="setting-label">
+            <svg class="row-icon" viewBox="0 0 24 24"><use href="#i-refresh"/></svg>
+            Actualisation automatique (1 h)
+          </span>
+          <div class="ios-toggle" id="autoRefreshToggle"><span></span></div>
+        </div>
+
+        <div class="setting-row">
+          <span class="setting-label">
+            <svg class="row-icon" viewBox="0 0 24 24"><use href="#i-thermo"/></svg>
+            Météo détaillée (24 h)
+          </span>
+          <div class="ios-toggle" id="detailHourlyToggle"><span></span></div>
+        </div>
+
+        <div class="setting-row">
+          <span class="setting-label">
+            <svg class="row-icon" viewBox="0 0 24 24"><use href="#i-wind"/></svg>
+            Qualité de l'air (1 h)
+          </span>
+          <div class="ios-toggle" id="airQualityToggle"><span></span></div>
+        </div>
+
         <div class="setting-row clickable" id="shareBtn">
           <span class="setting-label">
             <svg class="row-icon" viewBox="0 0 24 24"><use href="#i-share"/></svg>
@@ -787,6 +811,38 @@
           <div class="detail-value" id="pressure">—</div>
           <div class="detail-sub" id="pressureSub">—</div>
         </div>
+      </section>
+
+      <!-- ===== Section Détails horaires (24 h) - activable depuis les paramètres ===== -->
+      <section class="glass-card hourly-detail-card" id="hourlyDetailSection" style="display:none;">
+        <div class="card-header">
+          <span class="card-title">
+            <svg class="card-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+            Détails sur 24 h
+          </span>
+          <span class="card-meta" id="hourlyDetailMeta">Mis à jour il y a quelques secondes</span>
+        </div>
+        <div class="hourly-detail" id="hourlyDetail"></div>
+      </section>
+
+      <!-- ===== Section Qualité de l'air - activable depuis les paramètres ===== -->
+      <section class="glass-card air-quality-card" id="airQualitySection" style="display:none;">
+        <div class="card-header">
+          <span class="card-title">
+            <svg class="card-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+            Qualité de l'air
+          </span>
+          <span class="card-meta" id="airQualityMeta">—</span>
+        </div>
+        <div class="air-quality-main">
+          <div class="aq-aqi" id="aqAqi">—</div>
+          <div class="aq-info">
+            <div class="aq-label" id="aqLevel">—</div>
+            <div class="aq-sub" id="aqAdvice">—</div>
+          </div>
+        </div>
+        <div class="aq-bar"><span id="aqBar2"></span></div>
+        <div class="aq-grid" id="aqGrid"></div>
       </section>
     </main>
   </div>
