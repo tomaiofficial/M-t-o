@@ -288,29 +288,6 @@ body {
   justify-content: center;
   margin-top: 4px;
 }
-.pop-bar {
-  width: 28px;
-  border-radius: 4px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 3px;
-  font-size: 9px;
-  font-weight: 600;
-  color: #FFFFFF;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-  transition: height 0.4s ease;
-}
-.pop-bar.empty {
-  background: transparent !important;
-  box-shadow: none;
-  padding-top: 0;
-}
-.pop-bar span {
-  line-height: 1;
-  display: block;
-}
 
 /* ===== Icône météo principale (LCM) ===== */
 .main-icon {
@@ -554,28 +531,52 @@ body {
 .hour-time { font-size: 14px; font-weight: 600; }
 .hour-icon { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; }
 .hour-icon .wicon { width: 28px; height: 28px; }
-.hour-temp { font-size: 16px; font-weight: 600; }
-.hour-pop { font-size: 11px; opacity: 0.95; height: 26px; margin-top: 4px; display: flex; align-items: flex-end; justify-content: center; }
+.hour-temp { font-size: 18px; font-weight: 500; }
+.hour-pop {
+  font-size: 13px;
+  font-weight: 500;
+  color: #4cc9ff;
+  height: 18px;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hour-pop.empty { color: transparent; }
 
 /* ===== Daily ===== */
 .day {
   display: grid;
-  grid-template-columns: 80px 28px 60px 1fr 40px;
+  grid-template-columns: 64px 50px 32px 1fr 32px;
   align-items: center;
-  gap: 10px;
-  padding: 9px 4px;
+  gap: 8px;
+  padding: 11px 4px;
   border-bottom: 1px solid rgba(255,255,255,0.1);
   font-size: 16px;
 }
 .day:last-child { border-bottom: none; }
 .day-name { font-weight: 600; }
-.day-icon { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }
-.day-icon .wicon { width: 24px; height: 24px; }
-.day-low, .day-high { font-weight: 500; }
-.day-low { opacity: 0.75; text-align: right; }
-.day-high { text-align: left; }
+.day-icon-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 50px;
+}
+.day-icon { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; }
+.day-icon .wicon { width: 26px; height: 26px; }
+.day-pop {
+  font-size: 12px;
+  font-weight: 500;
+  color: #4cc9ff;
+  line-height: 1;
+  min-height: 14px;
+}
+.day-pop.empty { color: transparent; }
+.day-low { font-weight: 500; opacity: 0.85; text-align: right; font-size: 15px; }
+.day-high { font-weight: 500; text-align: left; font-size: 15px; }
 .day-bar {
-  height: 5px;
+  height: 6px;
   background: rgba(255,255,255,0.22);
   border-radius: 999px;
   position: relative;
@@ -583,11 +584,11 @@ body {
 }
 .day-bar .fill {
   position: absolute;
-  top: 0; bottom: 0;
-  background: linear-gradient(90deg, #4cc9ff, #ffd84d, #ff7a4c);
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, #4cc9ff 0%, #6dd5ff 18%, #c0c0c0 35%, #ffd84d 55%, #ff9a3c 78%, #ff5e3a 100%);
   border-radius: 999px;
 }
-.day-pop { font-size: 13px; opacity: 0.85; text-align: right; }
 
 /* ===== Details grid ===== */
 .details-grid {

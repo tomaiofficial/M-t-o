@@ -261,23 +261,24 @@ function renderCity(city, w) {
     const wi = wmoInfo(hourly.weather_code[idx], isNightH);
     const tempDisplay = (i === 0) ? fmtTemp(cur.temperature_2m) : fmtTemp(hourly.temperature_2m[idx]);
     const popRaw = hourly.precipitation_probability[idx] || 0;
-    // Jauge visuelle : visible à partir de 5%, pleine à 100%
     const popVal = Math.max(0, Math.min(100, popRaw));
     const popVisible = popVal >= 5;
-    const popBarHeight = popVisible ? Math.max(6, (popVal / 100) * 22) : 0;
-    const popColor = popVal >= 70 ? "#7E57C2" : popVal >= 40 ? "#42A5F5" : "#90CAF9";
+    // Étiquette d'heure au format Apple : "Maintenant" puis "10h", "11h", "12h", etc.
+    let timeLabel;
+    if (i === 0) timeLabel = "Maintenant";
+    else if (hourVal === 0) timeLabel = "Minuit";
+    else if (hourVal === 12) timeLabel = "Midi";
+    else timeLabel = `${hourVal}h`;
     h.innerHTML = `
-      <div class="hour-time">${i === 0 ? "Maintenant" : fmtHourLabel(hourly.time[idx])}</div>
+      <div class="hour-time">${timeLabel}</div>
       <div class="hour-icon">${icon(wi.icon, 28)}</div>
+      <div class="hour-pop${popVisible ? "" : " empty"}">${popVisible ? popVal + "%" : "—"}</div>
       <div class="hour-temp">${tempDisplay}</div>
-      <div class="hour-pop">
-        ${popVisible ? `<div class="pop-bar" style="height:${popBarHeight}px;background:${popColor};"><span>${popVal}%</span></div>` : `<div class="pop-bar empty" style="height:2px;"><span>&nbsp;</span></div>`}
-      </div>
     `;
     $hourly.appendChild(h);
   }
 
-  // Daily
+  // Daily (style Apple iOS : nom jour | icône+% | min | barre gradient | max)
   const $daily = $("daily");
   $daily.innerHTML = "";
   const allMax = Math.max(...daily.temperature_2m_max);
@@ -291,9 +292,15 @@ function renderCity(city, w) {
     const startPct = ((lo - allMin) / range) * 100;
     const endPct = ((hi - allMin) / range) * 100;
     const wi = wmoInfo(daily.weather_code[i], false);
+    // Probabilité précipitations journalière (depuis daily si dispo, sinon 0)
+    const popDay = daily.precipitation_probability_max?.[i] || 0;
+    const popVisible = popDay >= 10;
     di.innerHTML = `
       <div class="day-name">${dayName(daily.time[i], i)}</div>
-      <div class="day-icon">${icon(wi.icon, 24)}</div>
+      <div class="day-icon-wrap">
+        <div class="day-icon">${icon(wi.icon, 26)}</div>
+        <div class="day-pop${popVisible ? "" : " empty"}">${popVisible ? popDay + "%" : "—"}</div>
+      </div>
       <div class="day-low">${fmtTemp(lo)}</div>
       <div class="day-bar"><span class="fill" style="left:${startPct}%; right:${100 - endPct}%"></span></div>
       <div class="day-high">${fmtTemp(hi)}</div>
