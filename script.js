@@ -316,7 +316,7 @@ function renderCity(city, w) {
     const popDay = daily.precipitation_probability_max?.[i] || 0;
     // Affiche le % uniquement si le code WMO du jour est un code de précipitations
     const isPrecipCodeDay = [51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99].includes(daily.weather_code[i]);
-    const popVisible = isPrecipCodeDay && popDay >= 10;
+    const popVisible = isPrecipCodeDay && popDay >= 5;
     di.innerHTML = `
       <div class="day-name">${dayName(daily.time[i], i)}</div>
       <div class="day-icon-wrap">
@@ -459,16 +459,33 @@ function tryGeolocate() {
     if (window.location.protocol === "file:") return resolve(false);
     navigator.geolocation.getCurrentPosition(async (pos) => {
       const { latitude, longitude } = pos.coords;
-      if (state.cities[0] && state.cities[0].name === "Ma position") {
-        state.cities[0] = { name: "Ma position", lat: latitude, lon: longitude };
+      // Reverse-geocoding via Nominatim (OpenStreetMap) - gratuit, sans clé API
+      let placeName = "Position actuelle";
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&accept-language=fr&zoom=12`,
+          { headers: { "Accept": "application/json" } }
+        );
+        const data = await res.json();
+        if (data && data.address) {
+          const a = data.address;
+          // Priorité : ville > village > quartier > comté > pays
+          placeName = a.city || a.town || a.village || a.municipality || a.suburb || a.county || a.state || a.country || "Position actuelle";
+        }
+      } catch (e) {
+        console.warn("Reverse geocoding failed", e);
+      }
+      const city = { name: placeName, lat: latitude, lon: longitude };
+      if (state.cities[0] && (state.cities[0].name === "Ma position" || state.cities[0].name === "Position actuelle" || state.cities[0].name === "Paris")) {
+        state.cities[0] = city;
       } else {
-        state.cities.unshift({ name: "Ma position", lat: latitude, lon: longitude });
+        state.cities.unshift(city);
         state.activeIdx = 0;
       }
       saveState();
       renderTabs();
       await loadActive();
-      toast("Position mise à jour");
+      toast(`Localisé à ${placeName}`);
       resolve(true);
     }, () => resolve(false), { timeout: 8000, maximumAge: 600000 });
   });
@@ -699,7 +716,7 @@ function syncUnitToggle() {
 (async function init() {
   const ok = loadState();
   if (!ok) {
-    state.cities = [{ name: "Ma position", lat: 48.8566, lon: 2.3522 }];
+    state.cities = [{ name: "Paris", lat: 48.8566, lon: 2.3522 }];
     state.activeIdx = 0;
   }
   syncUnitToggle();
