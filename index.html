@@ -509,19 +509,33 @@
         <defs><linearGradient id="g-cnight-a" x1="-.652" x2="59.234" y1="1" y2="57.046" gradientUnits="userSpaceOnUse"><stop stop-color="#A8C7FA"/><stop offset=".344" stop-color="#4C8DF6"/></linearGradient></defs>
       </symbol>
       <symbol id="apple-partly-cloudy-day" viewBox="0 0 48 48">
-        <path fill="url(#g-pcd-a)" d="M33.995 7.163a8.022 8.022 0 0 1 7.45 7.451 8.022 8.022 0 0 0 1.958 4.725 8.022 8.022 0 0 1 0 10.537 8.025 8.025 0 0 0-1.957 4.726 8.023 8.023 0 0 1-7.451 7.451 8.021 8.021 0 0 0-4.726 1.957 8.02 8.02 0 0 1-10.536 0 8.021 8.021 0 0 0-4.726-1.957 8.024 8.024 0 0 1-7.452-7.451 8.025 8.025 0 0 0-1.957-4.726 8.022 8.022 0 0 1 0-10.537 8.022 8.022 0 0 0 1.957-4.725 8.022 8.022 0 0 1 7.452-7.451 8.027 8.027 0 0 0 4.726-1.957 8.02 8.02 0 0 1 10.535 0 8.027 8.027 0 0 0 4.727 1.957Z"/>
-        <path fill="url(#g-pcd-b)" fill-opacity=".95" fill-rule="evenodd" d="M47 31.999c0 7.318-5.715 13.325-13 13.947V46H14v-.002c-4.971 0-9-3.959-9-8.842 0-4.883 4.029-8.841 9-8.841 1.725 0 3.337.476 4.706 1.303C19.857 23.021 25.706 18 32.75 18 40.62 18 47 24.268 47 31.999Z" clip-rule="evenodd"/>
+        <!-- Soleil en haut à gauche, bien visible -->
+        <circle cx="16" cy="16" r="7" fill="url(#g-pcd-a)"/>
+        <g stroke="url(#g-pcd-a)" stroke-width="2" stroke-linecap="round">
+          <line x1="16" y1="3" x2="16" y2="6"/>
+          <line x1="16" y1="26" x2="16" y2="29"/>
+          <line x1="3" y1="16" x2="6" y2="16"/>
+          <line x1="26" y1="16" x2="29" y2="16"/>
+          <line x1="7" y1="7" x2="9" y2="9"/>
+          <line x1="23" y1="23" x2="25" y2="25"/>
+          <line x1="7" y1="25" x2="9" y2="23"/>
+          <line x1="23" y1="9" x2="25" y2="7"/>
+        </g>
+        <!-- Nuage en bas à droite -->
+        <path fill="url(#g-pcd-b)" fill-opacity=".95" fill-rule="evenodd" d="M47 34c0 6.318-5.715 11.325-13 11.947V46H18v-.002c-4.971 0-9-3.959-9-8.842 0-4.883 4.029-8.841 9-8.841 1.725 0 3.337.476 4.706 1.303C23.857 25.021 29.706 20 36.75 20 42.62 20 47 25.268 47 34Z" clip-rule="evenodd"/>
         <defs>
-          <linearGradient id="g-pcd-a" x1="21.049" x2="19.942" y1="-12.285" y2="77.364" gradientUnits="userSpaceOnUse"><stop offset=".268" stop-color="#F1C100"/><stop offset="1" stop-color="#F39607"/></linearGradient>
-          <linearGradient id="g-pcd-b" x1="20.716" x2="12.003" y1="40.71" y2="27.502" gradientUnits="userSpaceOnUse"><stop stop-color="#fff"/><stop offset="1" stop-color="#E9E9E9"/></linearGradient>
+          <linearGradient id="g-pcd-a" x1="10" x2="22" y1="8" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFE066"/><stop offset="1" stop-color="#F39607"/></linearGradient>
+          <linearGradient id="g-pcd-b" x1="30" x2="20" y1="40" y2="28" gradientUnits="userSpaceOnUse"><stop stop-color="#fff"/><stop offset="1" stop-color="#E9E9E9"/></linearGradient>
         </defs>
       </symbol>
       <symbol id="apple-partly-cloudy-night" viewBox="0 0 48 48">
-        <path fill="url(#g-pcn-a)" fill-rule="evenodd" d="M23.849 1c-3.231 3.937-5.163 8.932-5.163 14.368 0 12.705 10.558 23.005 23.582 23.005.245 0 .489-.004.732-.011C38.679 43.628 32.034 47 24.582 47 11.558 47 1 36.7 1 23.995 1 11.528 11.164 1.377 23.849 1Z" clip-rule="evenodd"/>
-        <path fill="url(#g-pcn-b)" fill-opacity=".92" fill-rule="evenodd" d="M47 31.5c0 8.358-6.662 15.172-15 15.488V47H10.857C5.413 47 1 42.617 1 37.211c0-5.407 4.413-9.79 9.857-9.79 1.889 0 3.654.528 5.154 1.443C17.271 21.559 23.678 16 31.393 16 40.012 16 47 22.94 47 31.5Z" clip-rule="evenodd"/>
+        <!-- Lune en haut à gauche -->
+        <path fill="url(#g-pcn-a)" fill-rule="evenodd" d="M18 2c-3 3.5-5 8-5 13 0 11 9 20 20 20 1 0 2 0 3-.2C33 42 27 45 20 45 9 45 1 37 1 26 1 15 8 5 18 2Z" clip-rule="evenodd"/>
+        <!-- Nuage en bas à droite -->
+        <path fill="url(#g-pcn-b)" fill-opacity=".92" fill-rule="evenodd" d="M47 34c0 6.358-5.662 11.172-13 11.488V46H16v-.002c-4.413 0-8-3.383-8-7.79 0-4.407 3.587-7.79 8-7.79 1.5 0 2.9.428 4.1 1.344C21.5 25.559 27.5 20 34 20 41.5 20 47 25.94 47 34Z" clip-rule="evenodd"/>
         <defs>
-          <linearGradient id="g-pcn-a" x1="-2.652" x2="57.234" y1="1" y2="57.046" gradientUnits="userSpaceOnUse"><stop stop-color="#A8C7FA"/><stop offset=".771" stop-color="#4C8DF6"/></linearGradient>
-          <linearGradient id="g-pcn-b" x1="18.212" x2="8.525" y1="41.144" y2="26.616" gradientUnits="userSpaceOnUse"><stop stop-color="#E3E3E3"/><stop offset="1" stop-color="#F2F2F2"/></linearGradient>
+          <linearGradient id="g-pcn-a" x1="5" x2="25" y1="5" y2="40" gradientUnits="userSpaceOnUse"><stop stop-color="#A8C7FA"/><stop offset=".771" stop-color="#4C8DF6"/></linearGradient>
+          <linearGradient id="g-pcn-b" x1="30" x2="18" y1="40" y2="26" gradientUnits="userSpaceOnUse"><stop stop-color="#E3E3E3"/><stop offset="1" stop-color="#F2F2F2"/></linearGradient>
         </defs>
       </symbol>
       <symbol id="apple-cloudy" viewBox="0 0 48 48">
@@ -614,6 +628,22 @@
     <!-- Background simple Apple Weather style -->
     <div class="weather-bg">
       <div class="bg-sky"></div>
+      <!-- Soleil animé (thèmes jour clair / éclaircies) -->
+      <div class="bg-sun-glow"></div>
+      <!-- Nuages animés (thèmes couvert / éclaircies / pluie) -->
+      <div class="bg-clouds">
+        <div class="bg-cloud bg-cloud-1"></div>
+        <div class="bg-cloud bg-cloud-2"></div>
+        <div class="bg-cloud bg-cloud-3"></div>
+      </div>
+      <!-- Pluie animée -->
+      <div class="bg-rain"></div>
+      <!-- Neige animée -->
+      <div class="bg-snow"></div>
+      <!-- Éclairs (orage) -->
+      <div class="bg-lightning"></div>
+      <!-- Étoiles (nuit claire) -->
+      <div class="bg-stars"></div>
     </div>
 
     <!-- Topbar -->
@@ -651,14 +681,6 @@
           <span class="chev">›</span>
         </div>
 
-        <div class="setting-row clickable" id="refreshBtn">
-          <span class="setting-label">
-            <svg class="row-icon" viewBox="0 0 24 24"><use href="#i-refresh"/></svg>
-            Actualiser maintenant
-          </span>
-          <span class="chev">›</span>
-        </div>
-
         <div class="setting-row">
           <span class="setting-label">
             <svg class="row-icon" viewBox="0 0 24 24"><use href="#i-bell"/></svg>
@@ -669,42 +691,10 @@
 
         <div class="setting-row">
           <span class="setting-label">
-            <svg class="row-icon" viewBox="0 0 24 24"><use href="#i-refresh"/></svg>
-            Actualisation automatique (1 h)
-          </span>
-          <div class="ios-toggle" id="autoRefreshToggle"><span></span></div>
-        </div>
-
-        <div class="setting-row">
-          <span class="setting-label">
             <svg class="row-icon" viewBox="0 0 24 24"><use href="#i-thermo"/></svg>
             Météo détaillée (24 h)
           </span>
           <div class="ios-toggle" id="detailHourlyToggle"><span></span></div>
-        </div>
-
-        <div class="setting-row">
-          <span class="setting-label">
-            <svg class="row-icon" viewBox="0 0 24 24"><use href="#i-wind"/></svg>
-            Qualité de l'air (1 h)
-          </span>
-          <div class="ios-toggle" id="airQualityToggle"><span></span></div>
-        </div>
-
-        <div class="setting-row clickable" id="shareBtn">
-          <span class="setting-label">
-            <svg class="row-icon" viewBox="0 0 24 24"><use href="#i-share"/></svg>
-            Partager la météo
-          </span>
-          <span class="chev">›</span>
-        </div>
-
-        <div class="setting-row clickable" id="clearHistoryBtn">
-          <span class="setting-label">
-            <svg class="row-icon" viewBox="0 0 24 24"><use href="#i-trash"/></svg>
-            Effacer l'historique des signalements
-          </span>
-          <span class="chev">›</span>
         </div>
 
         <button class="close-panel-btn" id="closeSettings">Fermer</button>
@@ -755,9 +745,16 @@
         <p id="descText">—</p>
       </section>
 
+      <!-- ===== Alertes Météo France (vigilances) ===== -->
+      <section class="vigilance-section" id="vigilanceSection" style="display:none;">
+        <div class="vigilance-header">
+          <svg class="vig-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 22h20L12 2z"/><line x1="12" y1="9" x2="12" y2="14"/><circle cx="12" cy="18" r="0.5" fill="currentColor"/></svg>
+          <span class="vig-title">Vigilance Météo France</span>
+        </div>
+        <div class="vigilance-list" id="vigilanceList"></div>
+      </section>
+
       <section class="glass-card">
-        <div class="card-header">
-          <span class="card-title"><svg class="card-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>Prévisions sur 24h</span>
         </div>
         <div class="hourly" id="hourly"></div>
       </section>

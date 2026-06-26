@@ -2,8 +2,8 @@
 // Pictogrammes Google Weather (style Apple iOS) — viewBox 0 0 48 48
 const WMO = {
   0:  { label: "Ensoleillé",            icon: "apple-clear-day",         night: "apple-clear-night" },
-  1:  { label: "Ensoleillé",            icon: "apple-clear-day",         night: "apple-clear-night" },
-  2:  { label: "Partiellement nuageux",  icon: "apple-partly-cloudy-day", night: "apple-partly-cloudy-night" },
+  1:  { label: "Plutôt ensoleillé",     icon: "apple-clear-day",         night: "apple-clear-night" },
+  2:  { label: "Éclaircies",            icon: "apple-partly-cloudy-day", night: "apple-partly-cloudy-night" },
   3:  { label: "Couvert",               icon: "apple-cloudy",            night: "apple-cloudy" },
   45: { label: "Brouillard",            icon: "apple-fog",               night: "apple-fog" },
   48: { label: "Brouillard",            icon: "apple-fog",               night: "apple-fog" },
@@ -33,7 +33,7 @@ const WMO = {
 
 const REPORT_OPTIONS = [
   { code: 0,  label: "Ensoleillé" },
-  { code: 2,  label: "Nuageux" },
+  { code: 2,  label: "Éclaircies" },
   { code: 3,  label: "Couvert" },
   { code: 45, label: "Brouillard" },
   { code: 51, label: "Bruine" },
@@ -56,7 +56,11 @@ function themeFor(code, isNight, currentTime, windSpeed) {
   if ([71,73,75,77,85,86].includes(code)) return "theme-snow";
   if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) return "theme-rain";
   if ([45,48].includes(code)) return "theme-fog";
-  if ([2,3].includes(code)) return "theme-cloudy";
+  if (code === 2) {
+    if (isNight) return "theme-night-clear";
+    return "theme-day-clear"; // éclaircies : soleil + nuages
+  }
+  if (code === 3) return "theme-cloudy";
   if (code === 0 || code === 1) {
     if (isNight) return "theme-night-clear";
     if (isEvening) return "theme-sunset";
@@ -292,7 +296,7 @@ function renderCity(city, w) {
     h.innerHTML = `
       <div class="hour-time">${timeLabel}</div>
       <div class="hour-icon">${icon(wi.icon, 28)}</div>
-      <div class="hour-pop${popVisible ? "" : " empty"}">${popVisible ? popVal + "%" : "—"}</div>
+      <div class="hour-pop${popVisible ? "" : " empty"}">${popVisible ? popVal + "%" : ""}</div>
       <div class="hour-temp">${tempDisplay}</div>
     `;
     $hourly.appendChild(h);
@@ -321,7 +325,7 @@ function renderCity(city, w) {
       <div class="day-name">${dayName(daily.time[i], i)}</div>
       <div class="day-icon-wrap">
         <div class="day-icon">${icon(wi.icon, 26)}</div>
-        <div class="day-pop${popVisible ? "" : " empty"}">${popVisible ? popDay + "%" : "—"}</div>
+        <div class="day-pop${popVisible ? "" : " empty"}">${popVisible ? popDay + "%" : ""}</div>
       </div>
       <div class="day-low">${fmtTemp(lo)}</div>
       <div class="day-bar"><span class="fill" style="left:${startPct}%; right:${100 - endPct}%"></span></div>
@@ -357,6 +361,7 @@ function renderCity(city, w) {
   lastRefreshMs = Date.now();
   if (state.detailHourly) renderHourlyDetail();
   if (state.airQuality) loadAirQuality();
+  loadVigilance(city);
   updateMetaTimers();
 }
 
@@ -436,6 +441,162 @@ function updateMetaTimers() {
   const label = elapsed < 1 ? "il y a quelques secondes" : `il y a ${elapsed} min`;
   const el = $("hourlyDetailMeta");
   if (el) el.textContent = `Mis à jour ${label}`;
+}
+
+// ===== Vigilance Météo France =====
+// Cartographie des risques Météo France
+const VIG_RISKS = {
+  1: "Vent", 2: "Pluie-inondation", 3: "Orages", 4: "Crues", 5: "Neige-verglas",
+  6: "Canicule", 7: "Grand-froid", 8: "Avalanches", 9: "Vagues-submersion"
+};
+const VIG_COLORS = { 1: "green", 2: "yellow", 3: "orange", 4: "red" };
+const VIG_LEVELS = { 1: "Vigilance", 2: "Vigilance modérée", 3: "Vigilance forte", 4: "Vigilance absolue" };
+
+let vigilanceCache = null;
+let vigilanceCacheTime = 0;
+
+async function loadVigilance(city) {
+  // Ne fonctionne que pour la France métropolitaine
+  if (city.lat < 41 || city.lat > 51.5 || city.lon < -5.5 || city.lon > 10) {
+    $("vigilanceSection").style.display = "none";
+    return;
+  }
+  // Cache de 10 minutes
+  const now = Date.now();
+  if (vigilanceCache && (now - vigilanceCacheTime) < 600000) {
+    renderVigilance(vigilanceCache, city);
+    return;
+  }
+  try {
+    // Étape 1 : obtenir un token OAuth2
+    const appid = "WkU5X0NvWDRKODJ2THE0OUw1b2FyVEN0OFdZYTpla3hQb1ZqMmRQaXJ3c0pYcnNzRUFZM1kxUnNh";
+    const tokenRes = await fetch("https://portail-api.meteofrance.fr/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": `Basic ${appid}`
+      },
+      body: "grant_type=client_credentials"
+    });
+    if (!tokenRes.ok) throw new Error("Token failed");
+    const tokenData = await tokenRes.json();
+    const token = tokenData.access_token;
+
+    // Étape 2 : récupérer la carte de vigilance
+    const vigRes = await fetch("https://public-api.meteofrance.fr/public/DPVigilance/v1/cartevigilance/encours", {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    if (!vigRes.ok) throw new Error("Vigilance API failed");
+    const vigData = await vigRes.json();
+    vigilanceCache = vigData;
+    vigilanceCacheTime = now;
+    renderVigilance(vigData, city);
+  } catch (e) {
+    console.warn("Vigilance fetch failed (CORS?), trying proxy...", e);
+    // Fallback : utiliser un proxy CORS
+    try {
+      const proxyBase = "https://corsproxy.io/?url=";
+      const appid = "WkU5X0NvWDRKODJ2THE0OUw1b2FyVEN0OFdZYTpla3hQb1ZqMmRQaXJ3c0pYcnNzRUFZM1kxUnNh";
+      const tokenRes2 = await fetch(proxyBase + encodeURIComponent("https://portail-api.meteofrance.fr/token"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Authorization": `Basic ${appid}`
+        },
+        body: "grant_type=client_credentials"
+      });
+      if (!tokenRes2.ok) throw new Error("Token proxy failed");
+      const tokenData2 = await tokenRes2.json();
+      const token2 = tokenData2.access_token;
+      const vigRes2 = await fetch(proxyBase + encodeURIComponent("https://public-api.meteofrance.fr/public/DPVigilance/v1/cartevigilance/encours"), {
+        headers: { "Authorization": `Bearer ${token2}` }
+      });
+      if (!vigRes2.ok) throw new Error("Vigilance proxy failed");
+      const vigData2 = await vigRes2.json();
+      vigilanceCache = vigData2;
+      vigilanceCacheTime = now;
+      renderVigilance(vigData2, city);
+    } catch (e2) {
+      console.warn("Vigilance proxy also failed", e2);
+      $("vigilanceSection").style.display = "none";
+    }
+  }
+}
+
+function renderVigilance(data, city) {
+  if (!data || !data.product) {
+    $("vigilanceSection").style.display = "none";
+    return;
+  }
+  // Trouver le département de l'utilisateur via Nominatim
+  // On utilise le nom de la ville pour déterminer le département
+  // L'API renvoie les vigilances pour tous les départements
+  const dept = findDepartment(city, data);
+  if (!dept) {
+    $("vigilanceSection").style.display = "none";
+    return;
+  }
+  // Extraire les risques pour ce département
+  const risks = extractRisks(data, dept);
+  if (!risks || risks.length === 0) {
+    $("vigilanceSection").style.display = "none";
+    return;
+  }
+  // Afficher les alertes
+  const html = risks.map(r => {
+    const color = VIG_COLORS[r.level] || "green";
+    const levelLabel = VIG_LEVELS[r.level] || "Vigilance";
+    const riskLabel = VIG_RISKS[r.riskId] || "Phénomène";
+    return `<div class="vig-card vig-${color}">
+      <div class="vig-color"></div>
+      <div class="vig-label">${riskLabel}</div>
+      <div class="vig-level">${levelLabel}</div>
+    </div>`;
+  }).join("");
+  $("vigilanceList").innerHTML = html;
+  $("vigilanceSection").style.display = "";
+}
+
+// Détermine le numéro de département à partir des coordonnées
+// Utilise un approximation basée sur les coordonnées (simplifiée)
+function findDepartment(city, data) {
+  // L'API Météo France utilise des numéros de département à 2 chiffres
+  // On peut les trouver dans la réponse
+  if (!data.product || !data.product.departments) return null;
+  // Trouve le département le plus proche
+  let minDist = Infinity;
+  let closest = null;
+  for (const dept of data.product.departments) {
+    if (dept.lat == null || dept.lon == null) continue;
+    const d = Math.abs(dept.lat - city.lat) + Math.abs(dept.lon - city.lon);
+    if (d < minDist) { minDist = d; closest = dept; }
+  }
+  return closest;
+}
+
+// Extrait les risques pour un département donné
+function extractRisks(data, dept) {
+  if (!data.product || !data.product.departments) return [];
+  const deptData = data.product.departments.find(d => d.numero === dept.numero);
+  if (!deptData) return [];
+  const risks = [];
+  // La structure peut varier - on cherche les couleurs de risque
+  if (deptData.couleur) {
+    // Niveau global de vigilance
+    const level = typeof deptData.couleur === "number" ? deptData.couleur : parseInt(deptData.couleur);
+    if (level > 1) {
+      // Risques spécifiques
+      if (deptData.risques && Array.isArray(deptData.risques)) {
+        for (const r of deptData.risques) {
+          risks.push({ level: r.couleur || level, riskId: r.id || r.type || 0 });
+        }
+      } else {
+        // Pas de risques spécifiques, juste le niveau global
+        risks.push({ level: level, riskId: 0 });
+      }
+    }
+  }
+  return risks;
 }
 
 async function loadActive() {
