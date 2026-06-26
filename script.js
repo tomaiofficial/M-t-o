@@ -292,7 +292,7 @@ function renderCity(city, w) {
     // Étiquette d'heure : "Maintenant" puis "00", "01", … "12", "13", … "23"
     let timeLabel;
     if (i === 0) timeLabel = "Maintenant";
-    else timeLabel = `${String(hourVal).padStart(2, '0')}`;
+    else timeLabel = `${hourVal}h`;
     h.innerHTML = `
       <div class="hour-time">${timeLabel}</div>
       <div class="hour-icon">${icon(wi.icon, 28)}</div>
@@ -382,7 +382,7 @@ function renderHourlyDetail() {
     const popStr = isPrecip ? `<span style="color:#4cc9ff;font-weight:500;">${pop}%</span>` : "";
     cells.push(`
       <div class="hd-cell">
-        <div class="hd-hour">${String(hour).padStart(2,'0')}</div>
+        <div class="hd-hour">${hour}h</div>
         <div class="hd-row"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v10M12 14a3 3 0 100 6 3 3 0 000-6z"/></svg>${temp}</div>
         <div class="hd-row"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01M9 15c1 1 2 1 3 1s2 0 3-1"/></svg>Ress. ${feels}</div>
         <div class="hd-row"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h13a3 3 0 110 6H4M16 8l3-3M16 8h-5M16 8v5"/></svg>${wind} km/h</div>
