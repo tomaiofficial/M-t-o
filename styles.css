@@ -642,8 +642,8 @@ body {
 .hour:hover { background: rgba(255,255,255,0.1); }
 .hour.now { background: rgba(255,255,255,0.18); }
 .hour-time { font-size: 14px; font-weight: 600; }
-.hour-icon { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; }
-.hour-icon .wicon { width: 28px; height: 28px; }
+.hour-icon { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+.hour-icon .wicon { width: 32px; height: 32px; }
 .hour-temp { font-size: 18px; font-weight: 500; }
 .hour-pop {
   font-size: 13px;
