@@ -379,7 +379,7 @@ function renderHourlyDetail() {
     const wind = Math.round(hourly.wind_speed_10m?.[i] || 0);
     const pop = hourly.precipitation_probability?.[i] || 0;
     const isPrecip = [51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99].includes(hourly.weather_code[i]);
-    const popStr = isPrecip ? `<span style="color:#4cc9ff;font-weight:500;">${pop}%</span>` : "—";
+    const popStr = isPrecip ? `<span style="color:#4cc9ff;font-weight:500;">${pop}%</span>` : "";
     cells.push(`
       <div class="hd-cell">
         <div class="hd-hour">${String(hour).padStart(2,'0')}</div>
@@ -718,8 +718,8 @@ document.querySelectorAll(".seg").forEach(btn => {
   });
 });
 
-// Refresh
-$("refreshBtn").onclick = async () => {
+// Refresh (removed from UI but keep function)
+if ($("refreshBtn")) $("refreshBtn").onclick = async () => {
   $("settingsPanel").classList.remove("open");
   await loadActive();
   toast("Météo actualisée");
@@ -733,9 +733,9 @@ $("notifToggle").onclick = () => {
   toast(state.notif ? "Notifications activées" : "Notifications désactivées");
 };
 
-// Actualisation automatique (1 h) toggle
+// Actualisation automatique (1 h) toggle (removed from UI)
 let autoRefreshTimer = null;
-$("autoRefreshToggle").onclick = () => {
+if ($("autoRefreshToggle")) $("autoRefreshToggle").onclick = () => {
   state.autoRefresh = !state.autoRefresh;
   $("autoRefreshToggle").classList.toggle("on", state.autoRefresh);
   saveState();
@@ -770,8 +770,8 @@ $("detailHourlyToggle").onclick = () => {
   }
 };
 
-// Qualité de l'air toggle
-$("airQualityToggle").onclick = async () => {
+// Qualité de l'air toggle (removed from UI)
+if ($("airQualityToggle")) $("airQualityToggle").onclick = async () => {
   state.airQuality = !state.airQuality;
   $("airQualityToggle").classList.toggle("on", state.airQuality);
   $("airQualitySection").style.display = state.airQuality ? "" : "none";
@@ -784,8 +784,8 @@ $("airQualityToggle").onclick = async () => {
   }
 };
 
-// Share
-$("shareBtn").onclick = async () => {
+// Share (removed from UI)
+if ($("shareBtn")) $("shareBtn").onclick = async () => {
   $("settingsPanel").classList.remove("open");
   const city = state.cities[state.activeIdx];
   if (!city) return;
@@ -802,8 +802,8 @@ $("shareBtn").onclick = async () => {
   }
 };
 
-// Clear history
-$("clearHistoryBtn").onclick = () => {
+// Clear history (removed from UI)
+if ($("clearHistoryBtn")) $("clearHistoryBtn").onclick = () => {
   $("settingsPanel").classList.remove("open");
   localStorage.removeItem("meteo_reports");
   toast("Historique des signalements effacé");
@@ -859,12 +859,12 @@ function getCurrentIconName() {
 // ===== Init =====
 function syncUnitToggle() {
   document.querySelectorAll(".seg").forEach(b => b.classList.toggle("active", b.dataset.unit === state.unit));
-  $("notifToggle").classList.toggle("on", state.notif);
-  $("autoRefreshToggle").classList.toggle("on", state.autoRefresh);
-  $("detailHourlyToggle").classList.toggle("on", state.detailHourly);
-  $("airQualityToggle").classList.toggle("on", state.airQuality);
-  $("hourlyDetailSection").style.display = state.detailHourly ? "" : "none";
-  $("airQualitySection").style.display = state.airQuality ? "" : "none";
+  if ($("notifToggle")) $("notifToggle").classList.toggle("on", state.notif);
+  if ($("autoRefreshToggle")) $("autoRefreshToggle").classList.toggle("on", state.autoRefresh);
+  if ($("detailHourlyToggle")) $("detailHourlyToggle").classList.toggle("on", state.detailHourly);
+  if ($("airQualityToggle")) $("airQualityToggle").classList.toggle("on", state.airQuality);
+  if ($("hourlyDetailSection")) $("hourlyDetailSection").style.display = state.detailHourly ? "" : "none";
+  if ($("airQualitySection")) $("airQualitySection").style.display = state.airQuality ? "" : "none";
   // Si l'auto-refresh était activé, relance le timer
   if (state.autoRefresh) {
     clearInterval(autoRefreshTimer);
