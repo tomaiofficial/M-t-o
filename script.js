@@ -1,4 +1,7 @@
 // ===== WMO codes =====
+// Debug mode
+const DEBUG = true;
+function log(...args) { if (DEBUG) console.log(...args); }
 // Pictogrammes Google Weather (style Apple iOS) — viewBox 0 0 48 48
 const WMO = {
   0:  { label: "Ensoleillé",            icon: "apple-clear-day",         night: "apple-clear-night" },
@@ -206,6 +209,7 @@ function toast(msg) {
 // ===== Tabs =====
 function renderTabs() {
   const tabs = $("cityTabs");
+  if (!tabs) return;
   tabs.innerHTML = "";
   state.cities.forEach((c, i) => {
     const b = document.createElement("button");
@@ -234,6 +238,11 @@ function renderTabs() {
 
 // ===== Render city =====
 function renderCity(city, w) {
+  console.log("renderCity:", city.name, w);
+  if (!w || !w.current) {
+    console.error("renderCity: invalid weather data", w);
+    return;
+  }
   lastWeather = w;
   const cur = w.current;
   const daily = w.daily;
@@ -601,15 +610,24 @@ function extractRisks(data, dept) {
 
 async function loadActive() {
   const city = state.cities[state.activeIdx];
-  if (!city) return;
+  if (!city) {
+    console.warn("loadActive: no city");
+    return;
+  }
   try {
+    console.log("loadActive: fetching", city.name);
     $("cityName").textContent = city.name + " …";
     const w = await fetchWeather(city.lat, city.lon);
+    console.log("loadActive: got data", w);
+    if (!w || !w.current) {
+      throw new Error("Invalid weather data");
+    }
     renderCity(city, w);
   } catch (e) {
-    console.error(e);
-    $("cityName").textContent = "Erreur";
+    console.error("loadActive error:", e);
+    $("cityName").textContent = "Erreur de chargement";
     $("temp").textContent = "—";
+    $("condition").textContent = "Vérifiez votre connexion";
   }
 }
 
@@ -875,18 +893,23 @@ function syncUnitToggle() {
 }
 
 (async function init() {
+  console.log("init: starting");
   const ok = loadState();
-  if (!ok) {
+  console.log("init: loadState returned", ok, state);
+  if (!ok || state.cities.length === 0) {
     state.cities = [{ name: "Paris", lat: 48.8566, lon: 2.3522 }];
     state.activeIdx = 0;
   }
   syncUnitToggle();
   renderTabs();
-  await loadActive();
+  console.log("init: loading active city", state.cities[state.activeIdx]);
+  // Délai pour s'assurer que le DOM est prêt
+  setTimeout(() => loadActive(), 100);
   if (!state.geoTried) {
     state.geoTried = true;
     tryGeolocate();
   }
   // Lance le timer de mise à jour du "Mis à jour il y a X min"
   setInterval(updateMetaTimers, 30 * 1000);
+  console.log("init: done");
 })();
