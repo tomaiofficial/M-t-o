@@ -6,7 +6,7 @@ body {
   color: #fff;
   overflow-x: hidden;
   overflow-y: auto;
-  background: linear-gradient(180deg, #4A90E2 0%, #67B8F0 50%, #A8D8F0 100%);
+  background: #4A90E2;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -18,74 +18,71 @@ body {
   overflow-y: visible;
   overflow-x: hidden;
   scroll-behavior: smooth;
-  /* Fond par défaut si le thème ne s'applique pas */
-  background: linear-gradient(180deg, #4A90E2 0%, #67B8F0 50%, #A8D8F0 100%);
+  background: transparent;
 }
 
-/* ===== Background simple Apple Weather style ===== */
+/* ===== Background Apple Weather style ===== */
 .weather-bg {
   position: fixed;
   inset: 0;
-  z-index: -1;
+  z-index: 0;
   overflow: hidden;
   pointer-events: none;
-  transition: background 1s ease;
 }
 .bg-sky {
   position: absolute;
   inset: 0;
   transition: background 1s ease;
-  /* Couleur par défaut si aucune classe theme n'est appliquée */
   background: linear-gradient(180deg, #4A90E2 0%, #67B8F0 50%, #A8D8F0 100%);
 }
 
-/* ====== THEME : JOUR CLAIR ====== */
+/* ====== THEME : JOUR CLAIR (Apple Weather clear day) ====== */
 .theme-day-clear .bg-sky {
-  background: linear-gradient(180deg, #4A90E2 0%, #67B8F0 50%, #A8D8F0 100%);
+  background: linear-gradient(180deg, #2D7FE0 0%, #4A9FF0 40%, #7AC0F5 70%, #B8E0FA 100%);
 }
 
-/* ====== THEME : COUVERT ====== */
+/* ====== THEME : COUVERT (Apple Weather cloudy) ====== */
 .theme-cloudy .bg-sky {
-  background: linear-gradient(180deg, #5C6B7A 0%, #7A8A9A 50%, #9BAAB8 100%);
+  background: linear-gradient(180deg, #6B7B8E 0%, #8492A4 40%, #A0AEBE 70%, #BCC8D4 100%);
 }
 
-/* ====== THEME : PLUIE ====== */
+/* ====== THEME : PLUIE (Apple Weather rain) ====== */
 .theme-rain .bg-sky {
-  background: linear-gradient(180deg, #3A4A5C 0%, #4E6070 50%, #657888 100%);
+  background: linear-gradient(180deg, #3D5A75 0%, #4E7088 40%, #6388A0 70%, #7BA0B5 100%);
 }
 
-/* ====== THEME : ORAGE ====== */
+/* ====== THEME : ORAGE (Apple Weather storm) ====== */
 .theme-storm .bg-sky {
-  background: linear-gradient(180deg, #1E2530 0%, #2C3540 50%, #404B5C 100%);
+  background: linear-gradient(180deg, #1A2030 0%, #2A3540 40%, #3A4858 70%, #4A5868 100%);
 }
 
-/* ====== THEME : NEIGE ====== */
+/* ====== THEME : NEIGE (Apple Weather snow) ====== */
 .theme-snow .bg-sky {
-  background: linear-gradient(180deg, #8FA8C0 0%, #B0C4D8 50%, #D0DCE8 100%);
+  background: linear-gradient(180deg, #8FAEC8 0%, #A8C2D8 40%, #C0D4E4 70%, #D8E6F0 100%);
 }
 
-/* ====== THEME : BROUILLARD ====== */
+/* ====== THEME : BROUILLARD (Apple Weather fog) ====== */
 .theme-fog .bg-sky {
-  background: linear-gradient(180deg, #98A4B0 0%, #B0B8C0 50%, #C8CED4 100%);
+  background: linear-gradient(180deg, #909EA8 0%, #A4B0B8 40%, #B8C2C8 70%, #CCD4D8 100%);
 }
 
-/* ====== THEME : COUCHER DE SOLEIL ====== */
+/* ====== THEME : COUCHER DE SOLEIL (Apple Weather sunset) ====== */
 .theme-sunset .bg-sky {
-  background: linear-gradient(180deg, #2D1B4E 0%, #8B3A62 40%, #E07845 80%, #F4B860 100%);
+  background: linear-gradient(180deg, #1A1A4E 0%, #6B3A7E 25%, #D85A4A 55%, #F29050 80%, #F4B860 100%);
 }
 .theme-sunset .bg-sun-glow {
   opacity: 1;
-  background: radial-gradient(circle at 50% 70%, rgba(255,140,0,0.4) 0%, rgba(255,100,0,0.2) 30%, transparent 60%);
+  background: radial-gradient(circle at 50% 75%, rgba(255,140,0,0.45) 0%, rgba(255,100,0,0.2) 30%, transparent 60%);
 }
 
-/* ====== THEME : VENT ====== */
+/* ====== THEME : VENT (Apple Weather windy) ====== */
 .theme-windy .bg-sky {
-  background: linear-gradient(180deg, #3A8AB8 0%, #5BA8D0 50%, #8AC8E0 100%);
+  background: linear-gradient(180deg, #3A8AB8 0%, #5BA8D0 40%, #8AC8E0 70%, #B0E0F0 100%);
 }
 
-/* ====== THEME : NUIT CLAIRE ====== */
+/* ====== THEME : NUIT CLAIRE (Apple Weather clear night) ====== */
 .theme-night-clear .bg-sky {
-  background: linear-gradient(180deg, #0A1530 0%, #1A2A50 50%, #2A3C68 100%);
+  background: linear-gradient(180deg, #0A1028 0%, #152045 40%, #1F2D55 70%, #2A3A68 100%);
 }
 
 /* ===== ÉLÉMENTS DYNAMIQUES (cachés par défaut, affichés selon le thème) ===== */
