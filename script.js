@@ -1,34 +1,33 @@
-// ===== WMO codes =====
-// Pictogrammes Google Weather (style Apple iOS) — viewBox 0 0 48 48
+// ===== WMO codes (style Apple Weather) =====
 const WMO = {
-  0:  { label: "Ensoleillé",            icon: "apple-clear-day",         night: "apple-clear-night" },
-  1:  { label: "Plutôt ensoleillé",     icon: "apple-clear-day",         night: "apple-clear-night" },
-  2:  { label: "Éclaircies",            icon: "apple-partly-cloudy-day", night: "apple-partly-cloudy-night" },
-  3:  { label: "Couvert",               icon: "apple-cloudy",            night: "apple-cloudy" },
-  45: { label: "Brouillard",            icon: "apple-fog",               night: "apple-fog" },
-  48: { label: "Brouillard",            icon: "apple-fog",               night: "apple-fog" },
-  51: { label: "Bruine",                icon: "apple-drizzle",           night: "apple-drizzle" },
-  53: { label: "Bruine",                icon: "apple-drizzle",           night: "apple-drizzle" },
-  55: { label: "Bruine",                icon: "apple-drizzle",           night: "apple-drizzle" },
-  56: { label: "Bruine verglaçante",    icon: "apple-icy",               night: "apple-icy" },
-  57: { label: "Bruine verglaçante",    icon: "apple-icy",               night: "apple-icy" },
-  61: { label: "Pluie",                 icon: "apple-rain",              night: "apple-rain" },
-  63: { label: "Pluie",                 icon: "apple-rain",              night: "apple-rain" },
-  65: { label: "Pluie",                 icon: "apple-rain",              night: "apple-rain" },
-  66: { label: "Pluie verglaçante",     icon: "apple-icy",               night: "apple-icy" },
-  67: { label: "Pluie verglaçante",     icon: "apple-icy",               night: "apple-icy" },
-  71: { label: "Neige",                 icon: "apple-snow",              night: "apple-snow" },
-  73: { label: "Neige",                 icon: "apple-snow",              night: "apple-snow" },
-  75: { label: "Neige abondante",       icon: "apple-snow",              night: "apple-snow" },
-  77: { label: "Neige",                 icon: "apple-snow",              night: "apple-snow" },
-  80: { label: "Averses",               icon: "apple-thunder-rain",      night: "apple-rain" },
-  81: { label: "Averses",               icon: "apple-thunder-rain",      night: "apple-rain" },
-  82: { label: "Fortes pluies",         icon: "apple-heavy-rain",        night: "apple-heavy-rain" },
-  85: { label: "Neige",                 icon: "apple-snow",              night: "apple-snow" },
-  86: { label: "Neige abondante",       icon: "apple-snow",              night: "apple-snow" },
-  95: { label: "Orage",                 icon: "apple-thunder",           night: "apple-thunder" },
-  96: { label: "Orage",                 icon: "apple-thunder",           night: "apple-thunder" },
-  99: { label: "Orage",                 icon: "apple-thunder",           night: "apple-thunder" }
+  0:  { label: "Ciel dégagé",          icon: "apple-clear-day",         night: "apple-clear-night" },
+  1:  { label: "Plutôt clair",         icon: "apple-clear-day",         night: "apple-clear-night" },
+  2:  { label: "Partiellement nuageux",icon: "apple-partly-cloudy-day", night: "apple-partly-cloudy-night" },
+  3:  { label: "Couvert",              icon: "apple-cloudy",            night: "apple-cloudy" },
+  45: { label: "Brouillard",          icon: "apple-fog",               night: "apple-fog" },
+  48: { label: "Brouillard givrant",  icon: "apple-fog",               night: "apple-fog" },
+  51: { label: "Légère bruine",       icon: "apple-drizzle",           night: "apple-drizzle" },
+  53: { label: "Bruine",              icon: "apple-drizzle",           night: "apple-drizzle" },
+  55: { label: "Bruine dense",        icon: "apple-drizzle",           night: "apple-drizzle" },
+  56: { label: "Bruine verglaçante",  icon: "apple-icy",               night: "apple-icy" },
+  57: { label: "Bruine verglaçante",  icon: "apple-icy",               night: "apple-icy" },
+  61: { label: "Pluie légère",       icon: "apple-rain",              night: "apple-rain" },
+  63: { label: "Pluie",              icon: "apple-rain",              night: "apple-rain" },
+  65: { label: "Pluie forte",        icon: "apple-heavy-rain",        night: "apple-heavy-rain" },
+  66: { label: "Pluie verglaçante",  icon: "apple-icy",               night: "apple-icy" },
+  67: { label: "Pluie verglaçante",  icon: "apple-icy",               night: "apple-icy" },
+  71: { label: "Légère neige",       icon: "apple-snow",              night: "apple-snow" },
+  73: { label: "Neige",              icon: "apple-snow",              night: "apple-snow" },
+  75: { label: "Forte neige",        icon: "apple-snow",              night: "apple-snow" },
+  77: { label: "Grains de neige",    icon: "apple-snow",              night: "apple-snow" },
+  80: { label: "Averses",            icon: "apple-rain",              night: "apple-rain" },
+  81: { label: "Averses",            icon: "apple-rain",              night: "apple-rain" },
+  82: { label: "Violentes averses",  icon: "apple-heavy-rain",        night: "apple-heavy-rain" },
+  85: { label: "Averses de neige",   icon: "apple-snow",              night: "apple-snow" },
+  86: { label: "Fortes averses neige",icon: "apple-snow",             night: "apple-snow" },
+  95: { label: "Orage",              icon: "apple-thunder",           night: "apple-thunder" },
+  96: { label: "Orage avec grêle",   icon: "apple-thunder",           night: "apple-thunder" },
+  99: { label: "Orage avec grêle",   icon: "apple-thunder",           night: "apple-thunder" }
 };
 
 const REPORT_OPTIONS = [
@@ -254,15 +253,28 @@ function renderCity(city, w) {
   $("condition").textContent = info.label;
   $("hilo").textContent = `H:${fmtTemp(daily.temperature_2m_max[0])}  L:${fmtTemp(daily.temperature_2m_min[0])}`;
 
-  // Description
+  // Description (style Apple Weather)
   const hi = daily.temperature_2m_max[0];
   const lo = daily.temperature_2m_min[0];
   const popToday = daily.precipitation_probability_max[0] || 0;
+  const windKmh = Math.round(cur.wind_speed_10m);
   let desc;
-  if (code === 0) desc = `C'est dégagé aujourd'hui, avec des températures maximales de ${fmtTemp(hi)}.`;
-  else if ([2,3].includes(code)) desc = `Nuageux toute la journée. Vent ${Math.round(cur.wind_speed_10m)} km/h.`;
-  else if ([51,53,55,61,63,65,80,81].includes(code)) desc = `Pluie attendue aujourd'hui avec un risque de ${popToday}%.`;
-  else if ([71,73,75,77,85,86].includes(code)) desc = `Chutes de neige attendues aujourd'hui.`;
+  if (code === 0) desc = `Ciel dégagé. Maximales ${fmtTemp(hi)}, minimales ${fmtTemp(lo)}.`;
+  else if (code === 1) desc = `Plutôt clair aujourd'hui. Maximales ${fmtTemp(hi)}.`;
+  else if (code === 2) desc = `Partiellement nuageux. Vent ${windKmh} km/h.`;
+  else if (code === 3) desc = `Couvert toute la journée. Vent ${windKmh} km/h.`;
+  else if ([45,48].includes(code)) desc = `Brouillard. Visibilité réduite.`;
+  else if ([51,53,55].includes(code)) desc = `Bruine aujourd'hui. Risque de ${popToday}%.`;
+  else if ([56,57].includes(code)) desc = `Bruine verglaçante. Attention aux routes.`;
+  else if ([61,63].includes(code)) desc = `Pluie aujourd'hui. Risque de ${popToday}%.`;
+  else if (code === 65) desc = `Pluie forte prévue. Risque de ${popToday}%.`;
+  else if ([66,67].includes(code)) desc = `Pluie verglaçante. Prudence sur la route.`;
+  else if ([71,73].includes(code)) desc = `Neige prévue aujourd'hui.`;
+  else if (code === 75) desc = `Forte neige prévue. Restez au chaud.`;
+  else if (code === 77) desc = `Grains de neige aujourd'hui.`;
+  else if ([80,81].includes(code)) desc = `Averses prévues. Risque de ${popToday}%.`;
+  else if (code === 82) desc = `Violentes averses. Restez à l'abri.`;
+  else if ([85,86].includes(code)) desc = `Averses de neige prévues.`;
   else if ([95,96,99].includes(code)) desc = `Orages prévus aujourd'hui. Restez prudent.`;
   else desc = `${info.label}. Maximales ${fmtTemp(hi)}, minimales ${fmtTemp(lo)}.`;
   $("descText").textContent = desc;
@@ -750,8 +762,8 @@ if ($("autoRefreshToggle")) $("autoRefreshToggle").onclick = () => {
       } catch (e) {
         console.warn("Auto-refresh failed", e);
       }
-    }, 60 * 60 * 1000); // 1 heure
-    toast("Actualisation automatique activée (1 h)");
+    }, 2 * 60 * 1000); // 2 minutes
+    toast("Actualisation automatique activée (2 min)");
   } else {
     clearInterval(autoRefreshTimer);
     autoRefreshTimer = null;
@@ -873,7 +885,7 @@ function syncUnitToggle() {
     clearInterval(autoRefreshTimer);
     autoRefreshTimer = setInterval(async () => {
       try { await loadActive(); toast("Météo actualisée automatiquement"); } catch (e) {}
-    }, 60 * 60 * 1000);
+    }, 2 * 60 * 1000);
   }
 }
 
@@ -892,4 +904,8 @@ function syncUnitToggle() {
   }
   // Lance le timer de mise à jour du "Mis à jour il y a X min"
   setInterval(updateMetaTimers, 30 * 1000);
+  // Actualisation automatique toutes les 2 minutes
+  setInterval(async () => {
+    try { await loadActive(); } catch (e) {}
+  }, 2 * 60 * 1000);
 })();
