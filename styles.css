@@ -6,7 +6,7 @@ body {
   color: #fff;
   overflow-x: hidden;
   overflow-y: auto;
-  background: #000;
+  background: linear-gradient(180deg, #4A90E2 0%, #67B8F0 50%, #A8D8F0 100%);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -18,6 +18,8 @@ body {
   overflow-y: visible;
   overflow-x: hidden;
   scroll-behavior: smooth;
+  /* Fond par défaut si le thème ne s'applique pas */
+  background: linear-gradient(180deg, #4A90E2 0%, #67B8F0 50%, #A8D8F0 100%);
 }
 
 /* ===== Background simple Apple Weather style ===== */
@@ -33,6 +35,8 @@ body {
   position: absolute;
   inset: 0;
   transition: background 1s ease;
+  /* Couleur par défaut si aucune classe theme n'est appliquée */
+  background: linear-gradient(180deg, #4A90E2 0%, #67B8F0 50%, #A8D8F0 100%);
 }
 
 /* ====== THEME : JOUR CLAIR ====== */
@@ -552,6 +556,8 @@ body {
 
 /* ===== Content ===== */
 .content {
+  position: relative;
+  z-index: 1;
   max-width: 520px;
   margin: 0 auto;
   padding: 8px 18px 80px;

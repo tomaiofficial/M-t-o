@@ -1,7 +1,4 @@
 // ===== WMO codes =====
-// Debug mode
-const DEBUG = true;
-function log(...args) { if (DEBUG) console.log(...args); }
 // Pictogrammes Google Weather (style Apple iOS) — viewBox 0 0 48 48
 const WMO = {
   0:  { label: "Ensoleillé",            icon: "apple-clear-day",         night: "apple-clear-night" },
@@ -238,7 +235,6 @@ function renderTabs() {
 
 // ===== Render city =====
 function renderCity(city, w) {
-  console.log("renderCity:", city.name, w);
   if (!w || !w.current) {
     console.error("renderCity: invalid weather data", w);
     return;
@@ -257,10 +253,6 @@ function renderCity(city, w) {
   $("temp").textContent = fmtTemp(cur.temperature_2m);
   $("condition").textContent = info.label;
   $("hilo").textContent = `H:${fmtTemp(daily.temperature_2m_max[0])}  L:${fmtTemp(daily.temperature_2m_min[0])}`;
-
-  // Grande icône météo principale (LCM)
-  const mainIcon = $("mainIcon");
-  if (mainIcon) mainIcon.innerHTML = icon(info.icon, 140);
 
   // Description
   const hi = daily.temperature_2m_max[0];
@@ -610,18 +602,11 @@ function extractRisks(data, dept) {
 
 async function loadActive() {
   const city = state.cities[state.activeIdx];
-  if (!city) {
-    console.warn("loadActive: no city");
-    return;
-  }
+  if (!city) return;
   try {
-    console.log("loadActive: fetching", city.name);
     $("cityName").textContent = city.name + " …";
     const w = await fetchWeather(city.lat, city.lon);
-    console.log("loadActive: got data", w);
-    if (!w || !w.current) {
-      throw new Error("Invalid weather data");
-    }
+    if (!w || !w.current) throw new Error("Invalid weather data");
     renderCity(city, w);
   } catch (e) {
     console.error("loadActive error:", e);
@@ -893,23 +878,18 @@ function syncUnitToggle() {
 }
 
 (async function init() {
-  console.log("init: starting");
   const ok = loadState();
-  console.log("init: loadState returned", ok, state);
   if (!ok || state.cities.length === 0) {
     state.cities = [{ name: "Paris", lat: 48.8566, lon: 2.3522 }];
     state.activeIdx = 0;
   }
   syncUnitToggle();
   renderTabs();
-  console.log("init: loading active city", state.cities[state.activeIdx]);
-  // Délai pour s'assurer que le DOM est prêt
-  setTimeout(() => loadActive(), 100);
+  await loadActive();
   if (!state.geoTried) {
     state.geoTried = true;
     tryGeolocate();
   }
   // Lance le timer de mise à jour du "Mis à jour il y a X min"
   setInterval(updateMetaTimers, 30 * 1000);
-  console.log("init: done");
 })();
