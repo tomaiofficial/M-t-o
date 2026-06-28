@@ -109,7 +109,7 @@
         <circle cx="96" cy="96" r="60" fill="url(#sunGlowMid)" opacity="0.5"/>
         
         <!-- Rayons du soleil - couche externe -->
-        <g opacity="0.7">
+        <g opacity="0.7" class="sun-rays-animate">
           <polygon points="96,8 100,50 92,50" fill="url(#sunRayGrad)" transform="rotate(0 96 96)"/>
           <polygon points="96,8 100,50 92,50" fill="url(#sunRayGrad)" transform="rotate(45 96 96)"/>
           <polygon points="96,8 100,50 92,50" fill="url(#sunRayGrad)" transform="rotate(90 96 96)"/>
@@ -121,7 +121,7 @@
         </g>
         
         <!-- Rayons courts secondaires -->
-        <g opacity="0.5">
+        <g opacity="0.5" class="sun-rays-animate">
           <polygon points="96,25 99,55 93,55" fill="url(#sunRayGrad2)" transform="rotate(22.5 96 96)"/>
           <polygon points="96,25 99,55 93,55" fill="url(#sunRayGrad2)" transform="rotate(67.5 96 96)"/>
           <polygon points="96,25 99,55 93,55" fill="url(#sunRayGrad2)" transform="rotate(112.5 96 96)"/>
@@ -152,7 +152,7 @@
         <circle cx="60" cy="65" r="35" fill="url(#sunGlowOuter)" opacity="0.35"/>
         
         <!-- Rayons du soleil -->
-        <g opacity="0.6">
+        <g opacity="0.6" class="sun-rays-animate">
           <polygon points="60,20 63,45 57,45" fill="url(#sunRayGrad)" transform="rotate(0 60 65)"/>
           <polygon points="60,20 63,45 57,45" fill="url(#sunRayGrad)" transform="rotate(60 60 65)"/>
           <polygon points="60,20 63,45 57,45" fill="url(#sunRayGrad)" transform="rotate(120 60 65)"/>
@@ -167,7 +167,7 @@
         <ellipse cx="54" cy="58" rx="6" ry="4" fill="#FFFFFF" opacity="0.5" transform="rotate(-30 54 58)"/>
         
         <!-- Nuage principal réaliste -->
-        <g transform="translate(45, 95)">
+        <g transform="translate(45, 95)" class="cloud-animate">
           <!-- Ombre du nuage -->
           <ellipse cx="55" cy="50" rx="48" ry="10" fill="url(#cloudShadowReal)" opacity="0.3"/>
           
@@ -189,14 +189,14 @@
       <!-- Couvert - nuages gris sombres réalistes -->
       <symbol id="weather-overcast" viewBox="0 0 192 192">
         <!-- Nuage d'arrière-plan plus clair -->
-        <g transform="translate(10, 70)" opacity="0.6">
+        <g transform="translate(10, 70)" opacity="0.6" class="cloud-animate">
           <ellipse cx="50" cy="50" rx="40" ry="35" fill="url(#cloudRealMid)"/>
           <ellipse cx="80" cy="45" rx="35" ry="30" fill="url(#cloudRealMid)"/>
           <ellipse cx="60" cy="60" rx="50" ry="18" fill="url(#cloudRealMid)"/>
         </g>
         
         <!-- Nuage principal réaliste sombre -->
-        <g transform="translate(25, 90)">
+        <g transform="translate(25, 90)" class="cloud-animate">
           <!-- Ombre -->
           <ellipse cx="70" cy="55" rx="55" ry="12" fill="#212529" opacity="0.25"/>
           
@@ -243,7 +243,7 @@
       <!-- Pluie réaliste avec gouttes et éclaboussures -->
       <symbol id="weather-rain" viewBox="0 0 192 192">
         <!-- Nuage réaliste -->
-        <g transform="translate(20, 35)">
+        <g transform="translate(20, 35)" class="cloud-animate">
           <!-- Ombre du nuage -->
           <ellipse cx="75" cy="50" rx="60" ry="10" fill="url(#cloudShadowReal)" opacity="0.35"/>
           
@@ -264,15 +264,15 @@
         <!-- Gouttes de pluie réalistes -->
         <g>
           <!-- Gouttes principales -->
-          <path d="M45 110 Q48 125 45 135 Q42 125 45 110" fill="url(#rainDropReal)" opacity="0.9"/>
-          <path d="M75 95 Q78 112 75 122 Q72 112 75 95" fill="url(#rainDropReal)" opacity="0.85"/>
-          <path d="M105 105 Q108 122 105 132 Q102 122 105 105" fill="url(#rainDropReal)" opacity="0.9"/>
-          <path d="M135 100 Q138 117 135 127 Q132 117 135 100" fill="url(#rainDropReal)" fill-opacity="0.85"/>
+          <path class="rain-drop-animate" style="animation-delay: 0s;" d="M45 110 Q48 125 45 135 Q42 125 45 110" fill="url(#rainDropReal)" opacity="0.9"/>
+          <path class="rain-drop-animate" style="animation-delay: 0.2s;" d="M75 95 Q78 112 75 122 Q72 112 75 95" fill="url(#rainDropReal)" opacity="0.85"/>
+          <path class="rain-drop-animate" style="animation-delay: 0.4s;" d="M105 105 Q108 122 105 132 Q102 122 105 105" fill="url(#rainDropReal)" opacity="0.9"/>
+          <path class="rain-drop-animate" style="animation-delay: 0.6s;" d="M135 100 Q138 117 135 127 Q132 117 135 100" fill="url(#rainDropReal)" fill-opacity="0.85"/>
           
           <!-- Gouttes moyennes -->
-          <path d="M55 135 Q57 148 55 155 Q53 148 55 135" fill="url(#rainDropReal)" opacity="0.8"/>
-          <path d="M90 125 Q93 140 90 150 Q87 140 90 125" fill="url(#rainDropReal)" opacity="0.85"/>
-          <path d="M120 130 Q122 143 120 150 Q118 143 120 130" fill="url(#rainDropReal)" opacity="0.8"/>
+          <path class="rain-drop-animate" style="animation-delay: 0.1s;" d="M55 135 Q57 148 55 155 Q53 148 55 135" fill="url(#rainDropReal)" opacity="0.8"/>
+          <path class="rain-drop-animate" style="animation-delay: 0.3s;" d="M90 125 Q93 140 90 150 Q87 140 90 125" fill="url(#rainDropReal)" opacity="0.85"/>
+          <path class="rain-drop-animate" style="animation-delay: 0.5s;" d="M120 130 Q122 143 120 150 Q118 143 120 130" fill="url(#rainDropReal)" opacity="0.8"/>
           
           <!-- Petites gouttes -->
           <ellipse cx="40" cy="150" rx="3" ry="5" fill="url(#rainDropReal)" opacity="0.7"/>
@@ -289,7 +289,7 @@
       <!-- Neige réaliste avec flocons -->
       <symbol id="weather-snow" viewBox="0 0 192 192">
         <!-- Nuage de neige -->
-        <g transform="translate(20, 30)">
+        <g transform="translate(20, 30)" class="cloud-animate">
           <!-- Ombre -->
           <ellipse cx="75" cy="50" rx="55" ry="10" fill="url(#cloudShadowReal)" opacity="0.3"/>
           
@@ -310,29 +310,29 @@
         <!-- Flocons de neige réalistes -->
         <g>
           <!-- Flocon principal détaillé -->
-          <g transform="translate(96, 100)">
+          <g transform="translate(96, 100)" class="snowflake-animate" style="animation-delay: 0s;">
             <circle cx="0" cy="0" r="12" fill="url(#snowflakeGrad)"/>
             <circle cx="0" cy="0" r="8" fill="#FFFFFF"/>
             <circle cx="0" cy="0" r="3" fill="#E3F2FD"/>
           </g>
           
           <!-- Flocons secondaires -->
-          <g transform="translate(45, 130)" opacity="0.9">
+          <g transform="translate(45, 130)" opacity="0.9" class="snowflake-animate" style="animation-delay: 0.5s;">
             <circle cx="0" cy="0" r="8" fill="url(#snowflakeGrad)"/>
             <circle cx="0" cy="0" r="5" fill="#FFFFFF"/>
           </g>
           
-          <g transform="translate(145, 120)" opacity="0.85">
+          <g transform="translate(145, 120)" opacity="0.85" class="snowflake-animate" style="animation-delay: 1s;">
             <circle cx="0" cy="0" r="9" fill="url(#snowflakeGrad)"/>
             <circle cx="0" cy="0" r="5.5" fill="#FFFFFF"/>
           </g>
           
-          <g transform="translate(70, 160)" opacity="0.8">
+          <g transform="translate(70, 160)" opacity="0.8" class="snowflake-animate" style="animation-delay: 1.5s;">
             <circle cx="0" cy="0" r="6" fill="url(#snowflakeGrad)"/>
             <circle cx="0" cy="0" r="3.5" fill="#FFFFFF"/>
           </g>
           
-          <g transform="translate(120, 155)" opacity="0.85">
+          <g transform="translate(120, 155)" opacity="0.85" class="snowflake-animate" style="animation-delay: 2s;">
             <circle cx="0" cy="0" r="7" fill="url(#snowflakeGrad)"/>
             <circle cx="0" cy="0" r="4" fill="#FFFFFF"/>
           </g>
@@ -356,7 +356,7 @@
       <!-- Orage réaliste avec éclair -->
       <symbol id="weather-thunderstorm" viewBox="0 0 192 192">
         <!-- Nuage d'orage sombre -->
-        <g transform="translate(15, 25)">
+        <g transform="translate(15, 25)" class="cloud-animate">
           <!-- Halo sombre sous le nuage -->
           <ellipse cx="80" cy="70" rx="70" ry="15" fill="#212529" opacity="0.3"/>
           
@@ -380,7 +380,7 @@
           <ellipse cx="100" cy="115" rx="35" ry="50" fill="url(#lightningGlowReal)" opacity="0.4"/>
           
           <!-- Corps principal de l'éclair -->
-          <path d="M105 75 
+          <path class="lightning-bolt-animate" d="M105 75
                    L95 100 
                    L108 100 
                    L85 145 
@@ -422,21 +422,21 @@
         
         <!-- Gouttes de pluie -->
         <g opacity="0.7">
-          <path d="M45 155 Q47 165 45 170 Q43 165 45 155" fill="url(#rainDropReal)"/>
-          <path d="M75 160 Q77 170 75 175 Q73 170 75 160" fill="url(#rainDropReal)"/>
-          <path d="M150 155 Q152 165 150 170 Q148 165 150 155" fill="url(#rainDropReal)"/>
+          <path class="rain-drop-animate" style="animation-delay: 0s;" d="M45 155 Q47 165 45 170 Q43 165 45 155" fill="url(#rainDropReal)"/>
+          <path class="rain-drop-animate" style="animation-delay: 0.3s;" d="M75 160 Q77 170 75 175 Q73 170 75 160" fill="url(#rainDropReal)"/>
+          <path class="rain-drop-animate" style="animation-delay: 0.6s;" d="M150 155 Q152 165 150 170 Q148 165 150 155" fill="url(#rainDropReal)"/>
         </g>
       </symbol>
       <!-- Soleil avec pluie réaliste -->
       <symbol id="weather-sun-and-rain" viewBox="0 0 192 192">
         <!-- Soleil partiel -->
-        <g transform="translate(15, 15)">
+        <g transform="translate(15, 15)" class="cloud-animate">
           <!-- Halo du soleil -->
           <circle cx="55" cy="50" r="40" fill="url(#sunGlowOuter)" opacity="0.4"/>
           <circle cx="55" cy="50" r="30" fill="url(#sunGlowMid)" opacity="0.5"/>
           
           <!-- Rayons -->
-          <g opacity="0.6">
+          <g opacity="0.6" class="sun-rays-animate">
             <polygon points="55,12 58,35 52,35" fill="url(#sunRayGrad)" transform="rotate(0 55 50)"/>
             <polygon points="55,12 58,35 52,35" fill="url(#sunRayGrad)" transform="rotate(45 55 50)"/>
             <polygon points="55,12 58,35 52,35" fill="url(#sunRayGrad)" transform="rotate(90 55 50)"/>
@@ -452,7 +452,7 @@
         </g>
         
         <!-- Nuage avec pluie -->
-        <g transform="translate(55, 100)">
+        <g transform="translate(55, 100)" class="cloud-animate">
           <!-- Ombre -->
           <ellipse cx="65" cy="45" rx="50" ry="10" fill="url(#cloudShadowReal)" opacity="0.35"/>
           
@@ -472,9 +472,9 @@
         
         <!-- Gouttes de pluie -->
         <g>
-          <path d="M75 145 Q78 160 75 170 Q72 160 75 145" fill="url(#rainDropReal)" opacity="0.85"/>
-          <path d="M105 155 Q107 165 105 172 Q103 165 105 155" fill="url(#rainDropReal)" opacity="0.8"/>
-          <path d="M130 150 Q132 162 130 170 Q128 162 130 150" fill="url(#rainDropReal)" opacity="0.75"/>
+          <path class="rain-drop-animate" style="animation-delay: 0s;" d="M75 145 Q78 160 75 170 Q72 160 75 145" fill="url(#rainDropReal)" opacity="0.85"/>
+          <path class="rain-drop-animate" style="animation-delay: 0.4s;" d="M105 155 Q107 165 105 172 Q103 165 105 155" fill="url(#rainDropReal)" opacity="0.8"/>
+          <path class="rain-drop-animate" style="animation-delay: 0.8s;" d="M130 150 Q132 162 130 170 Q128 162 130 150" fill="url(#rainDropReal)" opacity="0.75"/>
           
           <!-- Petites gouttes -->
           <ellipse cx="90" cy="175" rx="2.5" ry="4" fill="url(#rainDropReal)" opacity="0.7"/>
@@ -484,7 +484,7 @@
       <!-- Soleil avec neige réaliste -->
       <symbol id="weather-sun-and-snow" viewBox="0 0 192 192">
         <!-- Soleil partiel -->
-        <g transform="translate(15, 15)">
+        <g transform="translate(15, 15)" class="cloud-animate">
           <!-- Halo -->
           <circle cx="55" cy="50" r="40" fill="url(#sunGlowOuter)" opacity="0.4"/>
           <circle cx="55" cy="50" r="30" fill="url(#sunGlowMid)" opacity="0.5"/>
@@ -506,7 +506,7 @@
         </g>
         
         <!-- Nuage de neige -->
-        <g transform="translate(55, 100)">
+        <g transform="translate(55, 100)" class="cloud-animate">
           <!-- Ombre -->
           <ellipse cx="65" cy="45" rx="50" ry="10" fill="url(#cloudShadowReal)" opacity="0.3"/>
           
@@ -527,15 +527,15 @@
         <!-- Flocons de neige -->
         <g>
           <!-- Flocons principaux -->
-          <g transform="translate(80, 150)" opacity="0.85">
+          <g transform="translate(80, 150)" opacity="0.85" class="snowflake-animate" style="animation-delay: 0s;">
             <circle cx="0" cy="0" r="7" fill="url(#snowflakeGrad)"/>
             <circle cx="0" cy="0" r="4" fill="#FFFFFF"/>
           </g>
-          <g transform="translate(115, 160)" opacity="0.8">
+          <g transform="translate(115, 160)" opacity="0.8" class="snowflake-animate" style="animation-delay: 0.6s;">
             <circle cx="0" cy="0" r="6" fill="url(#snowflakeGrad)"/>
             <circle cx="0" cy="0" r="3.5" fill="#FFFFFF"/>
           </g>
-          <g transform="translate(140, 145)" opacity="0.75">
+          <g transform="translate(140, 145)" opacity="0.75" class="snowflake-animate" style="animation-delay: 1.2s;">
             <circle cx="0" cy="0" r="5" fill="url(#snowflakeGrad)"/>
             <circle cx="0" cy="0" r="3" fill="#FFFFFF"/>
           </g>
@@ -553,7 +553,7 @@
       <!-- Pluie verglaçante réaliste avec glace -->
       <symbol id="weather-freezing-rain" viewBox="0 0 192 192">
         <!-- Nuage sombre avec gel -->
-        <g transform="translate(20, 30)">
+        <g transform="translate(20, 30)" class="cloud-animate">
           <!-- Halo sombre -->
           <ellipse cx="75" cy="55" rx="60" ry="12" fill="url(#cloudShadowReal)" opacity="0.35"/>
           
@@ -574,14 +574,14 @@
         <!-- Gouttes de pluie verglaçante (bleu-glace) -->
         <g>
           <!-- Gouttes principales -->
-          <path d="M50 110 Q53 128 50 140 Q47 128 50 110" fill="url(#rainDropReal)" opacity="0.9"/>
-          <path d="M85 100 Q88 120 85 132 Q82 120 85 100" fill="url(#rainDropReal)" opacity="0.85"/>
-          <path d="M120 108 Q123 126 120 138 Q117 126 120 108" fill="url(#rainDropReal)" opacity="0.9"/>
-          <path d="M150 115 Q152 130 150 140 Q148 130 150 115" fill="url(#rainDropReal)" opacity="0.85"/>
+          <path class="rain-drop-animate" style="animation-delay: 0s;" d="M50 110 Q53 128 50 140 Q47 128 50 110" fill="url(#rainDropReal)" opacity="0.9"/>
+          <path class="rain-drop-animate" style="animation-delay: 0.2s;" d="M85 100 Q88 120 85 132 Q82 120 85 100" fill="url(#rainDropReal)" opacity="0.85"/>
+          <path class="rain-drop-animate" style="animation-delay: 0.4s;" d="M120 108 Q123 126 120 138 Q117 126 120 108" fill="url(#rainDropReal)" opacity="0.9"/>
+          <path class="rain-drop-animate" style="animation-delay: 0.6s;" d="M150 115 Q152 130 150 140 Q148 130 150 115" fill="url(#rainDropReal)" opacity="0.85"/>
           
           <!-- Gouttes moyennes -->
-          <path d="M65 145 Q67 158 65 165 Q63 158 65 145" fill="url(#rainDropReal)" opacity="0.8"/>
-          <path d="M100 150 Q102 163 100 170 Q98 163 100 150" fill="url(#rainDropReal)" opacity="0.85"/>
+          <path class="rain-drop-animate" style="animation-delay: 0.1s;" d="M65 145 Q67 158 65 165 Q63 158 65 145" fill="url(#rainDropReal)" opacity="0.8"/>
+          <path class="rain-drop-animate" style="animation-delay: 0.3s;" d="M100 150 Q102 163 100 170 Q98 163 100 150" fill="url(#rainDropReal)" opacity="0.85"/>
         </g>
         
         <!-- Grêle / granules de glace -->
@@ -774,7 +774,7 @@
     </div>
 
     <!-- Main content -->
-    <main class="content" id="content">
+    <main class="content app-content-animate" id="content">
       <section class="location">
         <div id="mainIcon" class="main-icon"></div>
         <h1 class="city-name" id="cityName">Chargement…</h1>

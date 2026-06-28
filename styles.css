@@ -1,3 +1,65 @@
+/* ===== Premium Animations ===== */
+@keyframes sun-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes cloud-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes rain-fall {
+  0% { transform: translateY(-10px); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: translateY(20px); opacity: 0; }
+}
+
+@keyframes snow-fall {
+  0% { transform: translateY(-10px) translateX(0) rotate(0deg); opacity: 0; }
+  25% { opacity: 1; transform: translateY(20px) translateX(5px) rotate(90deg); }
+  50% { transform: translateY(50px) translateX(-5px) rotate(180deg); }
+  75% { transform: translateY(80px) translateX(5px) rotate(270deg); }
+  100% { transform: translateY(110px) translateX(0) rotate(360deg); opacity: 0; }
+}
+
+@keyframes lightning-flash {
+  0%, 100% { opacity: 0; }
+  10%, 90% { opacity: 0; }
+  11%, 13%, 15%, 17% { opacity: 1; }
+  12%, 14%, 16%, 18% { opacity: 0; }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.sun-rays-animate {
+  transform-origin: center;
+  animation: sun-rotate 30s linear infinite;
+}
+
+.cloud-animate {
+  animation: cloud-float 4s ease-in-out infinite;
+}
+
+.rain-drop-animate {
+  animation: rain-fall 1.5s linear infinite;
+}
+
+.snowflake-animate {
+  animation: snow-fall 4s linear infinite;
+}
+
+.lightning-bolt-animate {
+  animation: lightning-flash 5s step-end infinite;
+}
+
+.app-content-animate {
+  animation: fade-in-up 0.8s ease-out forwards;
+}
+
 /* ===== Reset & Base ===== */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; }
@@ -469,14 +531,14 @@ body {
 
 .location { text-align: center; padding: 28px 0 18px; }
 .city-name {
-  font-size: 32px;
-  font-weight: 500;
+  font-size: 34px;
+  font-weight: 600;
   letter-spacing: -0.5px;
   text-shadow: 0 2px 12px rgba(0,0,0,0.25);
 }
 .temp {
-  font-size: 96px;
-  font-weight: 200;
+  font-size: 110px;
+  font-weight: 100;
   line-height: 1;
   letter-spacing: -4px;
   margin-top: 4px;
@@ -498,10 +560,10 @@ body {
 
 /* ===== Glass cards ===== */
 .glass-card {
-  background: rgba(255,255,255,0.16);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.12);
+  backdrop-filter: blur(25px) saturate(180%);
+  -webkit-backdrop-filter: blur(25px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.2);
   border-radius: 18px;
   padding: 14px 16px;
   margin-top: 10px;

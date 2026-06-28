@@ -225,17 +225,26 @@ function renderCity(city, w) {
   const mainIcon = $("mainIcon");
   if (mainIcon) mainIcon.innerHTML = icon(info.icon, 140);
 
-  // Description
+  // Description premium et naturelle
   const hi = daily.temperature_2m_max[0];
   const lo = daily.temperature_2m_min[0];
   const popToday = daily.precipitation_probability_max[0] || 0;
-  let desc;
-  if (code === 0) desc = `C'est dégagé aujourd'hui, avec des températures maximales de ${fmtTemp(hi)}.`;
-  else if ([2,3].includes(code)) desc = `Nuageux toute la journée. Vent ${Math.round(cur.wind_speed_10m)} km/h.`;
-  else if ([51,53,55,61,63,65,80,81].includes(code)) desc = `Pluie attendue aujourd'hui avec un risque de ${popToday}%.`;
-  else if ([71,73,75,77,85,86].includes(code)) desc = `Chutes de neige attendues aujourd'hui.`;
-  else if ([95,96,99].includes(code)) desc = `Orages prévus aujourd'hui. Restez prudent.`;
-  else desc = `${info.label}. Maximales ${fmtTemp(hi)}, minimales ${fmtTemp(lo)}.`;
+  const feelsLike = fmtTemp(cur.apparent_temperature);
+  const humidity = cur.relative_humidity_2m;
+  const wind = Math.round(cur.wind_speed_10m);
+
+  let desc = `Actuellement, le temps est ${info.label.toLowerCase()}. `;
+  desc += `Le ressenti est de ${feelsLike} avec une humidité de ${humidity}%. `;
+
+  if (popToday > 30) {
+    desc += `Des précipitations sont probables (${popToday}%). `;
+  } else if (wind > 25) {
+    desc += `Attention au vent soutenu de ${wind} km/h. `;
+  } else if (code === 0 || code === 1) {
+    desc += `Profitez d'une belle journée ensoleillée. `;
+  }
+
+  desc += `Les températures varieront entre ${fmtTemp(lo)} et ${fmtTemp(hi)}.`;
   $("descText").textContent = desc;
 
   // Hourly — "Maintenant" = température COURANTE, et tout est dans le fuseau de la ville
