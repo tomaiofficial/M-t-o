@@ -1,38 +1,38 @@
 // ============================================================
 //  Météo - Application météo style Apple Weather
-//  Geolocalisation automatique, descriptions IA, auto-refresh
+//  Géolocalisation auto, descriptions IA, auto-refresh
 // ============================================================
 
 // ===== WMO codes (style Apple Weather) =====
 const WMO = {
-  0:  { label: "Ciel degage",           icon: "apple-clear-day",         night: "apple-clear-night" },
-  1:  { label: "Plutot clair",          icon: "apple-clear-day",         night: "apple-clear-night" },
-  2:  { label: "Partiellement nuageux", icon: "apple-partly-cloudy-day", night: "apple-partly-cloudy-night" },
-  3:  { label: "Couvert",               icon: "apple-cloudy",            night: "apple-cloudy" },
-  45: { label: "Brouillard",           icon: "apple-fog",               night: "apple-fog" },
-  48: { label: "Brouillard givrant",   icon: "apple-fog",               night: "apple-fog" },
-  51: { label: "Legere bruine",        icon: "apple-drizzle",           night: "apple-drizzle" },
-  53: { label: "Bruine",              icon: "apple-drizzle",           night: "apple-drizzle" },
-  55: { label: "Bruine dense",        icon: "apple-drizzle",           night: "apple-drizzle" },
-  56: { label: "Bruine verglacante",  icon: "apple-icy",               night: "apple-icy" },
-  57: { label: "Bruine verglacante",  icon: "apple-icy",               night: "apple-icy" },
-  61: { label: "Pluie legere",        icon: "apple-rain",              night: "apple-rain" },
-  63: { label: "Pluie",              icon: "apple-rain",              night: "apple-rain" },
-  65: { label: "Pluie forte",        icon: "apple-heavy-rain",        night: "apple-heavy-rain" },
-  66: { label: "Pluie verglacante",  icon: "apple-icy",               night: "apple-icy" },
-  67: { label: "Pluie verglacante",  icon: "apple-icy",               night: "apple-icy" },
-  71: { label: "Legere neige",       icon: "apple-snow",              night: "apple-snow" },
-  73: { label: "Neige",              icon: "apple-snow",              night: "apple-snow" },
-  75: { label: "Forte neige",        icon: "apple-snow",              night: "apple-snow" },
-  77: { label: "Grains de neige",    icon: "apple-snow",              night: "apple-snow" },
-  80: { label: "Averses",            icon: "apple-rain",              night: "apple-rain" },
-  81: { label: "Averses",            icon: "apple-rain",              night: "apple-rain" },
-  82: { label: "Violentes averses",  icon: "apple-heavy-rain",        night: "apple-heavy-rain" },
-  85: { label: "Averses de neige",   icon: "apple-snow",              night: "apple-snow" },
-  86: { label: "Fortes averses neige",icon: "apple-snow",             night: "apple-snow" },
-  95: { label: "Orage",              icon: "apple-thunder",           night: "apple-thunder" },
-  96: { label: "Orage avec grele",   icon: "apple-thunder",           night: "apple-thunder" },
-  99: { label: "Orage avec grele",   icon: "apple-thunder",           night: "apple-thunder" }
+  0:  { label: "Ciel dégagé",            icon: "apple-clear-day",         night: "apple-clear-night" },
+  1:  { label: "Plutôt clair",           icon: "apple-clear-day",         night: "apple-clear-night" },
+  2:  { label: "Partiellement nuageux",  icon: "apple-partly-cloudy-day", night: "apple-partly-cloudy-night" },
+  3:  { label: "Couvert",                icon: "apple-cloudy",            night: "apple-cloudy" },
+  45: { label: "Brouillard",             icon: "apple-fog",               night: "apple-fog" },
+  48: { label: "Brouillard givrant",     icon: "apple-fog",               night: "apple-fog" },
+  51: { label: "Légère bruine",          icon: "apple-drizzle",           night: "apple-drizzle" },
+  53: { label: "Bruine",                 icon: "apple-drizzle",           night: "apple-drizzle" },
+  55: { label: "Bruine dense",           icon: "apple-drizzle",           night: "apple-drizzle" },
+  56: { label: "Bruine verglaçante",     icon: "apple-icy",               night: "apple-icy" },
+  57: { label: "Bruine verglaçante",     icon: "apple-icy",               night: "apple-icy" },
+  61: { label: "Pluie légère",           icon: "apple-rain",              night: "apple-rain" },
+  63: { label: "Pluie",                  icon: "apple-rain",              night: "apple-rain" },
+  65: { label: "Pluie forte",            icon: "apple-heavy-rain",        night: "apple-heavy-rain" },
+  66: { label: "Pluie verglaçante",      icon: "apple-icy",               night: "apple-icy" },
+  67: { label: "Pluie verglaçante",      icon: "apple-icy",               night: "apple-icy" },
+  71: { label: "Légère neige",           icon: "apple-snow",              night: "apple-snow" },
+  73: { label: "Neige",                  icon: "apple-snow",              night: "apple-snow" },
+  75: { label: "Forte neige",            icon: "apple-snow",              night: "apple-snow" },
+  77: { label: "Grains de neige",        icon: "apple-snow",              night: "apple-snow" },
+  80: { label: "Averses",                icon: "apple-rain",              night: "apple-rain" },
+  81: { label: "Averses",                icon: "apple-rain",              night: "apple-rain" },
+  82: { label: "Violentes averses",      icon: "apple-heavy-rain",        night: "apple-heavy-rain" },
+  85: { label: "Averses de neige",       icon: "apple-snow",              night: "apple-snow" },
+  86: { label: "Fortes averses de neige", icon: "apple-snow",             night: "apple-snow" },
+  95: { label: "Orage",                  icon: "apple-thunder",           night: "apple-thunder" },
+  96: { label: "Orage avec grêle",       icon: "apple-thunder",           night: "apple-thunder" },
+  99: { label: "Orage avec grêle",       icon: "apple-thunder",           night: "apple-thunder" }
 };
 
 // ===== State =====
@@ -42,7 +42,7 @@ const state = {
   lastWeather: null,
   lastRefreshMs: 0
 };
-const LS_KEY = "meteo_v3";
+const LS_KEY = "meteo_v4";
 
 // ===== Helpers =====
 const $ = id => document.getElementById(id);
@@ -118,8 +118,8 @@ function themeFor(code, isNight, currentTime, windSpeed) {
 }
 
 // ============================================================
-//  IA : Generateur de descriptions meteo intelligentes
-//  Analyse multiple parametres pour generer un texte naturel
+//  IA : Générateur de descriptions météo intelligentes
+//  Analyse plusieurs paramètres pour générer un texte naturel
 // ============================================================
 function generateDescription(w) {
   const cur = w.current;
@@ -127,7 +127,6 @@ function generateDescription(w) {
   const hourly = w.hourly;
   const code = cur.weather_code;
   const isNight = cur.is_day === 0;
-  const info = wmoInfo(code, isNight);
   const hi = daily.temperature_2m_max[0];
   const lo = daily.temperature_2m_min[0];
   const temp = cur.temperature_2m;
@@ -136,10 +135,10 @@ function generateDescription(w) {
   const wind = Math.round(cur.wind_speed_10m);
   const popToday = daily.precipitation_probability_max[0] || 0;
   const precip = daily.precipitation_sum[0] || 0;
-  const uv = daily.uv_index_max?.[0] || 0;
+  const uv = (daily.uv_index_max && daily.uv_index_max[0]) || 0;
   const pressure = cur.surface_pressure;
 
-  // Analyser les prochaines heures pour detecter des changements
+  // Analyser les prochaines heures
   const currentHour = getHourFromISO(cur.time);
   const nextHours = [];
   if (hourly && hourly.time) {
@@ -149,23 +148,20 @@ function generateDescription(w) {
         nextHours.push({
           hour: h,
           code: hourly.weather_code[i],
-          pop: hourly.precipitation_probability?.[i] || 0,
+          pop: (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0,
           temp: hourly.temperature_2m[i]
         });
       }
     }
   }
 
-  // Detecter si la pluie arrive dans les prochaines heures
+  // Détecter la pluie à venir
   let rainComing = false;
   let rainInHours = -1;
   let clearComing = false;
   for (const nh of nextHours) {
     if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(nh.code) && nh.pop > 30) {
-      if (!rainComing) {
-        rainComing = true;
-        rainInHours = nh.hour;
-      }
+      if (!rainComing) { rainComing = true; rainInHours = nh.hour; }
     }
     if (nh.code === 0 || nh.code === 1) {
       if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) {
@@ -174,31 +170,29 @@ function generateDescription(w) {
     }
   }
 
-  // Construire la description
   let parts = [];
 
   // 1. Condition principale
   if (code === 0) {
-    if (isNight) parts.push("Ciel degage cette nuit");
-    else parts.push("Ciel degage aujourd'hui");
+    parts.push(isNight ? "Ciel dégagé cette nuit" : "Ciel dégagé aujourd'hui");
   } else if (code === 1) {
-    parts.push("Plutot clair aujourd'hui");
+    parts.push("Plutôt clair aujourd'hui");
   } else if (code === 2) {
     parts.push("Partiellement nuageux");
   } else if (code === 3) {
-    parts.push("Ciel couvert toute la journee");
+    parts.push("Ciel couvert toute la journée");
   } else if ([45,48].includes(code)) {
-    parts.push("Brouillard, visibilite reduite");
+    parts.push("Brouillard, visibilité réduite");
   } else if ([51,53,55].includes(code)) {
-    parts.push("Bruine legere");
+    parts.push("Bruine légère");
   } else if ([56,57].includes(code)) {
-    parts.push("Bruine verglacante, attention aux routes");
+    parts.push("Bruine verglaçante, attention aux routes");
   } else if ([61,63].includes(code)) {
     parts.push("Pluie");
   } else if (code === 65) {
     parts.push("Pluie forte");
   } else if ([66,67].includes(code)) {
-    parts.push("Pluie verglacante, prudence sur la route");
+    parts.push("Pluie verglaçante, prudence sur la route");
   } else if ([71,73].includes(code)) {
     parts.push("Neige");
   } else if (code === 75) {
@@ -208,31 +202,31 @@ function generateDescription(w) {
   } else if ([80,81].includes(code)) {
     parts.push("Averses");
   } else if (code === 82) {
-    parts.push("Violentes averses, restez a l'abri");
+    parts.push("Violentes averses, restez à l'abri");
   } else if ([85,86].includes(code)) {
     parts.push("Averses de neige");
   } else if ([95,96,99].includes(code)) {
-    parts.push("Orages prevus, restez prudent");
+    parts.push("Orages prévus, restez prudent");
   }
 
-  // 2. Temperatures
+  // 2. Températures
   parts.push(`Maximales ${fmtTemp(hi)}, minimales ${fmtTemp(lo)}`);
 
-  // 3. Probabilite de precipitations
+  // 3. Probabilité de précipitations
   if (popToday >= 40 && ![51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) {
-    parts.push(`Risque de precipitations de ${popToday}%`);
+    parts.push(`Risque de précipitations de ${popToday}%`);
   } else if (popToday >= 60 && [51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) {
     parts.push(`Risque de ${popToday}%`);
   }
 
-  // 4. Pluie a venir
+  // 4. Pluie à venir
   if (rainComing && ![51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) {
     parts.push(`Pluie attendue vers ${rainInHours}h`);
   }
 
-  // 5. Eclaircissement a venir
+  // 5. Éclaircissement à venir
   if (clearComing) {
-    parts.push("Eclaircissements dans les prochaines heures");
+    parts.push("Éclaircissements dans les prochaines heures");
   }
 
   // 6. Vent
@@ -244,12 +238,12 @@ function generateDescription(w) {
 
   // 7. UV
   if (uv >= 8 && !isNight) {
-    parts.push("Indice UV tres eleve, protegez-vous");
+    parts.push("Indice UV très élevé, protégez-vous");
   } else if (uv >= 6 && !isNight) {
-    parts.push("Indice UV eleve");
+    parts.push("Indice UV élevé");
   }
 
-  // 8. Humidite
+  // 8. Humidité
   if (humidity >= 85 && code !== 3) {
     parts.push("Air humide");
   }
@@ -270,7 +264,7 @@ function generateDescription(w) {
     }
   }
 
-  // 11. Precipitations
+  // 11. Précipitations
   if (precip > 5) {
     parts.push(`${precip.toFixed(1)} mm attendus`);
   }
@@ -279,7 +273,7 @@ function generateDescription(w) {
 }
 
 // ============================================================
-//  API : Open-Meteo (gratuit, sans cle)
+//  API : Open-Meteo (gratuit, sans clé)
 // ============================================================
 async function fetchWeather(lat, lon) {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure&hourly=temperature_2m,apparent_temperature,weather_code,precipitation_probability,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max,precipitation_sum&timezone=auto&forecast_days=10`;
@@ -289,7 +283,7 @@ async function fetchWeather(lat, lon) {
 }
 
 // ============================================================
-//  Geolocalisation : Nominatim (OpenStreetMap)
+//  Géolocalisation : Nominatim (OpenStreetMap)
 // ============================================================
 async function reverseGeocode(lat, lon) {
   try {
@@ -316,10 +310,10 @@ async function searchCities(q) {
     );
     const data = await res.json();
     return data.map(r => ({
-      name: r.address?.city || r.address?.town || r.address?.village || r.display_name.split(",")[0],
+      name: (r.address && (r.address.city || r.address.town || r.address.village)) || r.display_name.split(",")[0],
       lat: parseFloat(r.lat),
       lon: parseFloat(r.lon),
-      region: [r.address?.county, r.address?.country].filter(Boolean).join(", ")
+      region: [r.address && r.address.county, r.address && r.address.country].filter(Boolean).join(", ")
     }));
   } catch (e) {
     return [];
@@ -327,7 +321,7 @@ async function searchCities(q) {
 }
 
 // ============================================================
-//  Render : Affichage des donnees meteo
+//  Render : Affichage des données météo
 // ============================================================
 function renderCity(city, w) {
   if (!w || !w.current) {
@@ -371,8 +365,9 @@ function renderCity(city, w) {
     const h = document.createElement("div");
     h.className = "hour";
     const timeLabel = i === startIdx ? "Maint." : fmtHourLabel(hourly.time[i]);
-    const wi = wmoInfo(hourly.weather_code[i], getHourFromISO(hourly.time[i]) >= 19 || getHourFromISO(hourly.time[i]) < 6);
-    const pop = hourly.precipitation_probability?.[i] || 0;
+    const hHour = getHourFromISO(hourly.time[i]);
+    const wi = wmoInfo(hourly.weather_code[i], hHour >= 19 || hHour < 6);
+    const pop = (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0;
     const isPrecipCode = [51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99].includes(hourly.weather_code[i]);
     const popVisible = isPrecipCode && pop >= 10;
     h.innerHTML = `
@@ -399,7 +394,7 @@ function renderCity(city, w) {
     const startPct = ((lo - allMin) / range) * 100;
     const endPct = ((hi - allMin) / range) * 100;
     const wi = wmoInfo(daily.weather_code[i], false);
-    const popDay = daily.precipitation_probability_max?.[i] || 0;
+    const popDay = (daily.precipitation_probability_max && daily.precipitation_probability_max[i]) || 0;
     const isPrecipCodeDay = [51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99].includes(daily.weather_code[i]);
     const popVisible = isPrecipCodeDay && popDay >= 5;
     di.innerHTML = `
@@ -420,20 +415,20 @@ function renderCity(city, w) {
   $("sunset").textContent = fmtTime(daily.sunset[0]);
   $("wind").textContent = `${Math.round(cur.wind_speed_10m)} km/h`;
   $("windDir").textContent = `${degToCompass(cur.wind_direction_10m)} · Rafales ${Math.round(cur.wind_speed_10m * 1.4)} km/h`;
-  $("precip").textContent = `${daily.precipitation_sum[0]?.toFixed(1) || "0.0"} mm`;
+  $("precip").textContent = `${(daily.precipitation_sum[0] || 0).toFixed(1)} mm`;
   $("precipSub").textContent = `Risque ${daily.precipitation_probability_max[0] || 0}% aujourd'hui`;
   $("humidity").textContent = `${cur.relative_humidity_2m}%`;
-  $("dew").textContent = `Point de rosee ${fmtTemp(cur.temperature_2m - (100 - cur.relative_humidity_2m) / 5)}`;
+  $("dew").textContent = `Point de rosée ${fmtTemp(cur.temperature_2m - (100 - cur.relative_humidity_2m) / 5)}`;
   $("feels").textContent = fmtTemp(cur.apparent_temperature);
-  $("feelsSub").textContent = cur.apparent_temperature < cur.temperature_2m ? "Plus frais a cause du vent" : "Similaire a la reelle";
+  $("feelsSub").textContent = cur.apparent_temperature < cur.temperature_2m ? "Plus frais à cause du vent" : "Similaire à la réelle";
   $("vis").textContent = "10+ km";
   $("pressure").textContent = `${Math.round(cur.surface_pressure)} hPa`;
   $("pressureSub").textContent = cur.surface_pressure > 1013 ? "Au-dessus de la moyenne" : "En dessous de la moyenne";
 
   // UV
-  const uv = daily.uv_index_max?.[0] || 0;
+  const uv = (daily.uv_index_max && daily.uv_index_max[0]) || 0;
   $("uv").textContent = uv.toFixed(1);
-  const uvLabels = ["Faible","Faible","Faible","Modere","Modere","Modere","Eleve","Eleve","Tres eleve","Extreme","Extreme"];
+  const uvLabels = ["Faible","Faible","Faible","Modéré","Modéré","Modéré","Élevé","Élevé","Très élevé","Extrême","Extrême"];
   $("uvSub").textContent = uvLabels[Math.min(10, Math.round(uv))] || "—";
   $("uvBar").style.width = `${Math.min(100, uv * 10)}%`;
 
@@ -445,19 +440,19 @@ function updateUpdatedAt() {
   if (!state.lastRefreshMs) return;
   const diff = Math.floor((Date.now() - state.lastRefreshMs) / 1000);
   if (diff < 60) {
-    $("updatedAt").textContent = `Mis a jour il y a ${diff}s`;
+    $("updatedAt").textContent = `Mis à jour il y a ${diff}s`;
   } else {
     const min = Math.floor(diff / 60);
-    $("updatedAt").textContent = `Mis a jour il y a ${min} min`;
+    $("updatedAt").textContent = `Mis à jour il y a ${min} min`;
   }
 }
 
 // ============================================================
-//  Load : Charger la meteo pour une ville
+//  Load : Charger la météo pour une ville
 // ============================================================
 async function loadWeather(city) {
   try {
-    $("cityName").textContent = city.name + " ...";
+    $("cityName").textContent = city.name + " …";
     const w = await fetchWeather(city.lat, city.lon);
     if (!w || !w.current) throw new Error("Invalid data");
     renderCity(city, w);
@@ -465,23 +460,17 @@ async function loadWeather(city) {
     console.error("loadWeather error:", e);
     $("cityName").textContent = "Erreur";
     $("temp").textContent = "—";
-    $("condition").textContent = "Verifiez votre connexion";
+    $("condition").textContent = "Vérifiez votre connexion";
   }
 }
 
 // ============================================================
-//  Geolocalisation : Detection automatique de la position
+//  Géolocalisation : Détection automatique de la position
 // ============================================================
 async function tryGeolocate() {
   return new Promise((resolve) => {
-    if (!navigator.geolocation) {
-      resolve(false);
-      return;
-    }
-    if (window.location.protocol === "file:") {
-      resolve(false);
-      return;
-    }
+    if (!navigator.geolocation) { resolve(false); return; }
+    if (window.location.protocol === "file:") { resolve(false); return; }
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -546,6 +535,9 @@ function closeSearch() {
   searchOverlay.classList.remove("open");
 }
 
+// Bouton loupe dans la topbar
+$("searchBtn").addEventListener("click", openSearch);
+
 // Tap sur le nom de la ville = ouvrir la recherche
 $("cityName").addEventListener("click", openSearch);
 $("locationSection").addEventListener("click", (e) => {
@@ -588,33 +580,105 @@ searchInput.addEventListener("input", () => {
 });
 
 // ============================================================
-//  Init : Demarrage de l'application
+//  Settings : Panneau des paramètres
+// ============================================================
+const settingsPanel = $("settingsPanel");
+
+function openSettings() {
+  settingsPanel.classList.add("open");
+}
+
+function closeSettings() {
+  settingsPanel.classList.remove("open");
+}
+
+$("settingsBtn").addEventListener("click", openSettings);
+$("closeSettings").addEventListener("click", closeSettings);
+settingsPanel.addEventListener("click", (e) => {
+  if (e.target === settingsPanel) closeSettings();
+});
+
+// Bouton actualiser
+$("refreshBtn").addEventListener("click", async () => {
+  closeSettings();
+  if (state.city) await loadWeather(state.city);
+});
+
+// Toggle unité °C/°F
+const unitToggle = $("unitToggle");
+unitToggle.addEventListener("click", (e) => {
+  const btn = e.target.closest(".seg");
+  if (!btn) return;
+  const newUnit = btn.dataset.unit;
+  if (newUnit === state.unit) return;
+  state.unit = newUnit;
+  // Update active button
+  unitToggle.querySelectorAll(".seg").forEach(b => {
+    b.classList.toggle("active", b.dataset.unit === newUnit);
+  });
+  saveState();
+  // Re-render with new unit
+  if (state.lastWeather && state.city) {
+    renderCity(state.city, state.lastWeather);
+  }
+});
+
+// ============================================================
+//  Init : Démarrage de l'application
 // ============================================================
 (async function init() {
-  // Charger l'etat sauvegarde
+  // Charger l'état sauvegardé
   const ok = loadState();
 
+  // Mettre à jour le toggle d'unité
+  unitToggle.querySelectorAll(".seg").forEach(b => {
+    b.classList.toggle("active", b.dataset.unit === state.unit);
+  });
+
   if (ok && state.city) {
-    // Ville sauvegardee : charger directement
     await loadWeather(state.city);
   } else {
-    // Pas de ville sauvegardee : geolocalisation
-    $("cityName").textContent = "Localisation...";
+    $("cityName").textContent = "Localisation…";
     const geoOk = await tryGeolocate();
     if (!geoOk) {
-      // Geolocalisation echouee : ville par defaut
       state.city = { name: "Paris", lat: 48.8566, lon: 2.3522 };
       await loadWeather(state.city);
     }
   }
 
-  // Auto-refresh toutes les 2 minutes
+  // Auto-refresh des données météo toutes les 2 minutes
   setInterval(async () => {
     if (state.city) {
       await loadWeather(state.city);
     }
   }, 2 * 60 * 1000);
 
-  // Mise a jour du "Mis a jour il y a X min"
+  // Rafraîchissement de la description IA toutes les 3 minutes
+  // Régénère la description à partir des données actuelles (heure par heure)
+  setInterval(() => {
+    if (state.lastWeather && state.city) {
+      // Simuler l'avance du temps en utilisant l'heure actuelle
+      const now = new Date();
+      const w = state.lastWeather;
+      // Mettre à jour l'heure courante dans les données
+      if (w.current) {
+        w.current.time = now.toISOString().slice(0, 19);
+        // Trouver l'heure correspondante dans hourly et utiliser ses données
+        const currentHour = now.getHours();
+        const hourlyIdx = w.hourly.time.findIndex(t => getHourFromISO(t) === currentHour);
+        if (hourlyIdx >= 0) {
+          w.current.temperature_2m = w.hourly.temperature_2m[hourlyIdx];
+          w.current.weather_code = w.hourly.weather_code[hourlyIdx];
+          w.current.apparent_temperature = w.hourly.apparent_temperature[hourlyIdx];
+          w.current.wind_speed_10m = w.hourly.wind_speed_10m[hourlyIdx];
+          w.current.is_day = (currentHour >= 6 && currentHour < 19) ? 1 : 0;
+        }
+        // Re-render avec les nouvelles données
+        renderCity(state.city, w);
+      }
+    }
+  }, 3 * 60 * 1000);
+
+  // Mise à jour du "Mis à jour il y a X min"
   setInterval(updateUpdatedAt, 30 * 1000);
 })();
