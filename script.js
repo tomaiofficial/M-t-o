@@ -268,7 +268,7 @@ let dayCycleCache = null;
 
 function isHourAtNight(isoHour, daily) {
   // Détermine si une heure donnée est de nuit en utilisant sunrise/sunset
-  // du jour correspondant. Retourne true si nuit.
+  // EXACT du jour calendaire où se trouve cette heure (pas le plus proche).
   if (!daily || !daily.sunrise || !daily.sunset) {
     // Fallback : 21h-6h si pas de données
     const m = (isoHour || "").match(/T(\d{2})/);
@@ -279,20 +279,29 @@ function isHourAtNight(isoHour, daily) {
   const hourMs = new Date(isoHour).getTime();
   if (isNaN(hourMs)) return false;
 
-  // Trouver le bon jour (utiliser sunrise/sunset le plus proche)
+  // Trouver le jour calendaire de l'heure (le sunrise le plus tôt du même jour)
+  // On cherche l'index où sunrise est juste après hourMs ET sunrise est le
+  // premier du lendemain. Sinon on utilise l'index le plus proche mais dans
+  // la même fenêtre de 24h.
   let bestIdx = 0;
   let bestDiff = Infinity;
   for (let i = 0; i < daily.sunrise.length; i++) {
     const sunriseMs = new Date(daily.sunrise[i]).getTime();
-    const diff = Math.abs(sunriseMs - hourMs);
+    let diff = Math.abs(sunriseMs - hourMs);
+    // Pénaliser les sauts de jour : si la diff couvre un coucher/lever complet
+    // (>20h), c'est probablement un autre jour calendaire
+    if (diff > 20 * 60 * 60 * 1000) diff += 24 * 60 * 60 * 1000;
     if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
   }
 
   const sunriseMs = new Date(daily.sunrise[bestIdx]).getTime();
   const sunsetMs = new Date(daily.sunset[bestIdx]).getTime();
 
-  // Nuit = avant sunrise (crépuscule terminé) ou après sunset + 30min (crépuscule terminé)
-  return hourMs < sunriseMs || hourMs >= sunsetMs + 30 * 60 * 1000;
+  // Mode nuit : lune remplace soleil à partir du coucher du soleil EXACT
+  // (pas 30min après) et jusqu'au lever du soleil EXACT.
+  // Donc à 22h12 (sunset), icône = nuit.
+  // Donc à 6h45 (sunrise), icône = jour.
+  return hourMs < sunriseMs || hourMs >= sunsetMs;
 }
 
 function getDayCycleInfo(cur, daily) {
