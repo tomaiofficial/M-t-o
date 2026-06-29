@@ -48,6 +48,139 @@ const LS_KEY = "meteo_v4";
 const $ = id => document.getElementById(id);
 const app = $("app");
 
+// ============================================================
+//  CANVAS PARTICLE SYSTEM — 60 FPS rain/snow/stars
+// ============================================================
+const bgCanvas = $("bgCanvas");
+const bgCtx = bgCanvas.getContext("2d");
+let particles = [];
+let particleType = "none";
+let particleRAF = null;
+
+function resizeCanvas() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  bgCanvas.width = window.innerWidth * dpr;
+  bgCanvas.height = window.innerHeight * dpr;
+  bgCanvas.style.width = window.innerWidth + "px";
+  bgCanvas.style.height = window.innerHeight + "px";
+  bgCtx.scale(dpr, dpr);
+}
+
+function initParticles(type) {
+  particles = [];
+  particleType = type;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+
+  if (type === "rain") {
+    const count = Math.min(250, Math.floor(w / 4));
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        len: 12 + Math.random() * 18,
+        speed: 10 + Math.random() * 10,
+        opacity: 0.2 + Math.random() * 0.4,
+        windX: -1.5
+      });
+    }
+  } else if (type === "snow") {
+    const count = Math.min(180, Math.floor(w / 5));
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        r: 1 + Math.random() * 3,
+        speed: 0.4 + Math.random() * 1.2,
+        drift: (Math.random() - 0.5) * 1.5,
+        opacity: 0.4 + Math.random() * 0.5,
+        phase: Math.random() * Math.PI * 2
+      });
+    }
+  } else if (type === "stars") {
+    const count = Math.min(120, Math.floor(w / 6));
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * w,
+        y: Math.random() * h * 0.65,
+        r: 0.5 + Math.random() * 1.5,
+        twinkle: Math.random() * Math.PI * 2,
+        speed: 0.015 + Math.random() * 0.025,
+        baseAlpha: 0.3 + Math.random() * 0.5
+      });
+    }
+  }
+}
+
+function animateParticles() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  bgCtx.clearRect(0, 0, w, h);
+
+  if (particleType === "rain") {
+    bgCtx.lineWidth = 1.2;
+    for (const p of particles) {
+      bgCtx.strokeStyle = `rgba(180,210,240,${p.opacity})`;
+      bgCtx.beginPath();
+      bgCtx.moveTo(p.x, p.y);
+      bgCtx.lineTo(p.x + p.windX * 2, p.y + p.len);
+      bgCtx.stroke();
+      p.y += p.speed;
+      p.x += p.windX;
+      if (p.y > h) { p.y = -p.len; p.x = Math.random() * w; }
+      if (p.x < -20) p.x = w + 20;
+    }
+  } else if (particleType === "snow") {
+    for (const p of particles) {
+      bgCtx.fillStyle = `rgba(255,255,255,${p.opacity})`;
+      bgCtx.beginPath();
+      bgCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      bgCtx.fill();
+      p.y += p.speed;
+      p.phase += 0.02;
+      p.x += Math.sin(p.phase) * p.drift;
+      if (p.y > h) { p.y = -p.r; p.x = Math.random() * w; }
+      if (p.x < -10) p.x = w + 10;
+      if (p.x > w + 10) p.x = -10;
+    }
+  } else if (particleType === "stars") {
+    for (const p of particles) {
+      p.twinkle += p.speed;
+      const alpha = p.baseAlpha + Math.sin(p.twinkle) * 0.3;
+      bgCtx.fillStyle = `rgba(255,255,255,${Math.max(0.1, alpha)})`;
+      bgCtx.beginPath();
+      bgCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      bgCtx.fill();
+      // Subtle glow for brighter stars
+      if (p.r > 1.2) {
+        bgCtx.fillStyle = `rgba(200,210,240,${Math.max(0.05, alpha * 0.3)})`;
+        bgCtx.beginPath();
+        bgCtx.arc(p.x, p.y, p.r * 2.5, 0, Math.PI * 2);
+        bgCtx.fill();
+      }
+    }
+  }
+
+  particleRAF = requestAnimationFrame(animateParticles);
+}
+
+function setParticleType(type) {
+  if (type === particleType) return;
+  if (particleRAF) { cancelAnimationFrame(particleRAF); particleRAF = null; }
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  bgCtx.clearRect(0, 0, w, h);
+  if (type === "none") { particles = []; return; }
+  initParticles(type);
+  animateParticles();
+}
+
+window.addEventListener("resize", () => {
+  resizeCanvas();
+  if (particleType !== "none") initParticles(particleType);
+});
+resizeCanvas();
+
 function wmoInfo(code, isNight) {
   const c = WMO[code] || { label: "—", icon: "apple-cloudy" };
   return { label: c.label, icon: isNight && c.night ? c.night : c.icon };
@@ -107,7 +240,7 @@ function themeFor(code, isNight, currentTime, windSpeed) {
   if ([71,73,75,77,85,86].includes(code)) return "theme-snow";
   if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) return "theme-rain";
   if ([45,48].includes(code)) return "theme-fog";
-  if (code === 2) return isNight ? "theme-night-clear" : "theme-day-clear";
+  if (code === 2) return isNight ? "theme-night-clear" : "theme-partly-cloudy";
   if (code === 3) return "theme-cloudy";
   if (code === 0 || code === 1) {
     if (isNight) return "theme-night-clear";
@@ -342,6 +475,19 @@ function renderCity(city, w) {
   // Theme
   app.className = "app " + themeFor(code, isNight, cur.time, cur.wind_speed_10m);
 
+  // Canvas particles based on weather
+  if ([95,96,99].includes(code)) {
+    setParticleType("rain"); // Storm = heavy rain particles
+  } else if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) {
+    setParticleType("rain");
+  } else if ([71,73,75,77,85,86].includes(code)) {
+    setParticleType("snow");
+  } else if (isNight && [0,1,2].includes(code)) {
+    setParticleType("stars");
+  } else {
+    setParticleType("none");
+  }
+
   // Location
   $("cityName").textContent = city.name;
   $("temp").textContent = fmtTemp(cur.temperature_2m);
@@ -364,17 +510,22 @@ function renderCity(city, w) {
   for (let i = startIdx; i < Math.min(startIdx + 24, hourly.time.length); i++) {
     const h = document.createElement("div");
     h.className = "hour";
-    const timeLabel = i === startIdx ? "Maint." : fmtHourLabel(hourly.time[i]);
+    const isNow = i === startIdx;
+    const timeLabel = isNow ? "Maint." : fmtHourLabel(hourly.time[i]);
     const hHour = getHourFromISO(hourly.time[i]);
-    const wi = wmoInfo(hourly.weather_code[i], hHour >= 19 || hHour < 6);
+    // Pour "Maint.", utiliser les données current (réelles) au lieu de hourly (prévision)
+    const hourCode = isNow ? cur.weather_code : hourly.weather_code[i];
+    const hourTemp = isNow ? cur.temperature_2m : hourly.temperature_2m[i];
+    const hourIsNight = isNow ? isNight : (hHour >= 19 || hHour < 6);
+    const wi = wmoInfo(hourCode, hourIsNight);
     const pop = (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0;
-    const isPrecipCode = [51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99].includes(hourly.weather_code[i]);
+    const isPrecipCode = [51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99].includes(hourCode);
     const popVisible = isPrecipCode && pop >= 10;
     h.innerHTML = `
       <div class="hour-time">${timeLabel}</div>
       <div class="hour-icon">${icon(wi.icon, 32)}</div>
       <div class="hour-pop${popVisible ? "" : " empty"}">${popVisible ? pop + "%" : ""}</div>
-      <div class="hour-temp">${fmtTemp(hourly.temperature_2m[i])}</div>
+      <div class="hour-temp">${fmtTemp(hourTemp)}</div>
     `;
     $hourly.appendChild(h);
   }
@@ -646,36 +797,11 @@ unitToggle.addEventListener("click", (e) => {
     }
   }
 
-  // Auto-refresh des données météo toutes les 2 minutes
+  // Auto-refresh des données météo toutes les 3 minutes
+  // Re-fetch depuis l'API : garantit cohérence entre current et hourly
   setInterval(async () => {
     if (state.city) {
       await loadWeather(state.city);
-    }
-  }, 2 * 60 * 1000);
-
-  // Rafraîchissement de la description IA toutes les 3 minutes
-  // Régénère la description à partir des données actuelles (heure par heure)
-  setInterval(() => {
-    if (state.lastWeather && state.city) {
-      // Simuler l'avance du temps en utilisant l'heure actuelle
-      const now = new Date();
-      const w = state.lastWeather;
-      // Mettre à jour l'heure courante dans les données
-      if (w.current) {
-        w.current.time = now.toISOString().slice(0, 19);
-        // Trouver l'heure correspondante dans hourly et utiliser ses données
-        const currentHour = now.getHours();
-        const hourlyIdx = w.hourly.time.findIndex(t => getHourFromISO(t) === currentHour);
-        if (hourlyIdx >= 0) {
-          w.current.temperature_2m = w.hourly.temperature_2m[hourlyIdx];
-          w.current.weather_code = w.hourly.weather_code[hourlyIdx];
-          w.current.apparent_temperature = w.hourly.apparent_temperature[hourlyIdx];
-          w.current.wind_speed_10m = w.hourly.wind_speed_10m[hourlyIdx];
-          w.current.is_day = (currentHour >= 6 && currentHour < 19) ? 1 : 0;
-        }
-        // Re-render avec les nouvelles données
-        renderCity(state.city, w);
-      }
     }
   }, 3 * 60 * 1000);
 

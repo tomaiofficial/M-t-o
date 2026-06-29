@@ -625,19 +625,38 @@
   </svg>
 
   <div class="app" id="app">
-    <!-- Background anime style Apple Weather -->
+    <!-- Background premium style Apple Weather (Liquid Glass) -->
     <div class="weather-bg">
+      <canvas id="bgCanvas"></canvas>
       <div class="bg-sky"></div>
-      <div class="bg-sun-glow"></div>
-      <div class="bg-clouds">
-        <div class="bg-cloud bg-cloud-1"></div>
-        <div class="bg-cloud bg-cloud-2"></div>
-        <div class="bg-cloud bg-cloud-3"></div>
+      <div class="bg-haze"></div>
+      <div class="bg-sun">
+        <div class="sun-rays"></div>
+        <div class="sun-core"></div>
+        <div class="sun-glow"></div>
       </div>
-      <div class="bg-rain"></div>
-      <div class="bg-snow"></div>
+      <div class="bg-moon">
+        <div class="moon-glow"></div>
+        <div class="moon-core"></div>
+      </div>
+      <div class="bg-clouds">
+        <div class="cloud-layer cloud-back">
+          <div class="cloud cloud-b1"></div>
+          <div class="cloud cloud-b2"></div>
+          <div class="cloud cloud-b3"></div>
+        </div>
+        <div class="cloud-layer cloud-mid">
+          <div class="cloud cloud-m1"></div>
+          <div class="cloud cloud-m2"></div>
+          <div class="cloud cloud-m3"></div>
+        </div>
+        <div class="cloud-layer cloud-front">
+          <div class="cloud cloud-f1"></div>
+          <div class="cloud cloud-f2"></div>
+        </div>
+      </div>
+      <div class="bg-fog"></div>
       <div class="bg-lightning"></div>
-      <div class="bg-stars"></div>
     </div>
 
     <!-- Barre supérieure -->
@@ -677,7 +696,7 @@
         </div>
         <div class="setting-row">
           <span class="setting-label">Actualisation auto</span>
-          <span class="setting-value">Toutes les 2 min</span>
+          <span class="setting-value">Toutes les 3 min</span>
         </div>
         <div class="setting-row">
           <span class="setting-label">Description IA</span>
