@@ -71,6 +71,53 @@ const $ = id => document.getElementById(id);
 const app = $("app");
 
 // ============================================================
+//  DRAG SCROLL : permet le scroll horizontal à la souris (PC)
+// ============================================================
+function initDragScroll(el) {
+  if (!el) return;
+  let isDown = false;
+  let startX = 0;
+  let scrollLeftStart = 0;
+  let moved = false;
+
+  el.addEventListener("mousedown", (e) => {
+    // Ignorer si click sur un enfant interactif
+    if (e.target.closest("button, a, input, .interactive")) return;
+    isDown = true;
+    moved = false;
+    el.classList.add("dragging");
+    startX = e.pageX - el.offsetLeft;
+    scrollLeftStart = el.scrollLeft;
+    e.preventDefault();
+  });
+
+  el.addEventListener("mousemove", (e) => {
+    if (!isDown) return;
+    e.preventDefault();
+    const x = e.pageX - el.offsetLeft;
+    const walk = (x - startX) * 1.5;
+    if (Math.abs(walk) > 5) moved = true;
+    el.scrollLeft = scrollLeftStart - walk;
+  });
+
+  const stop = () => {
+    isDown = false;
+    el.classList.remove("dragging");
+  };
+  el.addEventListener("mouseleave", stop);
+  el.addEventListener("mouseup", stop);
+
+  // Empêcher les liens/boutons à l'intérieur d'être cliqués après drag
+  el.addEventListener("click", (e) => {
+    if (moved) {
+      e.preventDefault();
+      e.stopPropagation();
+      moved = false;
+    }
+  }, true);
+}
+
+// ============================================================
 //  CANVAS PARTICLE SYSTEM — 60 FPS rain/snow/stars
 // ============================================================
 const bgCanvas = $("bgCanvas");
@@ -395,105 +442,290 @@ function themeFor(code, dayCycle, windSpeed) {
 }
 
 // ============================================================
-//  Description courte : simple et automatique
+//  Description développée : contextuelle, naturelle, en français
 // ============================================================
 function generateDescription(w) {
   const cur = w.current;
   const daily = w.daily;
+  const hourly = w.hourly;
   const code = cur.weather_code;
   const dayCycle = getDayCycleInfo(cur, daily);
-  const isNight = dayCycle.isNight;
 
-  // Déterminer le moment de la journée
   const sunriseMs = dayCycle.sunriseMs;
   const sunsetMs = dayCycle.sunsetMs;
   const nowMs = dayCycle.nowMs;
 
-  let timeLabel = "";
-  // Utilise isDaytime() pour la détermination principale, pas d'heure fixe
-  if (sunriseMs == null || sunsetMs == null) {
-    // Pas de données API : déduire du code météo et de l'heure actuelle
-    const h = new Date(nowMs).getHours();
-    const isDayNow = h >= 6 && h < 21;
-    if (isDayNow) {
-      if (h < 12) timeLabel = "ce matin";
-      else if (h < 18) timeLabel = "cet après-midi";
-      else timeLabel = "ce soir";
-    } else {
-      timeLabel = "cette nuit";
-    }
-  } else if (nowMs < sunriseMs) {
-    timeLabel = "cette nuit";
-  } else if (nowMs < sunriseMs + 2 * 60 * 60 * 1000) {
-    timeLabel = "ce matin";
-  } else if (nowMs < sunsetMs - 2 * 60 * 60 * 1000) {
-    timeLabel = "cet après-midi";
-  } else if (nowMs < sunsetMs) {
-    timeLabel = "ce soir";
-  } else if (nowMs < sunsetMs + 60 * 60 * 1000) {
-    timeLabel = "ce soir";
-  } else {
-    timeLabel = "cette nuit";
+  // ============== Calcul du moment de la journée (basé sur sunrise/sunset) ==============
+  const timeWord = computeTimeWord(nowMs, sunriseMs, sunsetMs);
+
+  // ============== Détection pluie à venir ==============
+  const rainInfo = findRainComing(hourly, cur.time);
+
+  // ============== Tendance température ==============
+  const tempTrend = computeTempTrend(cur, hourly);
+
+  // ============== Construction de la description ==============
+  const parts = [];
+
+  // 1. Phrase d'ouverture contextuelle (1-2 phrases)
+  parts.push(buildOpeningSentence(code, timeWord, rainInfo, tempTrend, cur));
+
+  // 2. Température min/max avec ressenti
+  const tempSentence = buildTempSentence(cur, daily, tempTrend);
+  if (tempSentence) parts.push(tempSentence);
+
+  // 3. Pluie à venir
+  if (rainInfo.coming) {
+    parts.push(buildRainSentence(rainInfo, nowMs));
   }
 
-  // Texte court selon le code météo
-  const text = getShortConditionText(code, timeLabel);
-  return text;
+  // 4. UV si pertinent
+  const uvSentence = buildUVSentence(daily, dayCycle);
+  if (uvSentence) parts.push(uvSentence);
+
+  // 5. Vent avec direction
+  const windSentence = buildWindSentence(cur);
+  if (windSentence) parts.push(windSentence);
+
+  // 6. Lever/coucher du soleil
+  const sunSentence = buildSunSentence(daily, nowMs, sunriseMs, sunsetMs);
+  if (sunSentence) parts.push(sunSentence);
+
+  // 7. Humidité si notable
+  const humiditySentence = buildHumiditySentence(cur, code);
+  if (humiditySentence) parts.push(humiditySentence);
+
+  return parts.join(" ");
 }
 
-function getShortConditionText(code, timeLabel) {
-  // Articles corrects : "ce" / "cet" / "cette"
-  if (code === 0) {
-    if (timeLabel === "cette nuit") return "Ciel dégagé cette nuit";
-    return `Ciel dégagé ${timeLabel.replace(/^ce |^cet /, '')}`;
+// ============== Helpers pour la description ==============
+
+function computeTimeWord(nowMs, sunriseMs, sunsetMs) {
+  // Retourne "ce matin", "cet après-midi", "ce soir", "cette nuit"
+  if (sunriseMs == null || sunsetMs == null) {
+    const h = new Date(nowMs).getHours();
+    if (h >= 5 && h < 12) return "ce matin";
+    if (h >= 12 && h < 18) return "cet après-midi";
+    if (h >= 18 && h < 22) return "ce soir";
+    return "cette nuit";
   }
-  if (code === 1) {
-    if (timeLabel === "cette nuit") return "Plutôt clair cette nuit";
-    return `Plutôt clair ${timeLabel.replace(/^ce |^cet /, '')}`;
+  if (nowMs < sunriseMs) return "cette nuit";
+  if (nowMs < sunriseMs + 2 * 60 * 60 * 1000) return "ce matin";
+  if (nowMs < sunsetMs - 2 * 60 * 60 * 1000) return "cet après-midi";
+  if (nowMs < sunsetMs) return "ce soir";
+  return "cette nuit";
+}
+
+function findRainComing(hourly, currentTimeStr) {
+  const result = { coming: false, inHours: -1, intensity: "", totalMm: 0 };
+  if (!hourly || !hourly.time) return result;
+
+  const currentMs = currentTimeStr ? new Date(currentTimeStr).getTime() : Date.now();
+
+  for (let i = 0; i < Math.min(12, hourly.time.length); i++) {
+    const tMs = new Date(hourly.time[i]).getTime();
+    if (tMs < currentMs) continue;
+    const c = hourly.weather_code[i];
+    const pop = (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0;
+    if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(c) && pop > 30) {
+      result.coming = true;
+      result.inHours = Math.max(1, Math.round((tMs - currentMs) / (60 * 60 * 1000)));
+      if ([65, 82].includes(c)) result.intensity = "forte";
+      else if ([61, 63, 80, 81].includes(c)) result.intensity = "modérée";
+      else result.intensity = "légère";
+      // Estimation de pluie sur les 12 prochaines heures
+      for (let j = 0; j < Math.min(12, hourly.precipitation_probability.length); j++) {
+        result.totalMm += Math.max(0, hourly.precipitation[j] || 0);
+      }
+      return result;
+    }
   }
-  if (code === 2) {
-    if (timeLabel === "cette nuit") return "Partiellement nuageux cette nuit";
-    return `Partiellement nuageux ${timeLabel.replace(/^ce |^cet /, '')}`;
+  return result;
+}
+
+function computeTempTrend(cur, hourly) {
+  if (!hourly || !hourly.temperature_2m) return "stable";
+  const curT = cur.temperature_2m;
+  // Comparer avec T+3h pour détecter une tendance
+  const futureT = hourly.temperature_2m[3] != null ? hourly.temperature_2m[3] : curT;
+  if (futureT > curT + 2) return "hausse";
+  if (futureT < curT - 2) return "baisse";
+  return "stable";
+}
+
+function buildOpeningSentence(code, timeWord, rainInfo, tempTrend, cur) {
+  // Différentes ouvertures selon la météo actuelle
+  const feels = cur.apparent_temperature;
+  const temp = cur.temperature_2m;
+  const feelsDiff = Math.abs(feels - temp);
+
+  // Si pluie actuelle
+  if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)) {
+    const intensity = [65, 82].includes(code) ? "forte" :
+                      [61, 63, 80, 81].includes(code) ? "modérée" : "légère";
+    if (timeWord === "cette nuit") {
+      return intensity === "forte" ? "Pluie intense cette nuit, prudence sur la route." : `Pluie ${intensity} cette nuit.`;
+    }
+    return intensity === "forte"
+      ? `Pluie intense ${timeWord}, restez vigilant.`
+      : `Pluie ${intensity} ${timeWord}.`;
   }
-  if (code === 3) return "Ciel couvert";
-  if (code === 45 || code === 48) {
-    if (timeLabel === "cette nuit") return "Brouillard cette nuit";
-    return `Brouillard ${timeLabel.replace(/^ce |^cet /, '')}`;
-  }
-  if ([51, 53, 55].includes(code)) {
-    if (timeLabel === "cette nuit") return "Bruine cette nuit";
-    return `Bruine ${timeLabel.replace(/^ce |^cet /, '')}`;
-  }
-  if ([56, 57].includes(code)) return "Bruine verglaçante";
-  if ([61, 63].includes(code)) {
-    if (timeLabel === "cette nuit") return "Pluie cette nuit";
-    return `Pluie ${timeLabel.replace(/^ce |^cet /, '')}`;
-  }
-  if (code === 65) {
-    if (timeLabel === "cette nuit") return "Pluie forte cette nuit";
-    return `Pluie forte ${timeLabel.replace(/^ce |^cet /, '')}`;
-  }
-  if ([66, 67].includes(code)) return "Pluie verglaçante";
-  if ([71, 73].includes(code)) {
-    if (timeLabel === "cette nuit") return "Neige cette nuit";
-    return `Neige ${timeLabel.replace(/^ce |^cet /, '')}`;
-  }
-  if (code === 75) return "Forte neige";
-  if (code === 77) return "Grains de neige";
-  if ([80, 81].includes(code)) {
-    if (timeLabel === "cette nuit") return "Averses cette nuit";
-    return `Averses ${timeLabel.replace(/^ce |^cet /, '')}`;
-  }
-  if (code === 82) return "Violentes averses";
-  if ([85, 86].includes(code)) {
-    if (timeLabel === "cette nuit") return "Averses de neige cette nuit";
-    return `Averses de neige ${timeLabel.replace(/^ce |^cet /, '')}`;
-  }
+
+  // Si orage
   if ([95, 96, 99].includes(code)) {
-    if (timeLabel === "cette nuit") return "Orages cette nuit";
-    return `Orages ${timeLabel.replace(/^ce |^cet /, '')}`;
+    if (timeWord === "cette nuit") return "Orages cette nuit, restez à l'abri.";
+    return `Orages ${timeWord}, restez prudent.`;
   }
-  return "Conditions inconnues";
+
+  // Si neige
+  if ([71, 73, 75, 77, 85, 86].includes(code)) {
+    if (timeWord === "cette nuit") return "Chutes de neige cette nuit, attention sur les routes.";
+    return `Neige ${timeWord}, prévoyez des vêtements chauds.`;
+  }
+
+  // Si brouillard
+  if ([45, 48].includes(code)) {
+    if (timeWord === "cette nuit") return "Brouillard cette nuit, visibilité très réduite.";
+    return `Brouillard ${timeWord}, visibilité réduite.`;
+  }
+
+  // Si pluie à venir dans les prochaines heures
+  if (rainInfo.coming) {
+    if (timeWord === "cette nuit") {
+      return rainInfo.intensity === "forte"
+        ? "Ciel dégagé pour l'instant mais de fortes pluies arrivent dans la nuit."
+        : "Ciel dégagé pour l'instant mais de la pluie est attendue dans la nuit.";
+    }
+    return rainInfo.intensity === "forte"
+      ? `Pour l'instant ${getConditionPhrase(code, timeWord)}, mais de fortes pluies sont attendues ${rainInfo.inHours <= 2 ? "dans les prochaines heures" : "plus tard"}.`
+      : `Pour l'instant ${getConditionPhrase(code, timeWord)}, mais de la pluie ${rainInfo.intensity} est attendue ${rainInfo.inHours <= 2 ? "dans les prochaines heures" : "plus tard"}.`;
+  }
+
+  // Si ciel dégagé
+  if (code === 0) {
+    if (timeWord === "cette nuit") {
+      return feelsDiff >= 5 && feels < temp
+        ? "Ciel dégagé cette nuit, mais attention au froid."
+        : "Ciel dégagé cette nuit, idéal pour admirer les étoiles.";
+    }
+    if (timeWord === "ce matin") return "Ciel dégagé ce matin, une belle journée s'annonce.";
+    if (timeWord === "cet après-midi") return "Ciel dégagé cet après-midi, profitez-en.";
+    return "Ciel dégagé ce soir, conditions idéales.";
+  }
+
+  // Si plutôt clair
+  if (code === 1) {
+    if (timeWord === "cette nuit") return "Plutôt clair cette nuit.";
+    return `Plutôt clair ${timeWord}, ${tempTrend === "hausse" ? "les températures grimpent" : "ambiance agréable"}.`;
+  }
+
+  // Si partiellement nuageux
+  if (code === 2) {
+    if (timeWord === "cette nuit") return "Partiellement nuageux cette nuit.";
+    return `Partiellement nuageux ${timeWord} avec quelques éclaircies.`;
+  }
+
+  // Si couvert
+  if (code === 3) {
+    if (timeWord === "cette nuit") return "Ciel couvert cette nuit.";
+    return `Ciel couvert ${timeWord}${tempTrend === "baisse" ? ", ambiance maussade" : ""}.`;
+  }
+
+  return "Conditions variables.";
+}
+
+function getConditionPhrase(code, timeWord) {
+  if (code === 0) return "le ciel est dégagé";
+  if (code === 1) return "le temps est plutôt clair";
+  if (code === 2) return "le ciel est partiellement nuageux";
+  if (code === 3) return "le ciel est couvert";
+  return "les conditions sont stables";
+}
+
+function buildTempSentence(cur, daily, tempTrend) {
+  const hi = daily.temperature_2m_max && daily.temperature_2m_max[0];
+  const lo = daily.temperature_2m_min && daily.temperature_2m_min[0];
+  const feels = cur.apparent_temperature;
+  const temp = cur.temperature_2m;
+  const feelsDiff = Math.abs(feels - temp);
+
+  if (hi == null || lo == null) return "";
+
+  if (feelsDiff >= 5) {
+    if (feels < temp) {
+      return `Il fait ${fmtTemp(temp)} mais le vent donne un ressenti plus frais de ${fmtTemp(feels)}.`;
+    } else {
+      return `Il fait ${fmtTemp(temp)} avec un ressenti plus chaud de ${fmtTemp(feels)}.`;
+    }
+  }
+
+  if (tempTrend === "hausse") {
+    return `Il fait ${fmtTemp(temp)}, les températures montent vers ${fmtTemp(hi)} en journée.`;
+  }
+  if (tempTrend === "baisse") {
+    return `Il fait ${fmtTemp(temp)}, les températures descendent vers ${fmtTemp(lo)} ce soir.`;
+  }
+  return `Maximales ${fmtTemp(hi)}, minimales ${fmtTemp(lo)}.`;
+}
+
+function buildRainSentence(rainInfo, nowMs) {
+  const hours = rainInfo.inHours;
+  let timeText;
+  if (hours === 1) timeText = "dans l'heure";
+  else if (hours === 2) timeText = "dans 2 heures";
+  else if (hours <= 4) timeText = "dans quelques heures";
+  else if (hours <= 6) timeText = "en fin de journée";
+  else timeText = "plus tard dans la journée";
+
+  if (rainInfo.intensity === "forte") {
+    return `Pluie forte attendue ${timeText}, pensez à prendre un parapluie.`;
+  }
+  if (rainInfo.intensity === "modérée") {
+    return `Pluie modérée attendue ${timeText}.`;
+  }
+  return `Pluie légère attendue ${timeText}.`;
+}
+
+function buildUVSentence(daily, dayCycle) {
+  if (!daily.uv_index_max || dayCycle.isNight) return "";
+  const uv = daily.uv_index_max[0];
+  if (uv >= 8) return "Indice UV très élevé, protégez-vous impérativement du soleil.";
+  if (uv >= 6) return "Indice UV élevé, lunettes de soleil et crème recommandées.";
+  if (uv >= 3) return "Indice UV modéré, quelques précautions utiles en extérieur.";
+  return "";
+}
+
+function buildWindSentence(cur) {
+  const wind = cur.wind_speed_10m;
+  const dir = cur.wind_direction_10m;
+  const dirTxt = dir != null ? ` ${degToCompass(dir)}` : "";
+  if (wind >= 50) return `Vent très fort à ${Math.round(wind)} km/h${dirTxt}, attention aux chutes d'objets.`;
+  if (wind >= 30) return `Vent fort à ${Math.round(wind)} km/h${dirTxt}.`;
+  if (wind >= 15) return `Vent modéré à ${Math.round(wind)} km/h${dirTxt}.`;
+  return "";
+}
+
+function buildSunSentence(daily, nowMs, sunriseMs, sunsetMs) {
+  if (sunriseMs == null || sunsetMs == null) return "";
+  const sunrise = daily.sunrise[0];
+  const sunset = daily.sunset[0];
+
+  // Avant lever (entre 1h et lever)
+  if (nowMs < sunriseMs && nowMs > sunriseMs - 90 * 60 * 1000) {
+    return `Lever du soleil à ${fmtTime(sunrise)}.`;
+  }
+  // Avant coucher (entre 1h30 et coucher)
+  if (nowMs < sunsetMs && nowMs > sunsetMs - 90 * 60 * 1000) {
+    return `Coucher du soleil à ${fmtTime(sunset)}.`;
+  }
+  return "";
+}
+
+function buildHumiditySentence(cur, code) {
+  const h = cur.relative_humidity_2m;
+  if (h >= 90 && code !== 3) return "Air très humide, sensation de moiteur.";
+  if (h >= 80 && h < 90 && [0, 1, 2].includes(code)) return "Air assez humide.";
+  return "";
 }
 
 // ============================================================
@@ -960,4 +1192,8 @@ unitToggle.addEventListener("click", (e) => {
 
   // Mise à jour du "Mis à jour il y a X min"
   setInterval(updateUpdatedAt, 30 * 1000);
+
+  // Drag-scroll : permet le scroll à la souris sur les listes horizontales
+  initDragScroll($("hourly"));
+  initDragScroll($("daily"));
 })();

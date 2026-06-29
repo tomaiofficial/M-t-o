@@ -44,17 +44,21 @@ input, textarea {
 button, .glass-card, .search-result, .day, .detail, .icon-btn {
   touch-action: manipulation;
 }
-/* Permettre le scroll horizontal sur les listes d'heures */
+/* Permettre le scroll horizontal sur les listes d'heures (drag natif) */
 .hourly {
   touch-action: pan-x;
   -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
+  overflow-y: hidden;
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
-.hourly:active {
-  cursor: grabbing;
-}
+.hourly::-webkit-scrollbar { display: none; height: 0; }
+.hourly:active { cursor: grabbing; }
+.hourly.dragging { cursor: grabbing; }
 
 /* ===== App container ===== */
 .app {
@@ -862,10 +866,12 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
 
 /* ===== Description card ===== */
 .desc-card p {
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: 14.5px;
+  line-height: 1.6;
   opacity: 0.95;
   text-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  margin: 0;
+  letter-spacing: 0.01em;
 }
 
 /* ===== Hourly ===== */
