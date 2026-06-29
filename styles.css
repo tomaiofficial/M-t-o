@@ -570,33 +570,36 @@ body {
 .theme-storm .bg-lightning { opacity: 1; }
 
 /* ============================================================
-   FLOATING SETTINGS BUTTON
+   TOPBAR — Liquid Glass
    ============================================================ */
-.float-settings {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
+.topbar {
+  position: sticky;
+  top: 0;
   z-index: 50;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
   backdrop-filter: blur(40px) saturate(180%);
   -webkit-backdrop-filter: blur(40px) saturate(180%);
+  background: rgba(0,0,0,0.08);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.topbar-spacer { flex: 1; }
+.icon-btn {
+  background: none;
+  border: none;
   color: #fff;
   cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.15);
-  transition: background 0.2s, transform 0.2s;
+  transition: background 0.2s;
   -webkit-tap-highlight-color: transparent;
 }
-.float-settings:hover, .float-settings:active {
-  background: rgba(255,255,255,0.18);
-  transform: scale(1.05);
-}
+.icon-btn:hover, .icon-btn:active { background: rgba(255,255,255,0.12); }
 
 /* ============================================================
    SETTINGS PANEL — Liquid Glass
@@ -797,10 +800,12 @@ body {
 }
 .hour-icon { display: flex; justify-content: center; }
 .hour-pop {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   color: #5AC8FA;
   min-height: 14px;
+  text-align: center;
+  white-space: nowrap;
 }
 .hour-pop.empty { opacity: 0; }
 .hour-temp {
@@ -831,10 +836,11 @@ body {
 }
 .day-icon { display: flex; justify-content: center; }
 .day-pop {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   color: #5AC8FA;
   min-height: 12px;
+  white-space: nowrap;
 }
 .day-pop.empty { opacity: 0; }
 .day-low {

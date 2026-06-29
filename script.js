@@ -230,6 +230,15 @@ function dayName(dateStr, idx) {
   return d.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "");
 }
 
+// Type de précipitation selon le code météo
+function getPrecipLabel(code) {
+  if ([71,73,75,77,85,86].includes(code)) return "neige";
+  if ([95,96,99].includes(code)) return "orage";
+  if ([56,57,66,67].includes(code)) return "verglas";
+  if ([51,53,55,61,63,65,80,81,82].includes(code)) return "pluie";
+  return "pluie"; // par défaut
+}
+
 // ===== Theme =====
 function themeFor(code, isNight, currentTime, windSpeed) {
   const hour = currentTime ? getHourFromISO(currentTime) : 12;
@@ -557,12 +566,13 @@ function renderCity(city, w) {
     const hourIsNight = isNow ? isNight : (hHour >= 19 || hHour < 6);
     const wi = wmoInfo(hourCode, hourIsNight);
     const pop = (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0;
-    const isPrecipCode = [51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99].includes(hourCode);
-    const popVisible = isPrecipCode && pop >= 10;
+    // Afficher les % de précipitations à partir de 5% avec le type
+    const popVisible = pop >= 5;
+    const precipLabel = getPrecipLabel(hourCode);
     h.innerHTML = `
       <div class="hour-time">${timeLabel}</div>
       <div class="hour-icon">${icon(wi.icon, 32)}</div>
-      <div class="hour-pop${popVisible ? "" : " empty"}">${popVisible ? pop + "%" : ""}</div>
+      <div class="hour-pop${popVisible ? "" : " empty"}">${popVisible ? precipLabel + " " + pop + "%" : ""}</div>
       <div class="hour-temp">${fmtTemp(hourTemp)}</div>
     `;
     $hourly.appendChild(h);
@@ -584,13 +594,13 @@ function renderCity(city, w) {
     const endPct = ((hi - allMin) / range) * 100;
     const wi = wmoInfo(daily.weather_code[i], false);
     const popDay = (daily.precipitation_probability_max && daily.precipitation_probability_max[i]) || 0;
-    const isPrecipCodeDay = [51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99].includes(daily.weather_code[i]);
-    const popVisible = isPrecipCodeDay && popDay >= 5;
+    const popVisible = popDay >= 5;
+    const precipLabelDay = getPrecipLabel(daily.weather_code[i]);
     di.innerHTML = `
       <div class="day-name">${dayName(daily.time[i], i)}</div>
       <div class="day-icon-wrap">
         <div class="day-icon">${icon(wi.icon, 28)}</div>
-        <div class="day-pop${popVisible ? "" : " empty"}">${popVisible ? popDay + "%" : ""}</div>
+        <div class="day-pop${popVisible ? "" : " empty"}">${popVisible ? precipLabelDay + " " + popDay + "%" : ""}</div>
       </div>
       <div class="day-low">${fmtTemp(lo)}</div>
       <div class="day-bar"><span class="fill" style="left:${startPct}%; right:${100 - endPct}%"></span></div>
@@ -724,13 +734,8 @@ function closeSearch() {
   searchOverlay.classList.remove("open");
 }
 
-// Tap sur le nom de la ville = ouvrir la recherche
-$("cityName").addEventListener("click", openSearch);
-$("locationSection").addEventListener("click", (e) => {
-  if (e.target === $("locationSection") || e.target === $("hilo")) {
-    openSearch();
-  }
-});
+// Bouton loupe dans la topbar = ouvrir la recherche
+$("searchBtn").addEventListener("click", openSearch);
 
 $("cancelSearch").addEventListener("click", closeSearch);
 searchOverlay.addEventListener("click", (e) => {
