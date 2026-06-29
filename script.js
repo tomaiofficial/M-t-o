@@ -451,8 +451,102 @@ function themeFor(code, dayCycle, windSpeed) {
 }
 
 // ============================================================
-//  Description développée : contextuelle, naturelle, en français
+//  Description dynamique Apple-Weather-like
+//  Texte entièrement basé sur l'heure locale réelle + sunrise/sunset
 // ============================================================
+
+/**
+ * Détermine le moment de la journée avec une expression française naturelle.
+ * Utilise sunrise/sunset réels + plages horaires pour la cohérence.
+ * Retourne { key, label } où key est utilisé pour les décisions logiques
+ * et label est l'expression française naturelle.
+ */
+function getTimePeriod(nowMs, sunriseMs, sunsetMs) {
+  const now = new Date(nowMs);
+  const h = now.getHours();
+  const hasSun = sunriseMs != null && sunsetMs != null;
+
+  // 1. Plages strictes d'abord (selon les règles)
+  // 00:00 - 04:59 : nuit
+  if (h < 5) {
+    return { key: "nuit", label: "cette nuit", article: "cette" };
+  }
+
+  // 5h-11h59 : matin (mais ajusté si on est avant le lever)
+  if (h >= 5 && h < 12) {
+    if (hasSun && nowMs < sunriseMs) {
+      // Avant le lever du soleil
+      return { key: "fin_nuit", label: "en fin de nuit", article: "en" };
+    }
+    if (h < 9) {
+      return { key: "matin_tot", label: "tôt ce matin", article: "ce" };
+    }
+    if (h < 11) {
+      return { key: "matin", label: "ce matin", article: "ce" };
+    }
+    // 11h-11h59 : en matinée
+    return { key: "matinee", label: "en matinée", article: "en" };
+  }
+
+  // 12h-17h59 : après-midi
+  if (h >= 12 && h < 18) {
+    if (h < 14) {
+      return { key: "debut_aprem", label: "en début d'après-midi", article: "en" };
+    }
+    return { key: "aprem", label: "cet après-midi", article: "cet" };
+  }
+
+  // 18h jusqu'au coucher du soleil : fin de journée / soirée
+  if (h >= 18 && h < 22) {
+    if (hasSun && nowMs >= sunsetMs) {
+      // Déjà après le coucher → bascule sur "ce soir"
+      if (h < 21) {
+        return { key: "soir", label: "ce soir", article: "ce" };
+      }
+      return { key: "nuit", label: "cette nuit", article: "cette" };
+    }
+    // 18h-sunset : fin de journée
+    if (h < 20) {
+      return { key: "fin_journee", label: "en cette fin de journée", article: "en" };
+    }
+    // 20h-sunset : soirée
+    return { key: "soiree", label: "en soirée", article: "en" };
+  }
+
+  // 22h-23h59 : nuit
+  return { key: "nuit", label: "cette nuit", article: "cette" };
+}
+
+/**
+ * Trouve la température minimale/maximale des prochaines heures
+ * pour donner une évolution naturelle.
+ */
+function findTempEvolution(hourly, nowMs) {
+  if (!hourly || !hourly.temperature_2m) return null;
+  // Cherche la température extrême (min ou max) dans les 12 prochaines heures
+  let extremeIdx = 0;
+  let extremeVal = hourly.temperature_2m[0];
+  let extremeType = "min"; // "min" ou "max"
+  for (let i = 0; i < Math.min(12, hourly.temperature_2m.length); i++) {
+    if (hourly.temperature_2m[i] < extremeVal) {
+      extremeVal = hourly.temperature_2m[i];
+      extremeIdx = i;
+      extremeType = "min";
+    }
+  }
+  let minVal = hourly.temperature_2m[0], maxVal = hourly.temperature_2m[0];
+  for (let i = 0; i < Math.min(12, hourly.temperature_2m.length); i++) {
+    if (hourly.temperature_2m[i] < minVal) minVal = hourly.temperature_2m[i];
+    if (hourly.temperature_2m[i] > maxVal) maxVal = hourly.temperature_2m[i];
+  }
+  return {
+    min: minVal,
+    minHour: hourly.time && hourly.time[0] ? new Date(hourly.time[0]) : null,
+    max: maxVal,
+    maxHour: hourly.time && hourly.time[0] ? new Date(hourly.time[0]) : null
+  };
+}
+
 function generateDescription(w) {
   const cur = w.current;
   const daily = w.daily;
@@ -463,278 +557,243 @@ function generateDescription(w) {
   const sunriseMs = dayCycle.sunriseMs;
   const sunsetMs = dayCycle.sunsetMs;
   const nowMs = dayCycle.nowMs;
+  const now = new Date(nowMs);
+  const h = now.getHours();
 
-  // ============== Calcul du moment de la journée (basé sur sunrise/sunset) ==============
-  const timeWord = computeTimeWord(nowMs, sunriseMs, sunsetMs);
+  // ============== Déterminer le moment de la journée ==============
+  const period = getTimePeriod(nowMs, sunriseMs, sunsetMs);
 
-  // ============== Détection pluie à venir ==============
-  const rainInfo = findRainComing(hourly, cur.time);
-
-  // ============== Tendance température ==============
-  const tempTrend = computeTempTrend(cur, hourly);
-
-  // ============== Construction de la description ==============
-  const parts = [];
-
-  // 1. Phrase d'ouverture contextuelle (1-2 phrases)
-  parts.push(buildOpeningSentence(code, timeWord, rainInfo, tempTrend, cur));
-
-  // 2. Température min/max avec ressenti
-  const tempSentence = buildTempSentence(cur, daily, tempTrend);
-  if (tempSentence) parts.push(tempSentence);
-
-  // 3. Pluie à venir
-  if (rainInfo.coming) {
-    parts.push(buildRainSentence(rainInfo, nowMs));
-  }
-
-  // 4. UV si pertinent
-  const uvSentence = buildUVSentence(daily, dayCycle);
-  if (uvSentence) parts.push(uvSentence);
-
-  // 5. Vent avec direction
-  const windSentence = buildWindSentence(cur);
-  if (windSentence) parts.push(windSentence);
-
-  // 6. Lever/coucher du soleil
-  const sunSentence = buildSunSentence(daily, nowMs, sunriseMs, sunsetMs);
-  if (sunSentence) parts.push(sunSentence);
-
-  // 7. Humidité si notable
-  const humiditySentence = buildHumiditySentence(cur, code);
-  if (humiditySentence) parts.push(humiditySentence);
-
-  return parts.join(" ");
-}
-
-// ============== Helpers pour la description ==============
-
-function computeTimeWord(nowMs, sunriseMs, sunsetMs) {
-  // Retourne "ce matin", "cet après-midi", "ce soir", "cette nuit"
-  if (sunriseMs == null || sunsetMs == null) {
-    const h = new Date(nowMs).getHours();
-    if (h >= 5 && h < 12) return "ce matin";
-    if (h >= 12 && h < 18) return "cet après-midi";
-    if (h >= 18 && h < 22) return "ce soir";
-    return "cette nuit";
-  }
-  if (nowMs < sunriseMs) return "cette nuit";
-  if (nowMs < sunriseMs + 2 * 60 * 60 * 1000) return "ce matin";
-  if (nowMs < sunsetMs - 2 * 60 * 60 * 1000) return "cet après-midi";
-  if (nowMs < sunsetMs) return "ce soir";
-  return "cette nuit";
-}
-
-function findRainComing(hourly, currentTimeStr) {
-  const result = { coming: false, inHours: -1, intensity: "", totalMm: 0 };
-  if (!hourly || !hourly.time) return result;
-
-  const currentMs = currentTimeStr ? new Date(currentTimeStr).getTime() : Date.now();
-
-  for (let i = 0; i < Math.min(12, hourly.time.length); i++) {
-    const tMs = new Date(hourly.time[i]).getTime();
-    if (tMs < currentMs) continue;
-    const c = hourly.weather_code[i];
-    const pop = (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0;
-    if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(c) && pop > 30) {
-      result.coming = true;
-      result.inHours = Math.max(1, Math.round((tMs - currentMs) / (60 * 60 * 1000)));
-      if ([65, 82].includes(c)) result.intensity = "forte";
-      else if ([61, 63, 80, 81].includes(c)) result.intensity = "modérée";
-      else result.intensity = "légère";
-      // Estimation de pluie sur les 12 prochaines heures
-      for (let j = 0; j < Math.min(12, hourly.precipitation_probability.length); j++) {
-        result.totalMm += Math.max(0, hourly.precipitation[j] || 0);
-      }
-      return result;
-    }
-  }
-  return result;
-}
-
-function computeTempTrend(cur, hourly) {
-  if (!hourly || !hourly.temperature_2m) return "stable";
+  // ============== Calculer l'évolution des températures ==============
+  const tempEvo = findTempEvolution(hourly, nowMs);
   const curT = cur.temperature_2m;
-  // Comparer avec T+3h pour détecter une tendance
-  const futureT = hourly.temperature_2m[3] != null ? hourly.temperature_2m[3] : curT;
-  if (futureT > curT + 2) return "hausse";
-  if (futureT < curT - 2) return "baisse";
-  return "stable";
-}
-
-function buildOpeningSentence(code, timeWord, rainInfo, tempTrend, cur) {
-  // Différentes ouvertures selon la météo actuelle
   const feels = cur.apparent_temperature;
-  const temp = cur.temperature_2m;
-  const feelsDiff = Math.abs(feels - temp);
+  const feelsDiff = Math.abs(feels - curT);
 
-  // Si pluie actuelle
-  if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)) {
-    const intensity = [65, 82].includes(code) ? "forte" :
-                      [61, 63, 80, 81].includes(code) ? "modérée" : "légère";
-    if (timeWord === "cette nuit") {
-      return intensity === "forte" ? "Pluie intense cette nuit, prudence sur la route." : `Pluie ${intensity} cette nuit.`;
+  // ============== Tendance à court terme ==============
+  let tempTrend = "stable";
+  if (hourly && hourly.temperature_2m) {
+    const t3 = hourly.temperature_2m[3];
+    if (t3 != null) {
+      if (t3 > curT + 2) tempTrend = "hausse";
+      else if (t3 < curT - 2) tempTrend = "baisse";
     }
-    return intensity === "forte"
-      ? `Pluie intense ${timeWord}, restez vigilant.`
-      : `Pluie ${intensity} ${timeWord}.`;
   }
 
-  // Si orage
-  if ([95, 96, 99].includes(code)) {
-    if (timeWord === "cette nuit") return "Orages cette nuit, restez à l'abri.";
-    return `Orages ${timeWord}, restez prudent.`;
+  // ============== Vent ==============
+  const wind = Math.round(cur.wind_speed_10m || 0);
+  const dirTxt = cur.wind_direction_10m != null ? ` ${degToCompass(cur.wind_direction_10m)}` : "";
+
+  // ============== Construction des phrases ==============
+  const sentences = [];
+
+  // ---- Phrase 1 : condition + moment de la journée ----
+  sentences.push(buildConditionSentence(code, period, h));
+
+  // ---- Phrase 2 : température actuelle + ressenti si notable ----
+  sentences.push(buildTempCurrentSentence(curT, feels, feelsDiff));
+
+  // ---- Phrase 3 : évolution des températures (si différente) ----
+  const evoSentence = buildEvolutionSentence(curT, tempEvo, period, tempTrend);
+  if (evoSentence) sentences.push(evoSentence);
+
+  // ---- Phrase 4 : vent si significatif ----
+  const windSentence = buildWindSentence(wind, dirTxt, period);
+  if (windSentence) sentences.push(windSentence);
+
+  // ---- Phrase 5 : UV si élevé en journée ----
+  if (period.key !== "nuit" && period.key !== "fin_nuit" && daily.uv_index_max) {
+    const uv = daily.uv_index_max[0];
+    if (uv >= 7) {
+      sentences.push(`Indice UV ${uv >= 8 ? "très" : ""} élevé, ${uv >= 8 ? "protégez-vous" : "lunettes recommandées"}.`);
+    }
   }
 
-  // Si neige
-  if ([71, 73, 75, 77, 85, 86].includes(code)) {
-    if (timeWord === "cette nuit") return "Chutes de neige cette nuit, attention sur les routes.";
-    return `Neige ${timeWord}, prévoyez des vêtements chauds.`;
-  }
-
-  // Si brouillard
+  // ---- Phrase 6 : visibilité pour brouillard ----
   if ([45, 48].includes(code)) {
-    if (timeWord === "cette nuit") return "Brouillard cette nuit, visibilité très réduite.";
-    return `Brouillard ${timeWord}, visibilité réduite.`;
+    sentences.push("Visibilité très réduite, prudence sur la route.");
   }
 
-  // Si pluie à venir dans les prochaines heures
-  if (rainInfo.coming) {
-    if (timeWord === "cette nuit") {
-      return rainInfo.intensity === "forte"
-        ? "Ciel dégagé pour l'instant mais de fortes pluies arrivent dans la nuit."
-        : "Ciel dégagé pour l'instant mais de la pluie est attendue dans la nuit.";
-    }
-    return rainInfo.intensity === "forte"
-      ? `Pour l'instant ${getConditionPhrase(code, timeWord)}, mais de fortes pluies sont attendues ${rainInfo.inHours <= 2 ? "dans les prochaines heures" : "plus tard"}.`
-      : `Pour l'instant ${getConditionPhrase(code, timeWord)}, mais de la pluie ${rainInfo.intensity} est attendue ${rainInfo.inHours <= 2 ? "dans les prochaines heures" : "plus tard"}.`;
+  return sentences.join(" ");
+}
+
+function buildConditionSentence(code, period, hour) {
+  const isNight = period.key === "nuit" || period.key === "fin_nuit";
+  const art = period.article;
+  const lbl = period.label;
+
+  // Pluie actuelle
+  if ([51, 53, 55, 56, 57, 61, 63, 80, 81].includes(code)) {
+    if (isNight) return `Pluie modérée ${lbl}.`;
+    return `Pluie modérée ${lbl}.`;
+  }
+  if (code === 65 || code === 82) {
+    if (isNight) return `Pluie intense ${lbl}, prudence sur la route.`;
+    return `Pluie intense ${lbl}, restez vigilant.`;
+  }
+  if ([95, 96, 99].includes(code)) {
+    if (isNight) return `Orages ${lbl}, restez à l'abri.`;
+    return `Orages ${lbl}, restez prudent.`;
+  }
+  if ([71, 73, 75, 77, 85, 86].includes(code)) {
+    if (isNight) return `Chutes de neige ${lbl}, attention sur les routes.`;
+    return `Neige ${lbl}, prévoyez des vêtements chauds.`;
+  }
+  if (code === 45 || code === 48) {
+    if (isNight) return `Brouillard ${lbl}, visibilité très réduite.`;
+    return `Brouillard ${lbl}, visibilité réduite.`;
+  }
+  if (code === 66 || code === 67) {
+    if (isNight) return `Pluie verglaçante ${lbl}, prudence accrue.`;
+    return `Pluie verglaçante ${lbl}, attention aux routes glissantes.`;
   }
 
-  // Si ciel dégagé
+  // Conditions calmes
   if (code === 0) {
-    if (timeWord === "cette nuit") {
-      return feelsDiff >= 5 && feels < temp
-        ? "Ciel dégagé cette nuit, mais attention au froid."
-        : "Ciel dégagé cette nuit, idéal pour admirer les étoiles.";
+    // Ciel dégagé
+    if (isNight) {
+      return hour >= 1 && hour < 4
+        ? `Nuit calme et dégagée.`
+        : `Ciel dégagé ${lbl}, conditions idéales.`;
     }
-    if (timeWord === "ce matin") return "Ciel dégagé ce matin, une belle journée s'annonce.";
-    if (timeWord === "cet après-midi") return "Ciel dégagé cet après-midi, profitez-en.";
-    return "Ciel dégagé ce soir, conditions idéales.";
+    if (period.key === "matin" || period.key === "matin_tot") {
+      return `Ciel dégagé ${lbl}, une belle journée s'annonce.`;
+    }
+    if (period.key === "matinee") {
+      return `Ciel dégagé ${lbl}, profitez du soleil.`;
+    }
+    if (period.key === "aprem" || period.key === "debut_aprem") {
+      return `Ciel dégagé ${lbl}, idéal pour sortir.`;
+    }
+    if (period.key === "fin_journee") {
+      return `Ciel dégagé ${lbl}.`;
+    }
+    if (period.key === "soiree") {
+      return `Ciel dégagé ${lbl}.`;
+    }
+    if (period.key === "soir") {
+      return `Ciel dégagé ${lbl}.`;
+    }
+    return `Ciel dégagé ${lbl}.`;
   }
 
-  // Si plutôt clair
   if (code === 1) {
-    if (timeWord === "cette nuit") return "Plutôt clair cette nuit.";
-    return `Plutôt clair ${timeWord}, ${tempTrend === "hausse" ? "les températures grimpent" : "ambiance agréable"}.`;
+    if (isNight) return `Plutôt clair ${lbl}.`;
+    if (period.key === "fin_journee") return `Plutôt clair ${lbl}.`;
+    if (period.key === "soiree") return `Plutôt clair ${lbl}.`;
+    if (period.key === "soir") return `Plutôt clair ${lbl}.`;
+    if (period.key === "matin" || period.key === "matin_tot") return `Plutôt clair ${lbl}, belle journée en perspective.`;
+    if (period.key === "matinee") return `Plutôt clair ${lbl}.`;
+    if (period.key === "aprem" || period.key === "debut_aprem") return `Plutôt clair ${lbl}.`;
+    return `Plutôt clair ${lbl}.`;
   }
 
-  // Si partiellement nuageux
   if (code === 2) {
-    if (timeWord === "cette nuit") return "Partiellement nuageux cette nuit.";
-    return `Partiellement nuageux ${timeWord} avec quelques éclaircies.`;
+    if (isNight) return `Partiellement nuageux ${lbl}.`;
+    if (period.key === "fin_journee") return `Partiellement nuageux ${lbl}, quelques éclaircies.`;
+    if (period.key === "soiree") return `Partiellement nuageux ${lbl}.`;
+    if (period.key === "soir") return `Partiellement nuageux ${lbl}.`;
+    return `Partiellement nuageux ${lbl} avec quelques éclaircies.`;
   }
 
-  // Si couvert
   if (code === 3) {
-    if (timeWord === "cette nuit") return "Ciel couvert cette nuit.";
-    return `Ciel couvert ${timeWord}${tempTrend === "baisse" ? ", ambiance maussade" : ""}.`;
+    if (isNight) return `Ciel couvert ${lbl}.`;
+    if (period.key === "fin_journee") return `Ciel couvert ${lbl}, ambiance maussade.`;
+    if (period.key === "soiree") return `Ciel couvert ${lbl}.`;
+    if (period.key === "soir") return `Ciel couvert ${lbl}.`;
+    return `Ciel couvert ${lbl}.`;
   }
 
-  return "Conditions variables.";
+  return `Conditions variables ${lbl}.`;
 }
 
-function getConditionPhrase(code, timeWord) {
-  if (code === 0) return "le ciel est dégagé";
-  if (code === 1) return "le temps est plutôt clair";
-  if (code === 2) return "le ciel est partiellement nuageux";
-  if (code === 3) return "le ciel est couvert";
-  return "les conditions sont stables";
-}
-
-function buildTempSentence(cur, daily, tempTrend) {
-  const hi = daily.temperature_2m_max && daily.temperature_2m_max[0];
-  const lo = daily.temperature_2m_min && daily.temperature_2m_min[0];
-  const feels = cur.apparent_temperature;
-  const temp = cur.temperature_2m;
-  const feelsDiff = Math.abs(feels - temp);
-
-  if (hi == null || lo == null) return "";
-
+function buildTempCurrentSentence(temp, feels, feelsDiff) {
   if (feelsDiff >= 5) {
     if (feels < temp) {
-      return `Il fait ${fmtTemp(temp)} mais le vent donne un ressenti plus frais de ${fmtTemp(feels)}.`;
+      return `Il fait actuellement ${fmtTemp(temp)} mais le ressenti est plus frais, ${fmtTemp(feels)}.`;
     } else {
-      return `Il fait ${fmtTemp(temp)} avec un ressenti plus chaud de ${fmtTemp(feels)}.`;
+      return `Il fait actuellement ${fmtTemp(temp)} avec un ressenti plus chaud, ${fmtTemp(feels)}.`;
     }
   }
-
-  if (tempTrend === "hausse") {
-    return `Il fait ${fmtTemp(temp)}, les températures montent vers ${fmtTemp(hi)} en journée.`;
-  }
-  if (tempTrend === "baisse") {
-    return `Il fait ${fmtTemp(temp)}, les températures descendent vers ${fmtTemp(lo)} ce soir.`;
-  }
-  return `Maximales ${fmtTemp(hi)}, minimales ${fmtTemp(lo)}.`;
+  return `Il fait actuellement ${fmtTemp(temp)}.`;
 }
 
-function buildRainSentence(rainInfo, nowMs) {
-  const hours = rainInfo.inHours;
-  let timeText;
-  if (hours === 1) timeText = "dans l'heure";
-  else if (hours === 2) timeText = "dans 2 heures";
-  else if (hours <= 4) timeText = "dans quelques heures";
-  else if (hours <= 6) timeText = "en fin de journée";
-  else timeText = "plus tard dans la journée";
+function buildEvolutionSentence(curT, tempEvo, period, tempTrend) {
+  if (!tempEvo) return "";
 
-  if (rainInfo.intensity === "forte") {
-    return `Pluie forte attendue ${timeText}, pensez à prendre un parapluie.`;
+  // Pendant la journée (matin ou après-midi) : parler du max à venir
+  if (period.key === "matin" || period.key === "matin_tot" || period.key === "matinee"
+      || period.key === "debut_aprem") {
+    if (tempEvo.max > curT + 2) {
+      return `Les températures monteront progressivement vers ${fmtTemp(tempEvo.max)} ${period.key === "debut_aprem" ? "cet après-midi" : "au plus chaud de la journée"}.`;
+    }
+    return "";
   }
-  if (rainInfo.intensity === "modérée") {
-    return `Pluie modérée attendue ${timeText}.`;
-  }
-  return `Pluie légère attendue ${timeText}.`;
-}
 
-function buildUVSentence(daily, dayCycle) {
-  if (!daily.uv_index_max || dayCycle.isNight) return "";
-  const uv = daily.uv_index_max[0];
-  if (uv >= 8) return "Indice UV très élevé, protégez-vous impérativement du soleil.";
-  if (uv >= 6) return "Indice UV élevé, lunettes de soleil et crème recommandées.";
-  if (uv >= 3) return "Indice UV modéré, quelques précautions utiles en extérieur.";
+  // Fin d'après-midi / fin de journée : transition vers la soirée
+  if (period.key === "aprem") {
+    if (tempEvo.max > curT + 2) {
+      return `Le pic de chaleur est attendu vers ${fmtTemp(tempEvo.max)} dans les prochaines heures.`;
+    }
+    return `Les températures vont commencer à baisser en fin de journée.`;
+  }
+
+  // Fin de journée (18h-sunset) : transition vers le soir
+  if (period.key === "fin_journee") {
+    if (tempEvo.min < curT - 2) {
+      return `Les températures descendront progressivement vers ${fmtTemp(tempEvo.min)} ce soir.`;
+    }
+    return `Les températures vont se rafraîchir au fil des heures.`;
+  }
+
+  // Soirée (20h-sunset)
+  if (period.key === "soiree") {
+    if (tempEvo.min < curT - 2) {
+      return `Les températures descendront progressivement vers ${fmtTemp(tempEvo.min)} cette nuit.`;
+    }
+    return `Les températures se maintiendront ${fmtTemp(tempEvo.min)} dans les prochaines heures.`;
+  }
+
+  // Soir (juste après le coucher, jusqu'à 22h)
+  if (period.key === "soir") {
+    if (tempEvo.min < curT - 2) {
+      return `Les températures descendront progressivement vers ${fmtTemp(tempEvo.min)} cette nuit.`;
+    }
+    return `Les températures resteront stables ${fmtTemp(curT)} dans les prochaines heures.`;
+  }
+
+  // Nuit (après 22h) : continuer de baisser jusqu'à l'aube
+  if (period.key === "nuit" || period.key === "fin_nuit") {
+    if (tempEvo.min < curT - 2) {
+      return `Les températures continueront de baisser jusqu'à ${fmtTemp(tempEvo.min)} à l'aube.`;
+    }
+    return `Les températures resteront stables ${fmtTemp(curT)} dans les prochaines heures.`;
+  }
+
   return "";
 }
 
-function buildWindSentence(cur) {
-  const wind = cur.wind_speed_10m;
-  const dir = cur.wind_direction_10m;
-  const dirTxt = dir != null ? ` ${degToCompass(dir)}` : "";
-  if (wind >= 50) return `Vent très fort à ${Math.round(wind)} km/h${dirTxt}, attention aux chutes d'objets.`;
-  if (wind >= 30) return `Vent fort à ${Math.round(wind)} km/h${dirTxt}.`;
-  if (wind >= 15) return `Vent modéré à ${Math.round(wind)} km/h${dirTxt}.`;
-  return "";
-}
-
-function buildSunSentence(daily, nowMs, sunriseMs, sunsetMs) {
-  if (sunriseMs == null || sunsetMs == null) return "";
-  const sunrise = daily.sunrise[0];
-  const sunset = daily.sunset[0];
-
-  // Avant lever (entre 1h et lever)
-  if (nowMs < sunriseMs && nowMs > sunriseMs - 90 * 60 * 1000) {
-    return `Lever du soleil à ${fmtTime(sunrise)}.`;
+function buildWindSentence(wind, dirTxt, period) {
+  if (wind >= 50) {
+    return `Vent très fort à ${wind} km/h${dirTxt}, attention aux chutes d'objets.`;
   }
-  // Avant coucher (entre 1h30 et coucher)
-  if (nowMs < sunsetMs && nowMs > sunsetMs - 90 * 60 * 1000) {
-    return `Coucher du soleil à ${fmtTime(sunset)}.`;
+  if (wind >= 30) {
+    return `Vent fort à ${wind} km/h${dirTxt}.`;
   }
-  return "";
-}
-
-function buildHumiditySentence(cur, code) {
-  const h = cur.relative_humidity_2m;
-  if (h >= 90 && code !== 3) return "Air très humide, sensation de moiteur.";
-  if (h >= 80 && h < 90 && [0, 1, 2].includes(code)) return "Air assez humide.";
-  return "";
+  if (wind >= 15) {
+    return `Vent modéré à ${wind} km/h${dirTxt}.`;
+  }
+  // Vent faible : petite mention adaptée au moment
+  if (wind > 0) {
+    if (period.key === "nuit" || period.key === "fin_nuit") {
+      return `Vent faible.`;
+    }
+    return `Brise légère à ${wind} km/h.`;
+  }
+  // Pas de vent
+  if (period.key === "nuit" || period.key === "fin_nuit") {
+    return `Vent nul, nuit calme.`;
+  }
+  return ``;
 }
 
 // ============================================================
