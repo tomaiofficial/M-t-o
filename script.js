@@ -263,94 +263,104 @@ function getPrecipLabel(code) {
 
 // ============================================================
 //  Day/Night cycle : basé sur sunrise/sunset réels de l'API
+//  Fonction centrale utilisée par TOUT : icônes, fond, animations
 // ============================================================
 let dayCycleCache = null;
 
-function isHourAtNight(isoHour, daily) {
-  // Détermine si une heure donnée est de nuit en utilisant sunrise/sunset
-  // EXACT du jour calendaire où se trouve cette heure (pas le plus proche).
-  if (!daily || !daily.sunrise || !daily.sunset) {
-    // Fallback : 21h-6h si pas de données
-    const m = (isoHour || "").match(/T(\d{2})/);
+/**
+ * Fonction centrale : détermine si une heure donnée est de JOUR ou de NUIT
+ * en utilisant les données sunrise/sunset de l'API pour CETTE date précise.
+ * @param {string} isoTime - timestamp ISO de l'heure à tester
+ * @param {object} daily - {sunrise:[], sunset:[]} de l'API
+ * @returns {boolean} true = jour, false = nuit
+ */
+function isDaytime(isoTime, daily) {
+  if (!daily || !daily.sunrise || !daily.sunset || daily.sunrise.length === 0) {
+    // Fallback heuristique : jour entre 6h et 21h
+    const m = (isoTime || "").match(/T(\d{2})/);
     const h = m ? parseInt(m[1], 10) : 12;
-    return h >= 21 || h < 6;
+    return h >= 6 && h < 21;
   }
 
-  const hourMs = new Date(isoHour).getTime();
-  if (isNaN(hourMs)) return false;
+  const timeMs = new Date(isoTime).getTime();
+  if (isNaN(timeMs)) return true;
 
-  // Trouver le jour calendaire de l'heure (le sunrise le plus tôt du même jour)
-  // On cherche l'index où sunrise est juste après hourMs ET sunrise est le
-  // premier du lendemain. Sinon on utilise l'index le plus proche mais dans
-  // la même fenêtre de 24h.
-  let bestIdx = 0;
-  let bestDiff = Infinity;
+  // Trouver le jour calendaire de cette heure :
+  // Le jour J est celui dont le sunriseMs est <= timeMs et le sunriseMs
+  // du jour suivant est > timeMs
+  let dayIndex = 0;
   for (let i = 0; i < daily.sunrise.length; i++) {
     const sunriseMs = new Date(daily.sunrise[i]).getTime();
-    let diff = Math.abs(sunriseMs - hourMs);
-    // Pénaliser les sauts de jour : si la diff couvre un coucher/lever complet
-    // (>20h), c'est probablement un autre jour calendaire
-    if (diff > 20 * 60 * 60 * 1000) diff += 24 * 60 * 60 * 1000;
-    if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+    // L'heure timeMs est dans le jour J si :
+    //   timeMs >= sunriseMs de J ET (c'est le dernier jour OU timeMs < sunriseMs de J+1)
+    // Pour le dernier jour de la liste, on suppose que le jour suivant existe
+    // avec sunrise = sunriseMs + 24h
+    if (timeMs >= sunriseMs) {
+      if (i === daily.sunrise.length - 1) {
+        // Dernier jour : accepter (au-delà, on garde la dernière valeur)
+        dayIndex = i;
+        break;
+      }
+      const nextSunriseMs = new Date(daily.sunrise[i + 1]).getTime();
+      if (timeMs < nextSunriseMs) {
+        dayIndex = i;
+        break;
+      }
+    }
   }
 
-  const sunriseMs = new Date(daily.sunrise[bestIdx]).getTime();
-  const sunsetMs = new Date(daily.sunset[bestIdx]).getTime();
+  const sunriseMs = new Date(daily.sunrise[dayIndex]).getTime();
+  const sunsetMs = new Date(daily.sunset[dayIndex]).getTime();
 
-  // Mode nuit : lune remplace soleil à partir du coucher du soleil EXACT
-  // (pas 30min après) et jusqu'au lever du soleil EXACT.
-  // Donc à 22h12 (sunset), icône = nuit.
-  // Donc à 6h45 (sunrise), icône = jour.
-  return hourMs < sunriseMs || hourMs >= sunsetMs;
+  // JOUR strict = heure >= sunrise ET heure < sunset
+  // NUIT = heure < sunrise OU heure >= sunset
+  return timeMs >= sunriseMs && timeMs < sunsetMs;
 }
 
+function isHourAtNight(isoHour, daily) {
+  return !isDaytime(isoHour, daily);
+}
+
+/**
+ * Détermine la phase actuelle du jour (dawn/day/dusk/night) avec marges
+ * de crépuscule pour le FOND visuellement progressif.
+ * Utilise les données sunrise/sunset de l'API.
+ */
 function getDayCycleInfo(cur, daily) {
-  // Récupère sunrise/sunset du jour actuel depuis l'API
   let sunriseStr = daily && daily.sunrise && daily.sunrise[0];
   let sunsetStr = daily && daily.sunset && daily.sunset[0];
 
-  // Fallback si pas encore chargé : utiliser l'heure actuelle comme référence
   const now = cur && cur.time ? new Date(cur.time) : new Date();
   const nowMs = now.getTime();
 
-  // Calculer sunrise/sunset en millisecondes (heure locale du lieu)
   let sunriseMs = sunriseStr ? new Date(sunriseStr).getTime() : null;
   let sunsetMs = sunsetStr ? new Date(sunsetStr).getTime() : null;
 
-  // Déterminer la phase du jour
-  // Si on n'a pas sunrise/sunset, fallback basé sur l'heure actuelle (mieux que rien)
   let isNight;
-  let phase; // 'dawn', 'day', 'dusk', 'night'
+  let phase;
 
   if (sunriseMs == null || sunsetMs == null) {
-    // Fallback heuristique : nuit entre 21h et 6h
     const h = now.getHours();
     isNight = h >= 21 || h < 6;
     phase = isNight ? "night" : "day";
   } else {
-    // Utiliser la position relative au lever/coucher du soleil
-    // Twilight windows : 30 min avant lever (dawn) / 30 min après coucher (dusk)
-    const dawnMs = sunriseMs - 30 * 60 * 1000; // 30 min avant lever
-    const duskMs = sunsetMs + 30 * 60 * 1000;  // 30 min après coucher
+    // Marges crépuscule : 30 min avant lever (aube) / 30 min après coucher (crépuscule)
+    const dawnMs = sunriseMs - 30 * 60 * 1000;
+    const duskMs = sunsetMs + 30 * 60 * 1000;
 
     if (nowMs < dawnMs) {
-      // Nuit profonde (avant le début du crépuscule du matin)
       isNight = true;
       phase = "night";
     } else if (nowMs < sunriseMs) {
-      // Crépuscule du matin (aube)
       isNight = false;
       phase = "dawn";
     } else if (nowMs < duskMs && nowMs >= sunsetMs) {
-      // Crépuscule du soir (entre coucher et nuit)
       isNight = false;
       phase = "dusk";
     } else if (nowMs >= duskMs) {
-      // Nuit (après le crépuscule)
       isNight = true;
       phase = "night";
     } else {
-      // Plein jour (entre lever et coucher)
       isNight = false;
       phase = "day";
     }
@@ -400,12 +410,18 @@ function generateDescription(w) {
   const nowMs = dayCycle.nowMs;
 
   let timeLabel = "";
+  // Utilise isDaytime() pour la détermination principale, pas d'heure fixe
   if (sunriseMs == null || sunsetMs == null) {
+    // Pas de données API : déduire du code météo et de l'heure actuelle
     const h = new Date(nowMs).getHours();
-    if (h >= 5 && h < 12) timeLabel = "ce matin";
-    else if (h >= 12 && h < 18) timeLabel = "cet après-midi";
-    else if (h >= 18 && h < 22) timeLabel = "ce soir";
-    else timeLabel = "cette nuit";
+    const isDayNow = h >= 6 && h < 21;
+    if (isDayNow) {
+      if (h < 12) timeLabel = "ce matin";
+      else if (h < 18) timeLabel = "cet après-midi";
+      else timeLabel = "ce soir";
+    } else {
+      timeLabel = "cette nuit";
+    }
   } else if (nowMs < sunriseMs) {
     timeLabel = "cette nuit";
   } else if (nowMs < sunriseMs + 2 * 60 * 60 * 1000) {
