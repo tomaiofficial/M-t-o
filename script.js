@@ -6,34 +6,49 @@
 // ===== WMO codes (style Apple Weather) =====
 const WMO = {
   0:  { label: "Ciel dégagé",            icon: "apple-clear-day",         night: "apple-clear-night" },
-  1:  { label: "Plutôt clair",           icon: "apple-clear-day",         night: "apple-clear-night" },
+  1:  { label: "Plutôt ensoleillé",      icon: "apple-clear-day",         night: "apple-clear-night" },
   2:  { label: "Partiellement nuageux",  icon: "apple-partly-cloudy-day", night: "apple-partly-cloudy-night" },
-  3:  { label: "Couvert",                icon: "apple-cloudy",            night: "apple-cloudy" },
+  3:  { label: "Ciel couvert",           icon: "apple-cloudy",            night: "apple-cloudy" },
   45: { label: "Brouillard",             icon: "apple-fog",               night: "apple-fog" },
   48: { label: "Brouillard givrant",     icon: "apple-fog",               night: "apple-fog" },
-  51: { label: "Légère bruine",          icon: "apple-drizzle",           night: "apple-drizzle" },
+  51: { label: "Bruine",                 icon: "apple-drizzle",           night: "apple-drizzle" },
   53: { label: "Bruine",                 icon: "apple-drizzle",           night: "apple-drizzle" },
   55: { label: "Bruine dense",           icon: "apple-drizzle",           night: "apple-drizzle" },
   56: { label: "Bruine verglaçante",     icon: "apple-icy",               night: "apple-icy" },
   57: { label: "Bruine verglaçante",     icon: "apple-icy",               night: "apple-icy" },
-  61: { label: "Pluie légère",           icon: "apple-rain",              night: "apple-rain" },
+  61: { label: "Pluie faible",           icon: "apple-rain",              night: "apple-rain" },
   63: { label: "Pluie",                  icon: "apple-rain",              night: "apple-rain" },
-  65: { label: "Pluie forte",            icon: "apple-heavy-rain",        night: "apple-heavy-rain" },
+  65: { label: "Fortes pluies",          icon: "apple-heavy-rain",        night: "apple-heavy-rain" },
   66: { label: "Pluie verglaçante",      icon: "apple-icy",               night: "apple-icy" },
-  67: { label: "Pluie verglaçante",      icon: "apple-icy",               night: "apple-icy" },
-  71: { label: "Légère neige",           icon: "apple-snow",              night: "apple-snow" },
+  67: { label: "Verglas",                icon: "apple-icy",               night: "apple-icy" },
+  71: { label: "Neige faible",           icon: "apple-snow",              night: "apple-snow" },
   73: { label: "Neige",                  icon: "apple-snow",              night: "apple-snow" },
-  75: { label: "Forte neige",            icon: "apple-snow",              night: "apple-snow" },
+  75: { label: "Fortes chutes de neige", icon: "apple-snow",              night: "apple-snow" },
   77: { label: "Grains de neige",        icon: "apple-snow",              night: "apple-snow" },
   80: { label: "Averses",                icon: "apple-rain",              night: "apple-rain" },
   81: { label: "Averses",                icon: "apple-rain",              night: "apple-rain" },
   82: { label: "Violentes averses",      icon: "apple-heavy-rain",        night: "apple-heavy-rain" },
   85: { label: "Averses de neige",       icon: "apple-snow",              night: "apple-snow" },
-  86: { label: "Fortes averses de neige", icon: "apple-snow",             night: "apple-snow" },
-  95: { label: "Orage",                  icon: "apple-thunder",           night: "apple-thunder" },
-  96: { label: "Orage avec grêle",       icon: "apple-thunder",           night: "apple-thunder" },
-  99: { label: "Orage avec grêle",       icon: "apple-thunder",           night: "apple-thunder" }
+  86: { label: "Averses de neige",       icon: "apple-snow",              night: "apple-snow" },
+  95: { label: "Orages",                 icon: "apple-thunder",           night: "apple-thunder" },
+  96: { label: "Orages avec pluie",      icon: "apple-thunder",           night: "apple-thunder" },
+  99: { label: "Orages violents",        icon: "apple-thunder",           night: "apple-thunder" }
 };
+
+// Libellés de référence (Apple-Weather-like) : vocabulaire étendu pour
+// affichage spécialisé si besoin futur (description courte, tooltip, etc.)
+const WEATHER_LABELS = [
+  "Temps clair","Ciel dégagé","Ensoleillé","Plutôt ensoleillé",
+  "Belles éclaircies","Éclaircies","Partiellement nuageux",
+  "Nuages prédominants","Nuageux","Très nuageux","Ciel couvert",
+  "Couvert","Brumeux","Brouillard","Grisaille",
+  "Pluie faible","Pluie","Pluie modérée","Fortes pluies",
+  "Averses","Averses éparses","Averses fréquentes","Risque d'averses",
+  "Orages","Orages isolés","Orages avec pluie","Orages violents",
+  "Neige faible","Neige","Fortes chutes de neige","Averses de neige",
+  "Pluie et neige mêlées","Verglas","Givre",
+  "Vent fort","Rafales de vent","Tempête"
+];
 
 // ===== State =====
 const state = {
@@ -621,35 +636,73 @@ function buildConditionSentence(code, period, hour) {
   const art = period.article;
   const lbl = period.label;
 
+  // Libellé pour la phrase (issu de la liste de référence)
+  const wmoLabel = (WMO[code] && WMO[code].label) || "Conditions variables";
+
   // Pluie actuelle
-  if ([51, 53, 55, 56, 57, 61, 63, 80, 81].includes(code)) {
-    if (isNight) return `Pluie modérée ${lbl}.`;
-    return `Pluie modérée ${lbl}.`;
+  if ([51, 53, 55].includes(code)) {
+    if (isNight) return `${wmoLabel} ${lbl}.`;
+    return `${wmoLabel} ${lbl}.`;
   }
-  if (code === 65 || code === 82) {
-    if (isNight) return `Pluie intense ${lbl}, prudence sur la route.`;
-    return `Pluie intense ${lbl}, restez vigilant.`;
+  if ([56, 57].includes(code)) {
+    if (isNight) return `${wmoLabel} ${lbl}, prudence accrue.`;
+    return `${wmoLabel} ${lbl}, attention aux routes glissantes.`;
   }
-  if ([95, 96, 99].includes(code)) {
+  if (code === 61) {
+    if (isNight) return `Pluie faible ${lbl}.`;
+    return `Pluie faible ${lbl}.`;
+  }
+  if (code === 63 || code === 80 || code === 81) {
+    if (isNight) return `Averses ${lbl}.`;
+    return `Averses ${lbl}, ${wmoLabel.toLowerCase().includes("averse") ? "ponctuelles" : "à prévoir"}.`;
+  }
+  if (code === 65) {
+    if (isNight) return `Fortes pluies ${lbl}, prudence sur la route.`;
+    return `Fortes pluies ${lbl}, restez vigilant.`;
+  }
+  if (code === 82) {
+    if (isNight) return `Violentes averses ${lbl}, prudence sur la route.`;
+    return `Violentes averses ${lbl}.`;
+  }
+  if (code === 66 || code === 67) {
+    if (isNight) return `Verglas ${lbl}, prudence accrue.`;
+    return `Verglas ${lbl}, attention aux routes glissantes.`;
+  }
+  if ([95, 96].includes(code)) {
     if (isNight) return `Orages ${lbl}, restez à l'abri.`;
     return `Orages ${lbl}, restez prudent.`;
   }
-  if ([71, 73, 75, 77, 85, 86].includes(code)) {
-    if (isNight) return `Chutes de neige ${lbl}, attention sur les routes.`;
+  if (code === 99) {
+    if (isNight) return `Orages violents ${lbl}, restez à l'abri.`;
+    return `Orages violents ${lbl}, soyez très prudent.`;
+  }
+  if (code === 71) {
+    if (isNight) return `Neige faible ${lbl}.`;
+    return `Neige faible ${lbl},${hour >= 12 && hour < 18 ? " paysage hivernal" : " prudence"}.`;
+  }
+  if (code === 73) {
+    if (isNight) return `Neige ${lbl}, attention sur les routes.`;
     return `Neige ${lbl}, prévoyez des vêtements chauds.`;
+  }
+  if (code === 75) {
+    if (isNight) return `Fortes chutes de neige ${lbl}, restez prudent.`;
+    return `Fortes chutes de neige ${lbl}, évitez les déplacements.`;
+  }
+  if (code === 77) {
+    if (isNight) return `Grains de neige ${lbl}.`;
+    return `Grains de neige ${lbl}, attention à la visibilité.`;
+  }
+  if ([85, 86].includes(code)) {
+    if (isNight) return `Averses de neige ${lbl}.`;
+    return `Averses de neige ${lbl},${hour >= 7 && hour < 20 ? " chaussées glissantes" : " prudence"}.`;
   }
   if (code === 45 || code === 48) {
     if (isNight) return `Brouillard ${lbl}, visibilité très réduite.`;
     return `Brouillard ${lbl}, visibilité réduite.`;
   }
-  if (code === 66 || code === 67) {
-    if (isNight) return `Pluie verglaçante ${lbl}, prudence accrue.`;
-    return `Pluie verglaçante ${lbl}, attention aux routes glissantes.`;
-  }
 
   // Conditions calmes
   if (code === 0) {
-    // Ciel dégagé
     if (isNight) {
       return hour >= 1 && hour < 4
         ? `Nuit calme et dégagée.`
@@ -664,46 +717,47 @@ function buildConditionSentence(code, period, hour) {
     if (period.key === "aprem" || period.key === "debut_aprem") {
       return `Ciel dégagé ${lbl}, idéal pour sortir.`;
     }
-    if (period.key === "fin_journee") {
-      return `Ciel dégagé ${lbl}.`;
-    }
-    if (period.key === "soiree") {
-      return `Ciel dégagé ${lbl}.`;
-    }
-    if (period.key === "soir") {
+    if (period.key === "fin_journee" || period.key === "soiree" || period.key === "soir") {
       return `Ciel dégagé ${lbl}.`;
     }
     return `Ciel dégagé ${lbl}.`;
   }
 
   if (code === 1) {
-    if (isNight) return `Plutôt clair ${lbl}.`;
-    if (period.key === "fin_journee") return `Plutôt clair ${lbl}.`;
-    if (period.key === "soiree") return `Plutôt clair ${lbl}.`;
-    if (period.key === "soir") return `Plutôt clair ${lbl}.`;
-    if (period.key === "matin" || period.key === "matin_tot") return `Plutôt clair ${lbl}, belle journée en perspective.`;
-    if (period.key === "matinee") return `Plutôt clair ${lbl}.`;
-    if (period.key === "aprem" || period.key === "debut_aprem") return `Plutôt clair ${lbl}.`;
-    return `Plutôt clair ${lbl}.`;
+    if (isNight) return `Plutôt ensoleillé ${lbl}.`;
+    if (period.key === "fin_journee" || period.key === "soiree" || period.key === "soir") {
+      return `Plutôt ensoleillé ${lbl}.`;
+    }
+    if (period.key === "matin" || period.key === "matin_tot") {
+      return `Plutôt ensoleillé ${lbl}, belle journée en perspective.`;
+    }
+    if (period.key === "matinee") return `Plutôt ensoleillé ${lbl}.`;
+    return `Plutôt ensoleillé ${lbl}.`;
   }
 
   if (code === 2) {
-    if (isNight) return `Partiellement nuageux ${lbl}.`;
-    if (period.key === "fin_journee") return `Partiellement nuageux ${lbl}, quelques éclaircies.`;
-    if (period.key === "soiree") return `Partiellement nuageux ${lbl}.`;
-    if (period.key === "soir") return `Partiellement nuageux ${lbl}.`;
-    return `Partiellement nuageux ${lbl} avec quelques éclaircies.`;
+    if (isNight) return `Éclaircies ${lbl}.`;
+    if (period.key === "fin_journee") return `Belles éclaircies ${lbl}.`;
+    if (period.key === "soiree") return `Éclaircies ${lbl}.`;
+    if (period.key === "soir") return `Éclaircies ${lbl}.`;
+    if (period.key === "matin" || period.key === "matin_tot") {
+      return `Éclaircies ${lbl}, le soleil perce à travers les nuages.`;
+    }
+    return `Éclaircies ${lbl}.`;
   }
 
   if (code === 3) {
     if (isNight) return `Ciel couvert ${lbl}.`;
     if (period.key === "fin_journee") return `Ciel couvert ${lbl}, ambiance maussade.`;
-    if (period.key === "soiree") return `Ciel couvert ${lbl}.`;
-    if (period.key === "soir") return `Ciel couvert ${lbl}.`;
-    return `Ciel couvert ${lbl}.`;
+    if (period.key === "soiree") return `Couvert ${lbl}.`;
+    if (period.key === "soir") return `Couvert ${lbl}.`;
+    if (period.key === "matin" || period.key === "matin_tot") {
+      return `Couvert ${lbl}, ambiance grise au réveil.`;
+    }
+    return `Couvert ${lbl}.`;
   }
 
-  return `Conditions variables ${lbl}.`;
+  return `${wmoLabel} ${lbl}.`;
 }
 
 function buildTempCurrentSentence(temp, feels, feelsDiff) {
