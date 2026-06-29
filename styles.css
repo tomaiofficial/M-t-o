@@ -1042,10 +1042,16 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
   display: none;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 60px 20px 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 60px 20px 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.search-overlay::-webkit-scrollbar { display: none; width: 0; }
 .search-overlay.open { display: flex; }
 .search-bar {
   width: 100%;
@@ -1057,6 +1063,7 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   border: 1px solid rgba(255,255,255,0.15);
   border-radius: 14px;
   padding: 12px 16px;
+  flex: 0 0 auto;
 }
 .search-bar input {
   flex: 1;
@@ -1079,6 +1086,10 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   width: 100%;
   max-width: 480px;
   margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex: 0 0 auto;
 }
 .search-result {
   background: rgba(255,255,255,0.1);
