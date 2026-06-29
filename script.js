@@ -566,13 +566,12 @@ function renderCity(city, w) {
     const hourIsNight = isNow ? isNight : (hHour >= 19 || hHour < 6);
     const wi = wmoInfo(hourCode, hourIsNight);
     const pop = (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0;
-    // Afficher les % de précipitations à partir de 5% avec le type
+    // Afficher les % de précipitations à partir de 5% (juste le chiffre)
     const popVisible = pop >= 5;
-    const precipLabel = getPrecipLabel(hourCode);
     h.innerHTML = `
       <div class="hour-time">${timeLabel}</div>
       <div class="hour-icon">${icon(wi.icon, 32)}</div>
-      <div class="hour-pop${popVisible ? "" : " empty"}">${popVisible ? precipLabel + " " + pop + "%" : ""}</div>
+      <div class="hour-pop${popVisible ? "" : " empty"}">${popVisible ? pop + "%" : ""}</div>
       <div class="hour-temp">${fmtTemp(hourTemp)}</div>
     `;
     $hourly.appendChild(h);
@@ -595,12 +594,11 @@ function renderCity(city, w) {
     const wi = wmoInfo(daily.weather_code[i], false);
     const popDay = (daily.precipitation_probability_max && daily.precipitation_probability_max[i]) || 0;
     const popVisible = popDay >= 5;
-    const precipLabelDay = getPrecipLabel(daily.weather_code[i]);
     di.innerHTML = `
       <div class="day-name">${dayName(daily.time[i], i)}</div>
       <div class="day-icon-wrap">
         <div class="day-icon">${icon(wi.icon, 28)}</div>
-        <div class="day-pop${popVisible ? "" : " empty"}">${popVisible ? precipLabelDay + " " + popDay + "%" : ""}</div>
+        <div class="day-pop${popVisible ? "" : " empty"}">${popVisible ? popDay + "%" : ""}</div>
       </div>
       <div class="day-low">${fmtTemp(lo)}</div>
       <div class="day-bar"><span class="fill" style="left:${startPct}%; right:${100 - endPct}%"></span></div>
