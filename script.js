@@ -40,9 +40,10 @@ const state = {
   city: null,
   unit: "C",
   lastWeather: null,
-  lastRefreshMs: 0
+  lastRefreshMs: 0,
+  favorites: []
 };
-const LS_KEY = "meteo_v4";
+const LS_KEY = "meteo_v5";
 
 // ===== Helpers =====
 const $ = id => document.getElementById(id);
@@ -430,25 +431,31 @@ function generateDescription(w) {
 }
 
 function getConditionText(code, isNight, timeOfDay) {
+  // Gestion correcte des articles : "ce" ou "cet" selon voyelle, "cette" pour nuit
+  let art;
+  if (isNight) art = "cette";
+  else if (["matin", "après-midi"].includes(timeOfDay)) art = "cet";
+  else art = "ce";
+
   if (code === 0) {
-    return isNight ? "Ciel dégagé cette nuit" : `Beau temps ce ${timeOfDay}, ciel dégagé`;
+    return isNight ? "Ciel dégagé cette nuit" : `Beau temps ${art} ${timeOfDay}, ciel dégagé`;
   }
-  if (code === 1) return `Plutôt clair ce ${timeOfDay}`;
-  if (code === 2) return `Partiellement nuageux ce ${timeOfDay}`;
+  if (code === 1) return `Plutôt clair ${art} ${timeOfDay}`;
+  if (code === 2) return `Partiellement nuageux ${art} ${timeOfDay}`;
   if (code === 3) return "Ciel couvert toute la journée";
-  if ([45,48].includes(code)) return `Brouillard ce ${timeOfDay}, visibilité réduite`;
-  if ([51,53,55].includes(code)) return `Bruine légère ce ${timeOfDay}`;
+  if ([45,48].includes(code)) return `Brouillard ${art} ${timeOfDay}, visibilité réduite`;
+  if ([51,53,55].includes(code)) return `Bruine légère ${art} ${timeOfDay}`;
   if ([56,57].includes(code)) return "Bruine verglaçante, attention aux routes";
-  if ([61,63].includes(code)) return `Pluie ce ${timeOfDay}`;
-  if (code === 65) return `Pluie forte ce ${timeOfDay}`;
+  if ([61,63].includes(code)) return `Pluie ${art} ${timeOfDay}`;
+  if (code === 65) return `Pluie forte ${art} ${timeOfDay}`;
   if ([66,67].includes(code)) return "Pluie verglaçante, prudence sur la route";
-  if ([71,73].includes(code)) return `Neige ce ${timeOfDay}`;
+  if ([71,73].includes(code)) return `Neige ${art} ${timeOfDay}`;
   if (code === 75) return "Forte neige, restez au chaud";
-  if (code === 77) return `Grains de neige ce ${timeOfDay}`;
-  if ([80,81].includes(code)) return `Averses ce ${timeOfDay}`;
+  if (code === 77) return `Grains de neige ${art} ${timeOfDay}`;
+  if ([80,81].includes(code)) return `Averses ${art} ${timeOfDay}`;
   if (code === 82) return "Violentes averses, restez à l'abri";
-  if ([85,86].includes(code)) return `Averses de neige ce ${timeOfDay}`;
-  if ([95,96,99].includes(code)) return `Orages ce ${timeOfDay}, restez prudent`;
+  if ([85,86].includes(code)) return `Averses de neige ${art} ${timeOfDay}`;
+  if ([95,96,99].includes(code)) return `Orages ${art} ${timeOfDay}, restez prudent`;
   return "";
 }
 
@@ -694,7 +701,8 @@ function saveState() {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify({
       city: state.city,
-      unit: state.unit
+      unit: state.unit,
+      favorites: state.favorites
     }));
   } catch (e) {}
 }
@@ -707,10 +715,62 @@ function loadState() {
     if (s && s.city) {
       state.city = s.city;
       state.unit = s.unit || "C";
+      state.favorites = s.favorites || [];
       return true;
     }
   } catch (e) {}
   return false;
+}
+
+// ============================================================
+//  Favoris : Ajouter/retirer des villes
+// ============================================================
+function toggleFavorite(city) {
+  const idx = state.favorites.findIndex(f => f.name === city.name && Math.abs(f.lat - city.lat) < 0.01);
+  if (idx >= 0) {
+    state.favorites.splice(idx, 1);
+  } else {
+    state.favorites.push(city);
+  }
+  saveState();
+  renderFavorites();
+}
+
+function removeFavorite(idx) {
+  state.favorites.splice(idx, 1);
+  saveState();
+  renderFavorites();
+}
+
+function renderFavorites() {
+  const list = $("favoritesList");
+  if (!list) return;
+  if (state.favorites.length === 0) {
+    list.innerHTML = `<p style="opacity: 0.6; font-size: 13px; text-align: center; padding: 20px 0;">Aucune ville favorite. Recherchez une ville et appuyez sur l'étoile pour l'ajouter.</p>`;
+    return;
+  }
+  list.innerHTML = "";
+  state.favorites.forEach((f, idx) => {
+    const div = document.createElement("div");
+    div.className = "fav-item";
+    div.innerHTML = `
+      <div class="fav-item-info">
+        <div class="fav-item-name">${f.name}</div>
+      </div>
+      <button class="fav-item-remove" data-idx="${idx}" aria-label="Retirer">×</button>
+    `;
+    div.querySelector(".fav-item-info").addEventListener("click", () => {
+      state.city = { name: f.name, lat: f.lat, lon: f.lon };
+      saveState();
+      closeSettings();
+      loadWeather(state.city);
+    });
+    div.querySelector(".fav-item-remove").addEventListener("click", (e) => {
+      e.stopPropagation();
+      removeFavorite(idx);
+    });
+    list.appendChild(div);
+  });
 }
 
 // ============================================================
@@ -751,17 +811,30 @@ searchInput.addEventListener("input", () => {
     const results = await searchCities(q);
     searchResults.innerHTML = "";
     results.forEach(r => {
+      const isFav = state.favorites.some(f => f.name === r.name && Math.abs(f.lat - r.lat) < 0.01);
       const div = document.createElement("div");
       div.className = "search-result";
       div.innerHTML = `
-        <div class="sr-name">${r.name}</div>
-        <div class="sr-region">${r.region}</div>
+        <div class="sr-info">
+          <div class="sr-name">${r.name}</div>
+          <div class="sr-region">${r.region}</div>
+        </div>
+        <button class="fav-star ${isFav ? "active" : ""}" data-lat="${r.lat}" data-lon="${r.lon}" data-name="${r.name.replace(/"/g, "&quot;")}" data-region="${r.region.replace(/"/g, "&quot;")}" aria-label="Ajouter aux favoris">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        </button>
       `;
-      div.addEventListener("click", () => {
+      // Click sur la zone principale = sélectionner la ville
+      div.querySelector(".sr-info").addEventListener("click", () => {
         state.city = { name: r.name, lat: r.lat, lon: r.lon };
         saveState();
         closeSearch();
         loadWeather(state.city);
+      });
+      // Click sur l'étoile = ajouter/retirer des favoris
+      div.querySelector(".fav-star").addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleFavorite({ name: r.name, lat: r.lat, lon: r.lon });
+        div.querySelector(".fav-star").classList.toggle("active");
       });
       searchResults.appendChild(div);
     });
@@ -824,6 +897,9 @@ unitToggle.addEventListener("click", (e) => {
     b.classList.toggle("active", b.dataset.unit === state.unit);
   });
 
+  // Afficher les favoris
+  renderFavorites();
+
   if (ok && state.city) {
     await loadWeather(state.city);
   } else {
@@ -835,13 +911,13 @@ unitToggle.addEventListener("click", (e) => {
     }
   }
 
-  // Auto-refresh des données météo toutes les 3 minutes
+  // Auto-refresh des données météo toutes les 2 minutes
   // Re-fetch depuis l'API : garantit cohérence entre current et hourly
   setInterval(async () => {
     if (state.city) {
       await loadWeather(state.city);
     }
-  }, 3 * 60 * 1000);
+  }, 2 * 60 * 1000);
 
   // Mise à jour du "Mis à jour il y a X min"
   setInterval(updateUpdatedAt, 30 * 1000);

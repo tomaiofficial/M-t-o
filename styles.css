@@ -980,6 +980,52 @@ body {
 }
 .sr-name { font-size: 16px; font-weight: 500; }
 .sr-region { font-size: 13px; opacity: 0.6; margin-top: 2px; }
+.search-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sr-info { flex: 1; min-width: 0; }
+.fav-star {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.5);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s, transform 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.fav-star:hover, .fav-star:active { color: #FFD60A; transform: scale(1.1); }
+.fav-star.active { color: #FFD60A; }
+.fav-star.active svg { fill: #FFD60A; }
+.favorites-list { display: flex; flex-direction: column; gap: 8px; }
+.fav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+}
+.fav-item-info { flex: 1; min-width: 0; cursor: pointer; }
+.fav-item-name { font-size: 16px; font-weight: 500; }
+.fav-item-region { font-size: 13px; opacity: 0.6; margin-top: 2px; }
+.fav-item-remove {
+  background: none;
+  border: none;
+  color: rgba(255,100,100,0.7);
+  cursor: pointer;
+  padding: 6px;
+  font-size: 18px;
+  -webkit-tap-highlight-color: transparent;
+}
+.fav-item-remove:hover { color: rgba(255,100,100,1); }
 
 /* ===== Weather icon ===== */
 .wicon { display: inline-block; vertical-align: middle; }
