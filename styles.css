@@ -570,36 +570,33 @@ body {
 .theme-storm .bg-lightning { opacity: 1; }
 
 /* ============================================================
-   TOPBAR — Liquid Glass
+   FLOATING SETTINGS BUTTON
    ============================================================ */
-.topbar {
-  position: sticky;
-  top: 0;
+.float-settings {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
   z-index: 50;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 18px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.1);
   backdrop-filter: blur(40px) saturate(180%);
   -webkit-backdrop-filter: blur(40px) saturate(180%);
-  background: rgba(0,0,0,0.08);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-}
-.topbar-spacer { flex: 1; }
-.icon-btn {
-  background: none;
-  border: none;
   color: #fff;
   cursor: pointer;
-  padding: 8px;
-  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.15);
+  transition: background 0.2s, transform 0.2s;
   -webkit-tap-highlight-color: transparent;
 }
-.icon-btn:hover, .icon-btn:active { background: rgba(255,255,255,0.12); }
+.float-settings:hover, .float-settings:active {
+  background: rgba(255,255,255,0.18);
+  transform: scale(1.05);
+}
 
 /* ============================================================
    SETTINGS PANEL — Liquid Glass

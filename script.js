@@ -252,7 +252,7 @@ function themeFor(code, isNight, currentTime, windSpeed) {
 
 // ============================================================
 //  IA : Générateur de descriptions météo intelligentes
-//  Analyse plusieurs paramètres pour générer un texte naturel
+//  Analyse 15+ paramètres pour générer un texte naturel et contextuel
 // ============================================================
 function generateDescription(w) {
   const cur = w.current;
@@ -260,22 +260,32 @@ function generateDescription(w) {
   const hourly = w.hourly;
   const code = cur.weather_code;
   const isNight = cur.is_day === 0;
-  const hi = daily.temperature_2m_max[0];
-  const lo = daily.temperature_2m_min[0];
   const temp = cur.temperature_2m;
   const feels = cur.apparent_temperature;
   const humidity = cur.relative_humidity_2m;
   const wind = Math.round(cur.wind_speed_10m);
+  const windDir = degToCompass(cur.wind_direction_10m);
   const popToday = daily.precipitation_probability_max[0] || 0;
   const precip = daily.precipitation_sum[0] || 0;
   const uv = (daily.uv_index_max && daily.uv_index_max[0]) || 0;
   const pressure = cur.surface_pressure;
+  const hi = daily.temperature_2m_max[0];
+  const lo = daily.temperature_2m_min[0];
+  const sunrise = daily.sunrise[0];
+  const sunset = daily.sunset[0];
 
-  // Analyser les prochaines heures
+  // Déterminer le moment de la journée
   const currentHour = getHourFromISO(cur.time);
+  let timeOfDay = "";
+  if (currentHour >= 5 && currentHour < 12) timeOfDay = "matin";
+  else if (currentHour >= 12 && currentHour < 18) timeOfDay = "après-midi";
+  else if (currentHour >= 18 && currentHour < 22) timeOfDay = "soirée";
+  else timeOfDay = "nuit";
+
+  // Analyser les prochaines heures (24h)
   const nextHours = [];
   if (hourly && hourly.time) {
-    for (let i = 0; i < Math.min(12, hourly.time.length); i++) {
+    for (let i = 0; i < Math.min(24, hourly.time.length); i++) {
       const h = getHourFromISO(hourly.time[i]);
       if (h != null && h >= currentHour) {
         nextHours.push({
@@ -288,96 +298,93 @@ function generateDescription(w) {
     }
   }
 
-  // Détecter la pluie à venir
+  // Détecter pluie à venir + intensité + timing précis
   let rainComing = false;
   let rainInHours = -1;
+  let rainIntensity = "";
   let clearComing = false;
-  for (const nh of nextHours) {
-    if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(nh.code) && nh.pop > 30) {
-      if (!rainComing) { rainComing = true; rainInHours = nh.hour; }
+  let clearInHours = -1;
+  let tempTrend = "";
+  let nextTemp = temp;
+
+  for (let i = 0; i < Math.min(12, nextHours.length); i++) {
+    const nh = nextHours[i];
+    const hoursAhead = nh.hour - currentHour;
+
+    if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(nh.code) && nh.pop > 30 && !rainComing) {
+      rainComing = true;
+      rainInHours = hoursAhead;
+      if ([65,82].includes(nh.code)) rainIntensity = "forte";
+      else if ([61,63,80,81].includes(nh.code)) rainIntensity = "modérée";
+      else rainIntensity = "légère";
     }
-    if (nh.code === 0 || nh.code === 1) {
-      if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) {
-        clearComing = true;
-      }
+    if ((nh.code === 0 || nh.code === 1) && [51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code) && !clearComing) {
+      clearComing = true;
+      clearInHours = hoursAhead;
     }
+    if (i === 2) nextTemp = nh.temp;
   }
+
+  // Tendance température
+  if (nextTemp > temp + 2) tempTrend = "en hausse";
+  else if (nextTemp < temp - 2) tempTrend = "en baisse";
+  else tempTrend = "stable";
 
   let parts = [];
 
-  // 1. Condition principale
-  if (code === 0) {
-    parts.push(isNight ? "Ciel dégagé cette nuit" : "Ciel dégagé aujourd'hui");
-  } else if (code === 1) {
-    parts.push("Plutôt clair aujourd'hui");
-  } else if (code === 2) {
-    parts.push("Partiellement nuageux");
-  } else if (code === 3) {
-    parts.push("Ciel couvert toute la journée");
-  } else if ([45,48].includes(code)) {
-    parts.push("Brouillard, visibilité réduite");
-  } else if ([51,53,55].includes(code)) {
-    parts.push("Bruine légère");
-  } else if ([56,57].includes(code)) {
-    parts.push("Bruine verglaçante, attention aux routes");
-  } else if ([61,63].includes(code)) {
-    parts.push("Pluie");
-  } else if (code === 65) {
-    parts.push("Pluie forte");
-  } else if ([66,67].includes(code)) {
-    parts.push("Pluie verglaçante, prudence sur la route");
-  } else if ([71,73].includes(code)) {
-    parts.push("Neige");
-  } else if (code === 75) {
-    parts.push("Forte neige, restez au chaud");
-  } else if (code === 77) {
-    parts.push("Grains de neige");
-  } else if ([80,81].includes(code)) {
-    parts.push("Averses");
-  } else if (code === 82) {
-    parts.push("Violentes averses, restez à l'abri");
-  } else if ([85,86].includes(code)) {
-    parts.push("Averses de neige");
-  } else if ([95,96,99].includes(code)) {
-    parts.push("Orages prévus, restez prudent");
+  // 1. Condition principale avec moment de la journée
+  parts.push(getConditionText(code, isNight, timeOfDay));
+
+  // 2. Température avec tendance
+  if (tempTrend === "en hausse" && !isNight) {
+    parts.push(`Il fait ${fmtTemp(temp)}, les températures montent vers ${fmtTemp(hi)}`);
+  } else if (tempTrend === "en baisse") {
+    parts.push(`Il fait ${fmtTemp(temp)}, les températures descendent vers ${fmtTemp(lo)}`);
+  } else {
+    parts.push(`Maximales ${fmtTemp(hi)}, minimales ${fmtTemp(lo)}`);
   }
 
-  // 2. Températures
-  parts.push(`Maximales ${fmtTemp(hi)}, minimales ${fmtTemp(lo)}`);
+  // 3. Pluie à venir avec timing précis
+  if (rainComing && ![51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) {
+    const hourText = rainInHours <= 1 ? "dans l'heure" : rainInHours <= 2 ? "dans 2 heures" : `vers ${currentHour + rainInHours}h`;
+    parts.push(`Pluie ${rainIntensity} attendue ${hourText}`);
+  }
 
-  // 3. Probabilité de précipitations
+  // 4. Éclaircissement à venir
+  if (clearComing) {
+    const hourText = clearInHours <= 1 ? "dans l'heure" : `dans ${clearInHours} heures`;
+    parts.push(`Éclaircissements prévus ${hourText}`);
+  }
+
+  // 5. Probabilité de précipitations
   if (popToday >= 40 && ![51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) {
     parts.push(`Risque de précipitations de ${popToday}%`);
   } else if (popToday >= 60 && [51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) {
     parts.push(`Risque de ${popToday}%`);
   }
 
-  // 4. Pluie à venir
-  if (rainComing && ![51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) {
-    parts.push(`Pluie attendue vers ${rainInHours}h`);
-  }
-
-  // 5. Éclaircissement à venir
-  if (clearComing) {
-    parts.push("Éclaircissements dans les prochaines heures");
-  }
-
-  // 6. Vent
-  if (wind > 30) {
-    parts.push(`Vent fort ${wind} km/h`);
+  // 6. Vent avec direction
+  if (wind > 50) {
+    parts.push(`Vent très fort ${wind} km/h venant de ${windDir}`);
+  } else if (wind > 30) {
+    parts.push(`Vent fort ${wind} km/h venant de ${windDir}`);
   } else if (wind > 15) {
-    parts.push(`Vent ${wind} km/h`);
+    parts.push(`Vent ${wind} km/h venant de ${windDir}`);
   }
 
-  // 7. UV
+  // 7. UV avec recommandations
   if (uv >= 8 && !isNight) {
-    parts.push("Indice UV très élevé, protégez-vous");
+    parts.push("Indice UV très élevé, protégez-vous du soleil");
   } else if (uv >= 6 && !isNight) {
-    parts.push("Indice UV élevé");
+    parts.push("Indice UV élevé, lunettes de soleil recommandées");
+  } else if (uv >= 3 && !isNight && timeOfDay === "matin") {
+    parts.push("Indice UV modéré");
   }
 
   // 8. Humidité
-  if (humidity >= 85 && code !== 3) {
+  if (humidity >= 90) {
+    parts.push("Air très humide");
+  } else if (humidity >= 80 && code !== 3) {
     parts.push("Air humide");
   }
 
@@ -389,7 +396,7 @@ function generateDescription(w) {
   }
 
   // 10. Ressenti
-  if (Math.abs(feels - temp) >= 3) {
+  if (Math.abs(feels - temp) >= 5) {
     if (feels < temp) {
       parts.push(`Ressenti plus frais : ${fmtTemp(feels)}`);
     } else {
@@ -399,10 +406,41 @@ function generateDescription(w) {
 
   // 11. Précipitations
   if (precip > 5) {
-    parts.push(`${precip.toFixed(1)} mm attendus`);
+    parts.push(`${precip.toFixed(1)} mm attendus aujourd'hui`);
+  }
+
+  // 12. Contexte lever/coucher du soleil
+  if (!isNight && currentHour >= 16 && currentHour < 21) {
+    parts.push(`Coucher de soleil à ${fmtTime(sunset)}`);
+  }
+  if (isNight && currentHour >= 4 && currentHour < 8) {
+    parts.push(`Lever de soleil à ${fmtTime(sunrise)}`);
   }
 
   return parts.join(". ") + ".";
+}
+
+function getConditionText(code, isNight, timeOfDay) {
+  if (code === 0) {
+    return isNight ? "Ciel dégagé cette nuit" : `Beau temps ce ${timeOfDay}, ciel dégagé`;
+  }
+  if (code === 1) return `Plutôt clair ce ${timeOfDay}`;
+  if (code === 2) return `Partiellement nuageux ce ${timeOfDay}`;
+  if (code === 3) return "Ciel couvert toute la journée";
+  if ([45,48].includes(code)) return `Brouillard ce ${timeOfDay}, visibilité réduite`;
+  if ([51,53,55].includes(code)) return `Bruine légère ce ${timeOfDay}`;
+  if ([56,57].includes(code)) return "Bruine verglaçante, attention aux routes";
+  if ([61,63].includes(code)) return `Pluie ce ${timeOfDay}`;
+  if (code === 65) return `Pluie forte ce ${timeOfDay}`;
+  if ([66,67].includes(code)) return "Pluie verglaçante, prudence sur la route";
+  if ([71,73].includes(code)) return `Neige ce ${timeOfDay}`;
+  if (code === 75) return "Forte neige, restez au chaud";
+  if (code === 77) return `Grains de neige ce ${timeOfDay}`;
+  if ([80,81].includes(code)) return `Averses ce ${timeOfDay}`;
+  if (code === 82) return "Violentes averses, restez à l'abri";
+  if ([85,86].includes(code)) return `Averses de neige ce ${timeOfDay}`;
+  if ([95,96,99].includes(code)) return `Orages ce ${timeOfDay}, restez prudent`;
+  return "";
 }
 
 // ============================================================
@@ -685,9 +723,6 @@ function openSearch() {
 function closeSearch() {
   searchOverlay.classList.remove("open");
 }
-
-// Bouton loupe dans la topbar
-$("searchBtn").addEventListener("click", openSearch);
 
 // Tap sur le nom de la ville = ouvrir la recherche
 $("cityName").addEventListener("click", openSearch);
