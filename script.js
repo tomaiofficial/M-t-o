@@ -45,25 +45,34 @@ const state = {
 };
 
 // Bloquer le zoom par double tap, pinch, et copier/coller sur mobile
-document.addEventListener("gesturestart", e => e.preventDefault());
-document.addEventListener("gesturechange", e => e.preventDefault());
-document.addEventListener("gestureend", e => e.preventDefault());
+// MAIS pas sur les inputs (sinon impossible de taper)
+function isInEditable(e) {
+  const t = e.target;
+  return t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+}
+document.addEventListener("gesturestart", e => { if (!isInEditable(e)) e.preventDefault(); });
+document.addEventListener("gesturechange", e => { if (!isInEditable(e)) e.preventDefault(); });
+document.addEventListener("gestureend", e => { if (!isInEditable(e)) e.preventDefault(); });
 // Bloquer le copier coller sur le body (sauf dans les inputs)
 document.addEventListener("copy", e => {
-  if (e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
-    e.preventDefault();
-  }
+  if (!isInEditable(e)) e.preventDefault();
 });
 document.addEventListener("cut", e => {
-  if (e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
-    e.preventDefault();
-  }
+  if (!isInEditable(e)) e.preventDefault();
 });
 document.addEventListener("paste", e => {
-  if (e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
-    e.preventDefault();
-  }
+  if (!isInEditable(e)) e.preventDefault();
 });
+// Forcer le focus sur l'input de recherche quand l'overlay s'ouvre (mobile)
+function focusSearchInput() {
+  setTimeout(() => {
+    const inp = $("searchInput");
+    if (inp) {
+      inp.removeAttribute("readonly");
+      inp.focus({ preventScroll: false });
+    }
+  }, 50);
+}
 const LS_KEY = "meteo_v5";
 
 // ===== Helpers =====
@@ -1056,7 +1065,14 @@ function openSearch() {
   searchOverlay.classList.add("open");
   searchInput.value = "";
   searchResults.innerHTML = "";
-  setTimeout(() => searchInput.focus(), 50);
+  // Force le focus et declenche le clavier mobile
+  setTimeout(() => {
+    searchInput.removeAttribute("readonly");
+    searchInput.removeAttribute("disabled");
+    searchInput.focus({ preventScroll: false });
+    // Astuce iOS : declenche un click pour faire monter le clavier
+    try { searchInput.click(); } catch (e) {}
+  }, 100);
 }
 
 function closeSearch() {
