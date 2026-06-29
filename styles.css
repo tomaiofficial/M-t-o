@@ -28,9 +28,20 @@ input, textarea {
   -webkit-user-select: text;
   user-select: text;
 }
-/* Bloquer le zoom double-tap sur iOS */
-button, .glass-card, .search-result, .hour, .day, .detail, .icon-btn {
+/* Bloquer le zoom double-tap sur iOS (sauf conteneurs scrollables) */
+button, .glass-card, .search-result, .day, .detail, .icon-btn {
   touch-action: manipulation;
+}
+/* Permettre le scroll horizontal sur les listes d'heures */
+.hourly {
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.hourly:active {
+  cursor: grabbing;
 }
 
 /* ===== App container ===== */
@@ -844,11 +855,27 @@ button, .glass-card, .search-result, .hour, .day, .detail, .icon-btn {
   display: flex;
   gap: 4px;
   overflow-x: auto;
+  overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  padding-bottom: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.3) transparent;
+  padding: 4px 0;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
 }
-.hourly::-webkit-scrollbar { display: none; }
+.hourly::-webkit-scrollbar {
+  height: 4px;
+}
+.hourly::-webkit-scrollbar-track {
+  background: transparent;
+}
+.hourly::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.3);
+  border-radius: 2px;
+}
+.hourly::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.5);
+}
 .hour {
   flex: 0 0 auto;
   width: 56px;
@@ -857,7 +884,10 @@ button, .glass-card, .search-result, .hour, .day, .detail, .icon-btn {
   align-items: center;
   gap: 4px;
   padding: 4px 2px;
+  scroll-snap-align: start;
+  cursor: grab;
 }
+.hour:active { cursor: grabbing; }
 .hour-time {
   font-size: 13px;
   font-weight: 600;
@@ -886,6 +916,7 @@ button, .glass-card, .search-result, .hour, .day, .detail, .icon-btn {
   gap: 10px;
   padding: 8px 0;
   border-bottom: 1px solid rgba(255,255,255,0.06);
+  touch-action: manipulation;
 }
 .day:last-child { border-bottom: none; }
 .day-name {
