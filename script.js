@@ -43,6 +43,27 @@ const state = {
   lastRefreshMs: 0,
   favorites: []
 };
+
+// Bloquer le zoom par double tap, pinch, et copier/coller sur mobile
+document.addEventListener("gesturestart", e => e.preventDefault());
+document.addEventListener("gesturechange", e => e.preventDefault());
+document.addEventListener("gestureend", e => e.preventDefault());
+// Bloquer le copier coller sur le body (sauf dans les inputs)
+document.addEventListener("copy", e => {
+  if (e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
+    e.preventDefault();
+  }
+});
+document.addEventListener("cut", e => {
+  if (e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
+    e.preventDefault();
+  }
+});
+document.addEventListener("paste", e => {
+  if (e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
+    e.preventDefault();
+  }
+});
 const LS_KEY = "meteo_v5";
 
 // ===== Helpers =====
@@ -240,23 +261,117 @@ function getPrecipLabel(code) {
   return "pluie"; // par défaut
 }
 
+// ============================================================
+//  Day/Night cycle : basé sur sunrise/sunset réels de l'API
+// ============================================================
+let dayCycleCache = null;
+
+function isHourAtNight(isoHour, daily) {
+  // Détermine si une heure donnée est de nuit en utilisant sunrise/sunset
+  // du jour correspondant. Retourne true si nuit.
+  if (!daily || !daily.sunrise || !daily.sunset) {
+    // Fallback : 21h-6h si pas de données
+    const m = (isoHour || "").match(/T(\d{2})/);
+    const h = m ? parseInt(m[1], 10) : 12;
+    return h >= 21 || h < 6;
+  }
+
+  const hourMs = new Date(isoHour).getTime();
+  if (isNaN(hourMs)) return false;
+
+  // Trouver le bon jour (utiliser sunrise/sunset le plus proche)
+  let bestIdx = 0;
+  let bestDiff = Infinity;
+  for (let i = 0; i < daily.sunrise.length; i++) {
+    const sunriseMs = new Date(daily.sunrise[i]).getTime();
+    const diff = Math.abs(sunriseMs - hourMs);
+    if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+  }
+
+  const sunriseMs = new Date(daily.sunrise[bestIdx]).getTime();
+  const sunsetMs = new Date(daily.sunset[bestIdx]).getTime();
+
+  // Nuit = avant sunrise (crépuscule terminé) ou après sunset + 30min (crépuscule terminé)
+  return hourMs < sunriseMs || hourMs >= sunsetMs + 30 * 60 * 1000;
+}
+
+function getDayCycleInfo(cur, daily) {
+  // Récupère sunrise/sunset du jour actuel depuis l'API
+  let sunriseStr = daily && daily.sunrise && daily.sunrise[0];
+  let sunsetStr = daily && daily.sunset && daily.sunset[0];
+
+  // Fallback si pas encore chargé : utiliser l'heure actuelle comme référence
+  const now = cur && cur.time ? new Date(cur.time) : new Date();
+  const nowMs = now.getTime();
+
+  // Calculer sunrise/sunset en millisecondes (heure locale du lieu)
+  let sunriseMs = sunriseStr ? new Date(sunriseStr).getTime() : null;
+  let sunsetMs = sunsetStr ? new Date(sunsetStr).getTime() : null;
+
+  // Déterminer la phase du jour
+  // Si on n'a pas sunrise/sunset, fallback basé sur l'heure actuelle (mieux que rien)
+  let isNight;
+  let phase; // 'dawn', 'day', 'dusk', 'night'
+
+  if (sunriseMs == null || sunsetMs == null) {
+    // Fallback heuristique : nuit entre 21h et 6h
+    const h = now.getHours();
+    isNight = h >= 21 || h < 6;
+    phase = isNight ? "night" : "day";
+  } else {
+    // Utiliser la position relative au lever/coucher du soleil
+    // Twilight windows : 30 min avant lever (dawn) / 30 min après coucher (dusk)
+    const dawnMs = sunriseMs - 30 * 60 * 1000; // 30 min avant lever
+    const duskMs = sunsetMs + 30 * 60 * 1000;  // 30 min après coucher
+
+    if (nowMs < dawnMs) {
+      // Nuit profonde (avant le début du crépuscule du matin)
+      isNight = true;
+      phase = "night";
+    } else if (nowMs < sunriseMs) {
+      // Crépuscule du matin (aube)
+      isNight = false;
+      phase = "dawn";
+    } else if (nowMs < duskMs && nowMs >= sunsetMs) {
+      // Crépuscule du soir (entre coucher et nuit)
+      isNight = false;
+      phase = "dusk";
+    } else if (nowMs >= duskMs) {
+      // Nuit (après le crépuscule)
+      isNight = true;
+      phase = "night";
+    } else {
+      // Plein jour (entre lever et coucher)
+      isNight = false;
+      phase = "day";
+    }
+  }
+
+  dayCycleCache = { isNight, phase, sunriseMs, sunsetMs, nowMs };
+  return dayCycleCache;
+}
+
 // ===== Theme =====
-function themeFor(code, isNight, currentTime, windSpeed) {
-  const hour = currentTime ? getHourFromISO(currentTime) : 12;
-  const isEvening = hour >= 18 && hour < 21;
+function themeFor(code, dayCycle, windSpeed) {
+  const isNight = dayCycle.isNight;
+  const phase = dayCycle.phase;
   const isWindy = (windSpeed || 0) > 25;
+
+  // Météo prioritaire : storm, snow, rain, fog masquent le cycle jour/nuit
   if ([95,96,99].includes(code)) return "theme-storm";
   if (isWindy && [0,1,2,3].includes(code)) return "theme-windy";
   if ([71,73,75,77,85,86].includes(code)) return "theme-snow";
   if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) return "theme-rain";
   if ([45,48].includes(code)) return "theme-fog";
-  if (code === 2) return isNight ? "theme-night-clear" : "theme-partly-cloudy";
+
+  // Pour les autres conditions, respecter le cycle jour/nuit
+  if (isNight) return "theme-night-clear";
+  if (phase === "dawn") return "theme-dawn";
+  if (phase === "dusk") return "theme-dusk";
+
+  if (code === 2) return "theme-partly-cloudy";
   if (code === 3) return "theme-cloudy";
-  if (code === 0 || code === 1) {
-    if (isNight) return "theme-night-clear";
-    if (isEvening) return "theme-sunset";
-    return "theme-day-clear";
-  }
+  if (code === 0 || code === 1) return "theme-day-clear";
   return "theme-day-clear";
 }
 
@@ -284,13 +399,39 @@ function generateDescription(w) {
   const sunrise = daily.sunrise[0];
   const sunset = daily.sunset[0];
 
-  // Déterminer le moment de la journée
-  const currentHour = getHourFromISO(cur.time);
+  // Déterminer le moment de la journée basé sur sunrise/sunset réels
+  const dayCycle = getDayCycleInfo(cur, daily);
+  const sunriseDate = daily.sunrise && daily.sunrise[0] ? new Date(daily.sunrise[0]) : null;
+  const sunsetDate = daily.sunset && daily.sunset[0] ? new Date(daily.sunset[0]) : null;
+  const sunriseMs = sunriseDate ? sunriseDate.getTime() : null;
+  const sunsetMs = sunsetDate ? sunsetDate.getTime() : null;
+  const nowDate = cur.time ? new Date(cur.time) : new Date();
+  const nowMs = nowDate.getTime();
+
   let timeOfDay = "";
-  if (currentHour >= 5 && currentHour < 12) timeOfDay = "matin";
-  else if (currentHour >= 12 && currentHour < 18) timeOfDay = "après-midi";
-  else if (currentHour >= 18 && currentHour < 22) timeOfDay = "soirée";
-  else timeOfDay = "nuit";
+  if (sunriseMs == null || sunsetMs == null) {
+    // Fallback si pas de données
+    const currentHour = getHourFromISO(cur.time);
+    if (currentHour >= 5 && currentHour < 12) timeOfDay = "matin";
+    else if (currentHour >= 12 && currentHour < 18) timeOfDay = "après-midi";
+    else if (currentHour >= 18 && currentHour < 22) timeOfDay = "soirée";
+    else timeOfDay = "nuit";
+  } else {
+    if (nowMs < sunriseMs) {
+      timeOfDay = "nuit";
+    } else if (nowMs < sunriseMs + 2 * 60 * 60 * 1000) {
+      timeOfDay = "matin";
+    } else if (nowMs < sunsetMs - 2 * 60 * 60 * 1000) {
+      timeOfDay = "après-midi";
+    } else if (nowMs < sunsetMs) {
+      timeOfDay = "soirée";
+    } else if (nowMs < sunsetMs + 60 * 60 * 1000) {
+      timeOfDay = "crépuscule";
+    } else {
+      timeOfDay = "nuit";
+    }
+  }
+  const currentHour = nowDate.getHours();
 
   // Analyser les prochaines heures (24h)
   const nextHours = [];
@@ -419,11 +560,11 @@ function generateDescription(w) {
     parts.push(`${precip.toFixed(1)} mm attendus aujourd'hui`);
   }
 
-  // 12. Contexte lever/coucher du soleil
-  if (!isNight && currentHour >= 16 && currentHour < 21) {
+  // 12. Contexte lever/coucher du soleil (basé sur sunrise/sunset réels)
+  if (!dayCycle.isNight && nowMs < sunsetMs + 60 * 60 * 1000 && nowMs > sunsetMs - 90 * 60 * 1000) {
     parts.push(`Coucher de soleil à ${fmtTime(sunset)}`);
   }
-  if (isNight && currentHour >= 4 && currentHour < 8) {
+  if (dayCycle.isNight && sunriseMs && nowMs > sunriseMs - 90 * 60 * 1000 && nowMs < sunriseMs) {
     parts.push(`Lever de soleil à ${fmtTime(sunrise)}`);
   }
 
@@ -522,12 +663,14 @@ function renderCity(city, w) {
   const cur = w.current;
   const daily = w.daily;
   const hourly = w.hourly;
-  const isNight = cur.is_day === 0;
+  // Cycle jour/nuit basé sur sunrise/sunset réels (pas cur.is_day qui peut être imprécis)
+  const dayCycle = getDayCycleInfo(cur, daily);
+  const isNight = dayCycle.isNight;
   const code = cur.weather_code;
   const info = wmoInfo(code, isNight);
 
   // Theme
-  app.className = "app " + themeFor(code, isNight, cur.time, cur.wind_speed_10m);
+  app.className = "app " + themeFor(code, dayCycle, cur.wind_speed_10m);
 
   // Canvas particles based on weather
   if ([95,96,99].includes(code)) {
@@ -570,7 +713,7 @@ function renderCity(city, w) {
     // Pour "Maint.", utiliser les données current (réelles) au lieu de hourly (prévision)
     const hourCode = isNow ? cur.weather_code : hourly.weather_code[i];
     const hourTemp = isNow ? cur.temperature_2m : hourly.temperature_2m[i];
-    const hourIsNight = isNow ? isNight : (hHour >= 19 || hHour < 6);
+    const hourIsNight = isNow ? isNight : isHourAtNight(hourly.time[i], daily);
     const wi = wmoInfo(hourCode, hourIsNight);
     const pop = (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0;
     // Afficher les % de précipitations à partir de 5% (juste le chiffre)

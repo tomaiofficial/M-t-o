@@ -5,6 +5,11 @@
 /* ===== Reset & Base ===== */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; }
+html {
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+}
 body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
   color: #fff;
@@ -13,6 +18,19 @@ body {
   background: #1a1a2e;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+/* Permettre la sélection dans les inputs */
+input, textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+/* Bloquer le zoom double-tap sur iOS */
+button, .glass-card, .search-result, .hour, .day, .detail, .icon-btn {
+  touch-action: manipulation;
 }
 
 /* ===== App container ===== */
@@ -170,6 +188,29 @@ body {
     #283050 100%);
 }
 
+/* 🌅 Dawn — lever de soleil */
+.theme-dawn .bg-sky {
+  background: linear-gradient(180deg,
+    #2a2050 0%,
+    #6a3a6e 20%,
+    #c85a4e 40%,
+    #f29050 65%,
+    #facf70 85%,
+    #ffe8a0 100%);
+}
+
+/* 🌇 Dusk — crépuscule du soir */
+.theme-dusk .bg-sky {
+  background: linear-gradient(180deg,
+    #0f0a3e 0%,
+    #3a1a5e 15%,
+    #7a2a6e 30%,
+    #c8424e 50%,
+    #e8703e 70%,
+    #f4a040 85%,
+    #fac860 100%);
+}
+
 /* ===== Haze / mist at bottom ===== */
 .bg-haze {
   position: absolute;
@@ -208,10 +249,25 @@ body {
   pointer-events: none;
 }
 .theme-day-clear .bg-sun { opacity: 1; }
+.theme-dawn .bg-sun {
+  opacity: 1;
+  top: 30%;
+  right: 20%;
+  animation: sunRise 60s ease-in-out;
+}
+.theme-dusk .bg-sun {
+  opacity: 1;
+  top: 55%;
+  right: 30%;
+}
 .theme-sunset .bg-sun {
   opacity: 1;
   top: 55%;
   right: 30%;
+}
+@keyframes sunRise {
+  from { top: 60%; opacity: 0.5; }
+  to { top: 12%; opacity: 1; }
 }
 
 .sun-core {
@@ -366,6 +422,17 @@ body {
   pointer-events: none;
 }
 .theme-night-clear .bg-moon { opacity: 1; }
+.theme-dawn .bg-moon {
+  opacity: 0.4;
+  top: 5%;
+  right: 8%;
+  filter: brightness(0.8);
+}
+.theme-dusk .bg-moon {
+  opacity: 0.3;
+  top: 12%;
+  right: 18%;
+}
 
 .moon-core {
   position: absolute;
