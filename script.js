@@ -862,33 +862,69 @@ async function fetchWeather(lat, lon, lite = false) {
     if (!res.ok) throw new Error("API error lite");
     return res.json();
   }
-  // Full : current + hourly + daily, fallback robuste
   const hourly = 'temperature_2m,apparent_temperature,weather_code,precipitation_probability,precipitation,wind_speed_10m,wind_gusts_10m,cloud_cover,relative_humidity_2m,wind_direction_10m';
   const daily = 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant';
-  // Essai 1 : meteofrance_seamless (meilleure precision France)
+  // Validation : les donnees daily doivent etre completes (max+min non-null sur tous les jours)
+  function isDailyComplete(d) {
+    if (!d || !d.daily || !d.daily.time || !d.daily.temperature_2m_max || !d.daily.temperature_2m_min) return false;
+    // Au moins 7 jours valides (avec max ET min non-null)
+    let valid = 0;
+    for (let i = 0; i < d.daily.time.length; i++) {
+      if (d.daily.temperature_2m_max[i] != null && d.daily.temperature_2m_min[i] != null) valid++;
+    }
+    return valid >= 5;
+  }
+  // Essai 1 : meteofrance_seamless 7 jours
   try {
-    const url1 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10&models=meteofrance_seamless`;
+    const url1 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=7&models=meteofrance_seamless`;
     const r1 = await fetch(url1);
     if (r1.ok) {
       const d = await r1.json();
-      if (d && d.current && d.current.temperature_2m != null) return d;
+      if (d && d.current && d.current.temperature_2m != null) {
+        // Completer avec best_match si daily est incomplet
+        if (!isDailyComplete(d)) {
+          try {
+            const url1b = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=7`;
+            const r1b = await fetch(url1b);
+            if (r1b.ok) {
+              const db = await r1b.json();
+              if (isDailyComplete(db)) {
+                // Utilise current+hourly de MeteoFrance (plus precis), daily de best_match (plus complet)
+                db.current = d.current;
+                db.hourly = d.hourly;
+                return db;
+              }
+            }
+          } catch (e) {}
+        }
+        return d;
+      }
     }
   } catch (e) { /* continue */ }
-  // Essai 2 : best_match (modele par defaut, dispo partout)
+  // Essai 2 : best_match 7 jours
   try {
-    const url2 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10`;
+    const url2 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=7`;
     const r2 = await fetch(url2);
     if (r2.ok) {
       const d = await r2.json();
       if (d && d.current && d.current.temperature_2m != null) return d;
     }
   } catch (e) { /* continue */ }
-  // Essai 3 : ultra-minimal (au cas où)
+  // Essai 3 : gfs_seamless 7 jours (modele NOAA)
   try {
-    const url3 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m,is_day,precipitation&hourly=temperature_2m,weather_code,precipitation_probability,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max&timezone=auto&forecast_days=10`;
+    const url3 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=7&models=gfs_seamless`;
     const r3 = await fetch(url3);
     if (r3.ok) {
       const d = await r3.json();
+      if (d && d.current && d.current.temperature_2m != null) return d;
+    }
+  } catch (e) { /* continue */ }
+  // Essai 4 : ultra-minimal 10 jours (fallback finale)
+  try {
+    const url4 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m,is_day,precipitation,apparent_temperature&hourly=temperature_2m,weather_code,precipitation_probability,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max&timezone=auto&forecast_days=10`;
+    const r4 = await fetch(url4);
+    if (r4.ok) {
+      const d = await r4.json();
       if (d && d.current && d.current.temperature_2m != null) return d;
     }
   } catch (e) { /* continue */ }
@@ -1328,8 +1364,23 @@ function renderCity(city, w) {
   // ===== Daily =====
   const $daily = $("daily");
   $daily.innerHTML = "";
-  const allMax = Math.max(...daily.temperature_2m_max);
-  const allMin = Math.min(...daily.temperature_2m_min);
+  // Filtre : jours avec min ET max non-null
+  const validIndices = [];
+  for (let i = 0; i < daily.time.length; i++) {
+    if (daily.temperature_2m_max[i] != null && daily.temperature_2m_min[i] != null) {
+      validIndices.push(i);
+    }
+  }
+  // Si le modele renvoie tous les jours OK, prendre tout ; sinon filtrer
+  const indices = validIndices.length >= Math.max(5, daily.time.length / 2)
+    ? Array.from({ length: daily.time.length }, (_, i) => i)
+    : validIndices;
+  if (indices.length === 0) {
+    // Plan B : tous les indices, meme ceux potentiellement vides
+    for (let i = 0; i < daily.time.length; i++) indices.push(i);
+  }
+  const allMax = Math.max(...indices.map(i => daily.temperature_2m_max[i] ?? -Infinity));
+  const allMin = Math.min(...indices.map(i => daily.temperature_2m_min[i] ?? Infinity));
   const range = Math.max(1, allMax - allMin);
 
   for (let i = 0; i < daily.time.length; i++) {
@@ -1337,20 +1388,22 @@ function renderCity(city, w) {
     di.className = "day";
     const lo = daily.temperature_2m_min[i];
     const hi = daily.temperature_2m_max[i];
-    const startPct = ((lo - allMin) / range) * 100;
-    const endPct = ((hi - allMin) / range) * 100;
+    const hasData = lo != null && hi != null;
+    const startPct = hasData ? ((lo - allMin) / range) * 100 : 0;
+    const endPct = hasData ? ((hi - allMin) / range) * 100 : 100;
     const wi = wmoInfo(daily.weather_code[i], false);
     const popDay = (daily.precipitation_probability_max && daily.precipitation_probability_max[i]) || 0;
     const popVisible = popDay >= 5;
+    if (!hasData) di.classList.add("day-empty");
     di.innerHTML = `
       <div class="day-name">${dayName(daily.time[i], i)}</div>
       <div class="day-icon-wrap">
         <div class="day-icon">${icon(wi.icon, 28)}</div>
         <div class="day-pop${popVisible ? "" : " empty"}">${popVisible ? popDay + "%" : ""}</div>
       </div>
-      <div class="day-low">${fmtTemp(lo)}</div>
-      <div class="day-bar"><span class="fill" style="left:${startPct}%; right:${100 - endPct}%"></span></div>
-      <div class="day-high">${fmtTemp(hi)}</div>
+      <div class="day-low">${hasData ? fmtTemp(lo) : "—"}</div>
+      <div class="day-bar"><span class="fill" style="left:${hasData ? startPct : 50}%; right:${hasData ? 100 - endPct : 50}%"></span></div>
+      <div class="day-high">${hasData ? fmtTemp(hi) : "—"}</div>
     `;
     $daily.appendChild(di);
   }

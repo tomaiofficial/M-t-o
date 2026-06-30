@@ -974,6 +974,8 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   touch-action: manipulation;
 }
 .day:last-child { border-bottom: none; }
+.day-empty .day-low, .day-empty .day-high { opacity: 0.3; }
+.day-empty .day-bar .fill { background: rgba(255, 255, 255, 0.15) !important; }
 .day-name {
   flex: 0 0 60px;
   font-size: 15px;
