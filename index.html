@@ -724,6 +724,7 @@
 
       <section class="glass-card desc-card">
         <p id="descText">--</p>
+        <div id="rainBanner" class="rain-banner"></div>
       </section>
 
       <section class="glass-card">
@@ -754,18 +755,20 @@
         </div>
         <div class="glass-card detail">
           <div class="detail-label">Vent</div>
-          <div class="detail-value" id="wind">--</div>
+          <div class="detail-value"><span id="windSpeed">--</span> <span class="detail-unit">km/h</span></div>
           <div class="detail-sub" id="windDir">--</div>
+          <div class="detail-sub hidden" id="gustsRow">Rafales <span id="windGusts">--</span> km/h</div>
         </div>
         <div class="glass-card detail">
           <div class="detail-label">Précipitations</div>
           <div class="detail-value" id="precip">--</div>
-          <div class="detail-sub" id="precipSub">--</div>
+          <div class="detail-sub"><span id="precipNow">--</span> · <span id="precipSub">--</span></div>
         </div>
         <div class="glass-card detail">
           <div class="detail-label">Humidité</div>
           <div class="detail-value" id="humidity">--</div>
-          <div class="detail-sub" id="dew">--</div>
+          <div class="detail-sub"><span id="dewPoint">--</span></div>
+          <div class="detail-sub"><span id="cloudCover">--</span></div>
         </div>
         <div class="glass-card detail">
           <div class="detail-label">Ressenti</div>

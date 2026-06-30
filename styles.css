@@ -882,6 +882,26 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   margin: 0;
   letter-spacing: 0.01em;
 }
+.rain-banner {
+  display: none;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, rgba(70, 130, 240, 0.85), rgba(50, 100, 220, 0.85));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  animation: rain-banner-in 0.4s ease-out;
+}
+.rain-banner.visible { display: block; }
+@keyframes rain-banner-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.detail-unit { font-size: 13px; opacity: 0.7; }
+.hidden { display: none !important; }
 
 /* ===== Hourly ===== */
 .hourly {

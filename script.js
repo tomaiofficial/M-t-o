@@ -854,10 +854,320 @@ function buildWindSentence(wind, dirTxt, period) {
 //  API : Open-Meteo (gratuit, sans clé)
 // ============================================================
 async function fetchWeather(lat, lon) {
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure&hourly=temperature_2m,apparent_temperature,weather_code,precipitation_probability,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max,precipitation_sum&timezone=auto&forecast_days=10`;
+  const cur = 'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,pressure_msl,surface_pressure,wind_speed_10m,wind_gusts_10m,wind_direction_10m,dew_point_2m,visibility';
+  let url;
+  if (lite) {
+    // Lite : current only (rapide, <1s)
+    url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&wind_speed_unit=kmh&timezone=auto`;
+  } else {
+    // Full : current + hourly + daily (meteofrance_seamless puis best_match en fallback)
+    const hourly = 'temperature_2m,apparent_temperature,weather_code,precipitation_probability,precipitation,rain,showers,snowfall,wind_speed_10m,wind_gusts_10m,cloud_cover,relative_humidity_2m,visibility,dew_point_2m,wind_direction_10m';
+    const daily = 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max,precipitation_sum,rain_sum,showers_sum,snowfall_sum,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,visibility_min';
+    url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10&models=meteofrance_seamless`;
+  }
   const res = await fetch(url);
   if (!res.ok) throw new Error("API error");
   return res.json();
+}
+
+// ============================================================
+//  REFRESH ENGINE v2 - 60s live + interpolation + smart diffing
+// ============================================================
+const REFRESH_LIVE_MS = 60 * 1000;     // fetch live chaque 60s
+const INTERPOLATE_MS = 1000;           // tick d'interpolation chaque seconde
+const REFRESH_FORECAST_MS = 5 * 60 * 1000; // re-render forecast complet chaque 5 min
+
+let prevLiveData = null;
+let currLiveData = null;
+let lastFetchMs = 0;
+let lastFullRenderMs = 0;
+let interpTimerId = null;
+let lastRainInfoMs = 0;
+let lastRainInfo = null;
+let liveRainBanner = null;
+let pendingRainStartTime = null;  // for "Pluie dans X min" detection
+
+// Cache des éléments hourly pour diffing intelligent
+const hourlyCells = []; // [{ idx, elTime, elIcon, elPop, elTemp, isNight, isPopVisible }]
+
+// Smart diffing helper : ne touche au DOM que si la valeur a change
+function setText(elOrId, text) {
+  const el = typeof elOrId === 'string' ? $(elOrId) : elOrId;
+  if (!el) return;
+  const newText = String(text);
+  if (el.textContent !== newText) {
+    el.textContent = newText;
+  }
+}
+
+function setClass(elOrId, cls, on) {
+  const el = typeof elOrId === 'string' ? $(elOrId) : elOrId;
+  if (!el) return;
+  const has = el.classList.contains(cls);
+  if (on && !has) el.classList.add(cls);
+  else if (!on && has) el.classList.remove(cls);
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+// Interpolation de la meteo "current" entre deux fetches successifs
+function computeInterpolatedCurrent(elapsedMs) {
+  if (!currLiveData) return null;
+  if (!prevLiveData || elapsedMs >= REFRESH_LIVE_MS) return currLiveData.current;
+  const t = Math.max(0, Math.min(1, elapsedMs / REFRESH_LIVE_MS));
+  const p = prevLiveData.current;
+  const n = currLiveData.current;
+  return {
+    temperature_2m: lerp(p.temperature_2m ?? n.temperature_2m, n.temperature_2m, t),
+    apparent_temperature: lerp(p.apparent_temperature ?? n.apparent_temperature, n.apparent_temperature, t),
+    relative_humidity_2m: lerp(p.relative_humidity_2m ?? n.relative_humidity_2m, n.relative_humidity_2m, t),
+    wind_speed_10m: lerp(p.wind_speed_10m ?? n.wind_speed_10m, n.wind_speed_10m, t),
+    wind_gusts_10m: lerp(p.wind_gusts_10m ?? 0, n.wind_gusts_10m ?? 0, t),
+    precipitation: lerp(p.precipitation ?? 0, n.precipitation ?? 0, t),
+    rain: lerp(p.rain ?? 0, n.rain ?? 0, t),
+    cloud_cover: lerp(p.cloud_cover ?? 0, n.cloud_cover ?? 0, t),
+    dew_point_2m: lerp(p.dew_point_2m ?? n.dew_point_2m, n.dew_point_2m, t),
+    surface_pressure: lerp(p.surface_pressure ?? n.surface_pressure, n.surface_pressure, t),
+    pressure_msl: lerp(p.pressure_msl ?? n.pressure_msl, n.pressure_msl, t),
+    weather_code: n.weather_code,
+    is_day: n.is_day,
+    wind_direction_10m: n.wind_direction_10m,
+    visibility: lerp(p.visibility ?? n.visibility ?? 0, n.visibility ?? 0, t)
+  };
+}
+
+// Detection avancee des precipitations
+function detectPrecipDetailed(hourly, currentTimeStr, lookaheadHours = 6) {
+  const result = {
+    raining: false,
+    starting: null,  // ms timestamp
+    ending: null,    // ms timestamp
+    inMinutes: -1,
+    intensity: null, // 'legere'|'moderee'|'forte'
+    type: null,      // 'pluie'|'neige'|'orage'|'bruine'|'verglas'
+    peakMm: 0,
+    peakTime: null,
+    peakType: null,
+    code: null,
+    startedAgo: -1,  // si deja en train, minutes depuis debut
+    endInMinutes: -1 // minutes avant la fin si en cours
+  };
+  if (!hourly || !hourly.time || !hourly.weather_code) return result;
+  const curMs = currentTimeStr ? new Date(currentTimeStr).getTime() : Date.now();
+
+  const PRECIP = [51,53,55,56,57,61,63,65,66,67,80,81,82,95,96,99,71,73,75,77,85,86];
+  let lastRaining = false;
+  for (let i = 0; i < Math.min(lookaheadHours, hourly.time.length); i++) {
+    const t = new Date(hourly.time[i]).getTime();
+    if (t < curMs) continue;
+    const c = hourly.weather_code[i];
+    const pop = (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0;
+    const mm = (hourly.precipitation && hourly.precipitation[i]) || 0;
+    const isRaining = PRECIP.includes(c);
+
+    if (isRaining) {
+      if (!result.raining) {
+        result.raining = true;
+        result.starting = t;
+        result.code = c;
+        result.inMinutes = Math.max(0, Math.round((t - curMs) / 60000));
+      }
+      // Intensite / type
+      if ([65, 82].includes(c) || mm >= 4) result.intensity = 'forte';
+      else if ([61, 63, 80, 81].includes(c) || mm >= 1) result.intensity = result.intensity || 'moderee';
+      else result.intensity = result.intensity || 'legere';
+      result.type = codeToPrecipType(c);
+      if (mm > result.peakMm) {
+        result.peakMm = mm;
+        result.peakTime = t;
+        result.peakType = result.type;
+      }
+    } else if (lastRaining && result.starting && !result.ending) {
+      result.ending = t;
+      result.endInMinutes = Math.round((t - curMs) / 60000);
+    }
+    lastRaining = isRaining;
+  }
+  return result;
+}
+
+function codeToPrecipType(code) {
+  if ([95, 96, 99].includes(code)) return 'orage';
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'neige';
+  if ([51, 53, 55].includes(code)) return 'bruine';
+  if ([56, 57, 66, 67].includes(code)) return 'verglas';
+  if ([65, 82].includes(code)) return 'forte_pluie';
+  return 'pluie';
+}
+
+// Tick live : recupere la meteo courante (pas le forecast) toutes les 60s
+async function tickLive() {
+  if (!state.city) return;
+  const city = state.city;
+  try {
+    const lite = await fetchWeather(city.lat, city.lon, true);
+    if (!lite || !lite.current) return;
+
+    prevLiveData = currLiveData;
+    currLiveData = lite;
+    lastFetchMs = Date.now();
+    state.lastRefreshMs = lastFetchMs;
+
+    // Premier fetch : full render
+    if (!state.lastWeather || !lastFullRenderMs) {
+      try {
+        const full = await fetchWeather(city.lat, city.lon, false);
+        if (full && full.current) {
+          state.lastWeather = full;
+          renderCity(city, full);
+          lastFullRenderMs = Date.now();
+          state.lastRefreshMs = Date.now();
+        }
+      } catch (e) {
+        renderCity(city, lite); // fallback
+      }
+    }
+
+    // Si pas de difference majeure, juste tick d'interpolation
+    applyLiveTick();
+  } catch (e) {
+    console.warn('tickLive failed:', e);
+  }
+  updateUpdatedAt();
+}
+
+// Tick d'interpolation (1s) : met a jour progressivement les valeurs actuelles
+let interpDebounceMs = 0;
+function applyLiveTick() {
+  if (!currLiveData) return;
+  const now = Date.now();
+  const elapsed = now - lastFetchMs;
+  const cur = computeInterpolatedCurrent(elapsed);
+  if (!cur) return;
+
+  // Temp + ressent
+  setText('temp', fmtTemp(cur.temperature_2m));
+  setText('feels', fmtTemp(cur.apparent_temperature));
+  setText('feelsLbl', 'Ressenti');
+
+  // Autres infos live : humidite, vent, rafales, precip, nuages, point de rosee, pression
+  const hum = Math.round(cur.relative_humidity_2m);
+  const wind = Math.round(cur.wind_speed_10m);
+  const gust = Math.round(cur.wind_gusts_10m || 0);
+  const clouds = Math.round(cur.cloud_cover);
+  const dew = Math.round(cur.dew_point_2m);
+  const press = Math.round(cur.surface_pressure || cur.pressure_msl);
+  const mm = (cur.precipitation || 0).toFixed(1);
+
+  setText('humidity', hum + '%');
+  setText('windSpeed', wind);
+  setText('windGusts', gust);
+  setText('cloudCover', 'Nuages ' + clouds + '%');
+  setText('dewPoint', 'Point de rosée ' + fmtTemp(dew));
+  setText('pressure', press + ' hPa');
+  setText('precipNow', mm + ' mm/h');
+
+  // Rafales differentes du vent moyen : les afficher
+  setClass('gustsRow', 'hidden', !(gust > wind + 5));
+
+  // Direction du vent (uniquement si elle change significativement)
+  const dirTxt = cur.wind_direction_10m != null ? ` ${degToCompass(cur.wind_direction_10m)}` : '';
+  setText('windDir', dirTxt.trim());
+
+  // Detection pluie pour le bandeau d'alerte
+  updateRainAlert();
+
+  // Mettre a jour uniquement les % du hourly sans re-render complet
+  applyHourlyInterpolation();
+}
+
+// Met a jour les % hourly avec interpolation
+function applyHourlyInterpolation() {
+  if (!state.lastWeather || !hourlyCells.length) return;
+  const hourly = state.lastWeather.hourly;
+  if (!hourly || !hourly.time) return;
+  const now = Date.now();
+  const REFR = REFRESH_LIVE_MS;
+
+  hourlyCells.forEach(cell => {
+    const i = cell.idx;
+    if (!hourly.precipitation_probability || hourly.precipitation_probability[i] == null) return;
+    const targetPop = hourly.precipitation_probability[i];
+    // Trouver la valeur precedente equivalente (approximation)
+    const prevPop = prevLiveData && prevLiveData.hourly && prevLiveData.hourly.precipitation_probability
+      ? (prevLiveData.hourly.precipitation_probability[i] ?? targetPop) : targetPop;
+    const t = Math.min(1, (now - lastFetchMs) / REFR);
+    const interpPop = lerp(prevPop, targetPop, t);
+    const visible = interpPop >= 5;
+    const txt = visible ? Math.round(interpPop) + '%' : '';
+    if (cell.elPop.textContent !== txt) cell.elPop.textContent = txt;
+    if (visible !== cell.isPopVisible) {
+      cell.elPop.classList.toggle('empty', !visible);
+      cell.isPopVisible = visible;
+    }
+  });
+}
+
+// Detection pluie en temps reel (bandeau alerte)
+function updateRainAlert() {
+  if (!state.lastWeather) return;
+  const hourly = state.lastWeather.hourly;
+  if (!hourly) return;
+  const now = Date.now();
+
+  // Detection pas trop frequente (5s min)
+  if (now - lastRainInfoMs < 5000) return;
+  lastRainInfoMs = now;
+
+  const info = detectPrecipDetailed(hourly, state.lastWeather.current ? state.lastWeather.current.time : null, 6);
+  lastRainInfo = info;
+
+  // Afficher le bandeau si pluie imminente ou en cours
+  const banner = $('rainBanner');
+  if (!banner) return;
+
+  let msg = '';
+  if (info.raining && info.inMinutes <= 5) {
+    msg = `Pluie dans ${info.inMinutes || "quelques"} min${info.intensity ? ` (${info.intensity})` : ''}.`;
+  } else if (info.raining && info.inMinutes > 5 && info.inMinutes <= 60) {
+    msg = `Pluie attendue dans ${info.inMinutes} min${info.intensity ? ` (${info.intensity})` : ''}.`;
+  } else if (info.raining && info.inMinutes === 0 && info.peakMm >= 0.5) {
+    msg = `Pluie en cours${info.intensity ? ` ${info.intensity}` : ''}.`;
+  }
+
+  if (msg) {
+    if (banner.textContent !== msg) banner.textContent = msg;
+    banner.classList.add('visible');
+  } else {
+    banner.classList.remove('visible');
+  }
+}
+
+// Re-render complet du forecast (hourly + daily + description)
+// Appele apres chaque fetch live pour les donnees de forecast
+async function refreshForecastIfNeeded() {
+  if (!state.city || !lastFullRenderMs) return;
+  if (Date.now() - lastFullRenderMs < REFRESH_FORECAST_MS) return;
+  try {
+    const full = await fetchWeather(state.city.lat, state.city.lon, false);
+    if (full && full.current) {
+      state.lastWeather = full;
+      lastFullRenderMs = Date.now();
+      renderCity(state.city, full);
+    }
+  } catch (e) { console.warn('Forecast refresh failed:', e); }
+}
+
+// Demarre la boucle d'interpolation
+function startInterpolate() {
+  if (interpTimerId) return;
+  interpTimerId = setInterval(() => {
+    if (!currLiveData) return;
+    applyLiveTick();
+    refreshForecastIfNeeded();
+  }, INTERPOLATE_MS);
 }
 
 // ============================================================
@@ -947,6 +1257,7 @@ function renderCity(city, w) {
   // ===== Hourly =====
   const $hourly = $("hourly");
   $hourly.innerHTML = "";
+  hourlyCells.length = 0;
 
   const currentHour = getHourFromISO(cur.time);
   const nowIdx = currentHour != null
@@ -975,6 +1286,18 @@ function renderCity(city, w) {
       <div class="hour-temp">${fmtTemp(hourTemp)}</div>
     `;
     $hourly.appendChild(h);
+    // Stocke les references DOM pour le diffing ulterieur
+    hourlyCells.push({
+      idx: i,
+      root: h,
+      elTime: h.querySelector(".hour-time"),
+      elIcon: h.querySelector(".hour-icon"),
+      elPop: h.querySelector(".hour-pop"),
+      elTemp: h.querySelector(".hour-temp"),
+      isNight: hourIsNight,
+      isPopVisible: popVisible,
+      isNow
+    });
   }
 
   // ===== Daily =====
@@ -1010,17 +1333,30 @@ function renderCity(city, w) {
   // ===== Details =====
   $("sunrise").textContent = fmtTime(daily.sunrise[0]);
   $("sunset").textContent = fmtTime(daily.sunset[0]);
-  $("wind").textContent = `${Math.round(cur.wind_speed_10m)} km/h`;
-  $("windDir").textContent = `${degToCompass(cur.wind_direction_10m)} · Rafales ${Math.round(cur.wind_speed_10m * 1.4)} km/h`;
+  $("windSpeed").textContent = Math.round(cur.wind_speed_10m);
+  $("windDir").textContent = cur.wind_direction_10m != null ? degToCompass(cur.wind_direction_10m) : "—";
+  const gusts = Math.round(cur.wind_gusts_10m || cur.wind_speed_10m * 1.4);
+  $("windGusts").textContent = gusts;
+  $("gustsRow").classList.toggle("hidden", !(gusts > Math.round(cur.wind_speed_10m) + 5));
   $("precip").textContent = `${(daily.precipitation_sum[0] || 0).toFixed(1)} mm`;
   $("precipSub").textContent = `Risque ${daily.precipitation_probability_max[0] || 0}% aujourd'hui`;
-  $("humidity").textContent = `${cur.relative_humidity_2m}%`;
-  $("dew").textContent = `Point de rosée ${fmtTemp(cur.temperature_2m - (100 - cur.relative_humidity_2m) / 5)}`;
+  $("precipNow").textContent = cur.precipitation != null ? `${(cur.precipitation || 0).toFixed(1)} mm/h` : "—";
+  $("humidity").textContent = `${Math.round(cur.relative_humidity_2m)}%`;
+  $("dewPoint").textContent = `Point de rosée ${fmtTemp(cur.dew_point_2m || (cur.temperature_2m - (100 - cur.relative_humidity_2m) / 5))}`;
+  $("cloudCover").textContent = `Nuages ${Math.round(cur.cloud_cover || 0)}%`;
   $("feels").textContent = fmtTemp(cur.apparent_temperature);
-  $("feelsSub").textContent = cur.apparent_temperature < cur.temperature_2m ? "Plus frais à cause du vent" : "Similaire à la réelle";
-  $("vis").textContent = "10+ km";
-  $("pressure").textContent = `${Math.round(cur.surface_pressure)} hPa`;
-  $("pressureSub").textContent = cur.surface_pressure > 1013 ? "Au-dessus de la moyenne" : "En dessous de la moyenne";
+  $("feelsSub").textContent = cur.apparent_temperature < cur.temperature_2m - 0.5 ? "Plus frais" : cur.apparent_temperature > cur.temperature_2m + 0.5 ? "Plus chaud" : "Similaire";
+  // Visibilite reelle via API (km)
+  if (cur.visibility != null) {
+    $("vis").textContent = cur.visibility >= 1000 ? `${(cur.visibility / 1000).toFixed(0)}+ km` : `${Math.round(cur.visibility)} m`;
+  } else {
+    $("vis").textContent = "—";
+  }
+  $("pressure").textContent = `${Math.round(cur.surface_pressure || cur.pressure_msl)} hPa`;
+  $("pressureSub").textContent = (cur.surface_pressure || cur.pressure_msl) > 1013 ? "Au-dessus moyenne" : "En dessous moyenne";
+
+  // Detection pluie pour le bandeau d'alerte
+  updateRainAlert();
 
   // UV
   const uv = (daily.uv_index_max && daily.uv_index_max[0]) || 0;
@@ -1052,6 +1388,13 @@ async function loadWeather(city) {
     $("cityName").textContent = city.name + " …";
     const w = await fetchWeather(city.lat, city.lon);
     if (!w || !w.current) throw new Error("Invalid data");
+    // Initialise le moteur live
+    if (!currLiveData) {
+      currLiveData = w;
+      lastFetchMs = Date.now();
+    }
+    state.lastWeather = w;
+    state.lastRefreshMs = Date.now();
     renderCity(city, w);
   } catch (e) {
     console.error("loadWeather error:", e);
@@ -1311,13 +1654,11 @@ unitToggle.addEventListener("click", (e) => {
     }
   }
 
-  // Auto-refresh des données météo toutes les 2 minutes
-  // Re-fetch depuis l'API : garantit cohérence entre current et hourly
-  setInterval(async () => {
-    if (state.city) {
-      await loadWeather(state.city);
-    }
-  }, 2 * 60 * 1000);
+  // Auto-refresh "live" toutes les 60s (lite fetch : current seulement)
+  setInterval(tickLive, 60 * 1000);
+
+  // Boucle d'interpolation + diffing toutes les secondes
+  startInterpolate();
 
   // Mise à jour du "Mis à jour il y a X min"
   setInterval(updateUpdatedAt, 30 * 1000);
