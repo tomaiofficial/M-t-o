@@ -292,12 +292,16 @@ function renderCity(city, w) {
     di.className = "day";
     const lo = daily.temperature_2m_min[i];
     const hi = daily.temperature_2m_max[i];
+    const pop = daily.precipitation_probability_max[i] || 0;
     const startPct = ((lo - allMin) / range) * 100;
     const endPct = ((hi - allMin) / range) * 100;
     const wi = wmoInfo(daily.weather_code[i], false);
     di.innerHTML = `
       <div class="day-name">${dayName(daily.time[i], i)}</div>
-      <div class="day-icon">${icon(wi.icon, 24)}</div>
+      <div class="day-icon">
+        ${icon(wi.icon, 24)}
+        ${pop > 0 ? `<div class="day-pop">${pop}%</div>` : ""}
+      </div>
       <div class="day-low">${fmtTemp(lo)}</div>
       <div class="day-bar"><span class="fill" style="left:${startPct}%; right:${100 - endPct}%"></span></div>
       <div class="day-high">${fmtTemp(hi)}</div>
@@ -532,6 +536,10 @@ function syncUnitToggle() {
   syncUnitToggle();
   renderTabs();
   await loadActive();
+
+  // Auto-actualisation toutes les 1 minute
+  setInterval(loadActive, 60000);
+
   if (!state.geoTried) {
     state.geoTried = true;
     tryGeolocate();
