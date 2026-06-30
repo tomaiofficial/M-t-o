@@ -1358,16 +1358,22 @@ function applyHourlyInterpolation() {
     const i = cell.idx;
     if (!hourly.precipitation_probability || hourly.precipitation_probability[i] == null) return;
     const targetPop = hourly.precipitation_probability[i];
-    // Trouver la valeur precedente equivalente (approximation)
+    const targetMm = (hourly.precipitation && hourly.precipitation[i]) || 0;
     const prevPop = prevLiveData && prevLiveData.hourly && prevLiveData.hourly.precipitation_probability
       ? (prevLiveData.hourly.precipitation_probability[i] ?? targetPop) : targetPop;
     const t = Math.min(1, (now - lastFetchMs) / REFR);
     const interpPop = lerp(prevPop, targetPop, t);
-    const visible = interpPop >= 5;
+    // Seuil 1% : affiche des qu'il y a un risque
+    const visible = interpPop >= 1;
     const txt = visible ? Math.round(interpPop) + '%' : '';
+    // Intensite : heavy si pop>=70% OU mm>=4
+    const heavy = interpPop >= 70 || targetMm >= 4;
+    const medium = !heavy && (interpPop >= 30 || targetMm >= 1);
+    const wantClass = visible ? (heavy ? ' heavy' : (medium ? ' medium' : '')) : ' empty';
     if (cell.elPop.textContent !== txt) cell.elPop.textContent = txt;
-    if (visible !== cell.isPopVisible) {
-      cell.elPop.classList.toggle('empty', !visible);
+    if (wantClass !== cell.popClass) {
+      cell.elPop.className = 'hour-pop' + wantClass;
+      cell.popClass = wantClass;
       cell.isPopVisible = visible;
     }
   });
@@ -1556,12 +1562,16 @@ function renderCity(city, w) {
     const hourIsNight = isNow ? isNight : isHourAtNight(hourly.time[i], daily);
     const wi = wmoInfo(hourCode, hourIsNight);
     const pop = (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0;
-    // Afficher les % de précipitations à partir de 5% (juste le chiffre)
-    const popVisible = pop >= 5;
+    const mmHour = (hourly.precipitation && hourly.precipitation[i]) || 0;
+    // Afficher les % a partir de 1% (avec code couleur d'intensite)
+    const popVisible = pop >= 1;
+    let popClass = '';
+    if (pop >= 70 || mmHour >= 4) popClass = ' heavy';
+    else if (pop >= 30 || mmHour >= 1) popClass = ' medium';
     h.innerHTML = `
       <div class="hour-time">${timeLabel}</div>
       <div class="hour-icon">${icon(wi.icon, 32)}</div>
-      <div class="hour-pop${popVisible ? "" : " empty"}">${popVisible ? pop + "%" : ""}</div>
+      <div class="hour-pop${popVisible ? popClass : " empty"}">${popVisible ? Math.round(pop) + "%" : ""}</div>
       <div class="hour-temp">${fmtTemp(hourTemp)}</div>
     `;
     $hourly.appendChild(h);
@@ -1754,40 +1764,82 @@ async function switchCity(city) {
   state.currentFetchController = controller;
 
   // 2) Incremente le requestId pour invalider toute operation async en cours
-  //    (tickLive, applyHourlyInterpolation, etc. testent ce compteur)
   const myRequestId = ++state.requestId;
 
-  // 3) Vide immediatement TOUTES les donnees affichees
+  // 3) Vide immediatement TOUTES les donnees affichees + skeleton
   clearAllWeatherUI();
   $("cityName").textContent = city.name + " …";
 
-  // 4) Mets a jour la ville courante tout de suite (pour les shortcuts)
+  // 4) Mets a jour la ville courante tout de suite
   state.city = city;
 
-  // 5) Lance le fetch
+  // 5) PHASE 1 : LITE FETCH (~1s) - affiche rapidement temperature, condition,
+  //              humidite, vent + 12h de precipitations pour la detection live
   try {
-    const w = await fetchWeather(city.lat, city.lon, false, controller.signal);
-    // Verifie que cette requete est toujours la courante
-    if (myRequestId !== state.requestId) return; // ignore - une nouvelle ville a ete demandee
-    if (!w || !w.current) throw new Error("Invalid data");
+    const lite = await fetchWeather(city.lat, city.lon, true, controller.signal);
+    if (myRequestId !== state.requestId) return; // nouvelle ville demandee
+    if (!lite || !lite.current) throw new Error("Invalid lite data");
+
+    // Construit un objet weather minimal pour le premier render rapide
+    const w = {
+      current: lite.current,
+      hourly: lite.hourly || { time: [], temperature_2m: [], weather_code: [], precipitation_probability: [], precipitation: [], wind_speed_10m: [], relative_humidity_2m: [], wind_direction_10m: [], apparent_temperature: [], wind_gusts_10m: [], cloud_cover: [], dew_point_2m: [] },
+      // Daily minimal : utilise des valeurs par defaut pour H/L (sera corrige par le full)
+      daily: {
+        time: [new Date().toISOString().split('T')[0]],
+        temperature_2m_max: [lite.current.temperature_2m || 0],
+        temperature_2m_min: [lite.current.temperature_2m || 0],
+        sunrise: [],
+        sunset: [],
+        uv_index_max: [0],
+        precipitation_probability_max: [0],
+        precipitation_sum: [lite.current.precipitation || 0],
+        wind_speed_10m_max: [lite.current.wind_speed_10m || 0],
+        wind_gusts_10m_max: [lite.current.wind_gusts_10m || 0],
+        wind_direction_10m_dominant: [lite.current.wind_direction_10m || 0],
+        weather_code: [lite.current.weather_code]
+      }
+    };
+    // Sunrise/sunset approx : on les laisse vides, le full les remplacera
 
     // Initialise le moteur live pour cette ville
     currLiveData = w;
     prevLiveData = null;
     lastFetchMs = Date.now();
-    livePrecipHourly = null;
+    livePrecipHourly = lite.hourly || null;
     state.lastWeather = w;
     state.lastRefreshMs = Date.now();
-    lastFullRenderMs = Date.now();
     renderCity(city, w);
     disableSkeleton();
   } catch (e) {
-    if (e.name === 'AbortError') return; // annulee par une nouvelle requete
+    if (e.name === 'AbortError') return;
     if (myRequestId !== state.requestId) return;
-    console.error("switchCity error:", e);
-    $("cityName").textContent = "Erreur";
-    $("temp").textContent = "—";
-    $("condition").textContent = "Vérifiez votre connexion";
+    // Continue quand meme vers le full fetch en fallback
+  }
+
+  // 6) PHASE 2 : FULL FETCH (3-5s) - en arriere-plan, ajoute 10 jours, hourly 24h
+  if (myRequestId !== state.requestId) return;
+  try {
+    const full = await fetchWeather(city.lat, city.lon, false, controller.signal);
+    if (myRequestId !== state.requestId) return; // nouvelle ville demandee
+    if (!full || !full.current) return; // silencieux si echec (lite est deja affiche)
+
+    // Met a jour avec les donnees completes sans reflicker
+    state.lastWeather = full;
+    state.lastRefreshMs = Date.now();
+    lastFullRenderMs = Date.now();
+    // Mets a jour currLiveData.current (le reste est garde du lite)
+    if (currLiveData) currLiveData.current = full.current;
+    renderCity(city, full);
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    if (myRequestId !== state.requestId) return;
+    // Si on a deja le lite affiche, on n'affiche pas d'erreur
+    if (!state.lastWeather) {
+      $("cityName").textContent = "Erreur";
+      $("temp").textContent = "—";
+      $("condition").textContent = "Vérifiez votre connexion";
+    }
     disableSkeleton();
   }
 }

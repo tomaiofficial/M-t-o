@@ -958,6 +958,22 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   letter-spacing: 0.3px;
 }
 .hour-pop.empty { opacity: 0; }
+.hour-pop.medium {
+  color: #FFD60A;
+  background: rgba(255, 214, 10, 0.25);
+  border-color: rgba(255, 214, 10, 0.45);
+}
+.hour-pop.heavy {
+  color: #fff;
+  background: linear-gradient(135deg, rgba(255, 100, 80, 0.85), rgba(255, 60, 60, 0.85));
+  border-color: rgba(255, 100, 100, 0.6);
+  text-shadow: 0 0 8px rgba(255, 60, 60, 0.7);
+  animation: pop-pulse 2s ease-in-out infinite;
+}
+@keyframes pop-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
 .hour-temp {
   font-size: 15px;
   font-weight: 500;
