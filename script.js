@@ -442,7 +442,15 @@ function getDayCycleInfo(cur, daily) {
     }
   }
 
-  dayCycleCache = { isNight, phase, sunriseMs, sunsetMs, nowMs };
+  // Calcul sunProgress : 0 = lever, 1 = coucher, intermediate = position du soleil
+  let sunProgress = 0.5;
+  if (sunriseMs != null && sunsetMs != null && sunriseMs < sunsetMs) {
+    if (nowMs <= sunriseMs) sunProgress = 0;
+    else if (nowMs >= sunsetMs) sunProgress = 1;
+    else sunProgress = (nowMs - sunriseMs) / (sunsetMs - sunriseMs);
+  }
+
+  dayCycleCache = { isNight, phase, sunriseMs, sunsetMs, nowMs, sunProgress };
   return dayCycleCache;
 }
 
@@ -997,55 +1005,126 @@ function computeInterpolatedCurrent(elapsedMs) {
     weather_code: n.weather_code,
     is_day: n.is_day,
     wind_direction_10m: n.wind_direction_10m,
-    visibility: lerp(p.visibility ?? n.visibility ?? 0, n.visibility ?? 0, t)
+    visibility: lerp(p.visibility ?? n.visibility ?? 0, n.visibility ?? 0, t),
+    snowfall: lerp(p.snowfall ?? 0, n.snowfall ?? 0, t),
+    showers: lerp(p.showers ?? 0, n.showers ?? 0, t)
   };
 }
 
 // Detection avancee des precipitations
-function detectPrecipDetailed(hourly, currentTimeStr, lookaheadHours = 6) {
+// Detection precipitations tres sensible : prend en compte WMO code ET mm reels.
+// Priorite aux observations (current.precipitation > 0) qui surclassent le forecast.
+function detectPrecipDetailed(hourly, currentTimeStr, lookaheadHours = 6, liveCurrent = null) {
   const result = {
     raining: false,
-    starting: null,  // ms timestamp
-    ending: null,    // ms timestamp
+    starting: null,
+    ending: null,
     inMinutes: -1,
-    intensity: null, // 'legere'|'moderee'|'forte'
-    type: null,      // 'pluie'|'neige'|'orage'|'bruine'|'verglas'
+    intensity: null, // 'crachin'|'legere'|'moderee'|'forte'|'violente'
+    type: null,      // 'bruine'|'pluie'|'neige'|'grele'|'orage'|'verglas'|'neige_fondue'
     peakMm: 0,
     peakTime: null,
     peakType: null,
+    peakIntensity: null,
     code: null,
-    startedAgo: -1,  // si deja en train, minutes depuis debut
-    endInMinutes: -1 // minutes avant la fin si en cours
+    startedAgo: -1,
+    endInMinutes: -1,
+    // Observation temps reel (override si dispo)
+    observedNow: false,
+    observedMm: 0,
+    observedType: null
   };
   if (!hourly || !hourly.time || !hourly.weather_code) return result;
   const curMs = currentTimeStr ? new Date(currentTimeStr).getTime() : Date.now();
 
+  // WMO codes precipitation (toutes formes)
   const PRECIP = [51,53,55,56,57,61,63,65,66,67,80,81,82,95,96,99,71,73,75,77,85,86];
+
+  // ===== ETAPE 1 : Observation temps reel =====
+  // Si current.precipitation > 0.05 mm/h, on considere qu'il pleut MAINTENANT.
+  // Ce signal est plus fiable que le forecast pour la condition courante.
+  if (liveCurrent && typeof liveCurrent.precipitation === 'number') {
+    const mm = liveCurrent.precipitation;
+    const snowMm = liveCurrent.snowfall || 0;
+    const rainMm = liveCurrent.rain || 0;
+    const showerMm = liveCurrent.showers || 0;
+    if (mm > 0.05 || snowMm > 0 || rainMm > 0 || showerMm > 0) {
+      result.observedNow = true;
+      result.observedMm = mm;
+      // Type par observation
+      if (snowMm > 0.1 && mm < 0.1) {
+        result.observedType = 'neige';
+      } else if (liveCurrent.weather_code === 77) {
+        result.observedType = 'grele';
+      } else if (liveCurrent.weather_code >= 95 && liveCurrent.weather_code <= 99) {
+        result.observedType = 'orage';
+      } else if ([51, 53, 55, 56, 57].includes(liveCurrent.weather_code) || mm < 0.5) {
+        result.observedType = 'bruine';
+      } else {
+        result.observedType = 'pluie';
+      }
+      // Intensite reelle
+      if (mm < 0.3) result.intensity = 'crachin';
+      else if (mm < 1) result.intensity = 'legere';
+      else if (mm < 4) result.intensity = 'moderee';
+      else if (mm < 8) result.intensity = 'forte';
+      else result.intensity = 'violente';
+      result.type = result.observedType;
+      result.raining = true;
+      result.starting = curMs; // il pleut maintenant
+      result.startedAgo = 0;
+      if (mm > result.peakMm) {
+        result.peakMm = mm;
+        result.peakTime = curMs;
+        result.peakType = result.observedType;
+        result.peakIntensity = result.intensity;
+      }
+    }
+  }
+
+  // ===== ETAPE 2 : Forecast prochaine fenetre =====
   let lastRaining = false;
   for (let i = 0; i < Math.min(lookaheadHours, hourly.time.length); i++) {
     const t = new Date(hourly.time[i]).getTime();
-    if (t < curMs) continue;
+    // Pendant la premiere heure, le code WMO hourly reflete souvent
+    // l'observation actuelle. On le skip si on a deja une observation.
+    if (t < curMs + 30 * 60 * 1000) continue;
     const c = hourly.weather_code[i];
     const pop = (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0;
     const mm = (hourly.precipitation && hourly.precipitation[i]) || 0;
-    const isRaining = PRECIP.includes(c);
+    // Detection amelioree : on inclut aussi PoP eleve (>=40%) meme si WMO != precip
+    // car WMO code hourly peut etre en retard sur les micro-intensites.
+    const isRaining = PRECIP.includes(c) || (pop >= 40 && mm >= 0.1);
 
     if (isRaining) {
-      if (!result.raining) {
-        result.raining = true;
-        result.starting = t;
-        result.code = c;
-        result.inMinutes = Math.max(0, Math.round((t - curMs) / 60000));
+      if (!result.raining || (result.raining && result.starting > t)) {
+        // Si on observe deja de la pluie maintenant, on garde starting=curMs
+        if (!result.observedNow) {
+          result.raining = true;
+          result.starting = t;
+          result.inMinutes = Math.max(0, Math.round((t - curMs) / 60000));
+          result.code = c;
+        }
       }
-      // Intensite / type
-      if ([65, 82].includes(c) || mm >= 4) result.intensity = 'forte';
-      else if ([61, 63, 80, 81].includes(c) || mm >= 1) result.intensity = result.intensity || 'moderee';
-      else result.intensity = result.intensity || 'legere';
-      result.type = codeToPrecipType(c);
+      // Intensite : meme logique plus fine
+      const isHeavy = [65, 82, 99].includes(c) || mm >= 4;
+      const isModerate = [61, 63, 80, 81].includes(c) || mm >= 1;
+      const isLight = [51, 53, 55, 80].includes(c) || mm >= 0.3;
+      if (isHeavy) {
+        if (result.intensity !== 'violente') result.intensity = 'forte';
+      } else if (isModerate) {
+        if (!['forte', 'violente'].includes(result.intensity)) result.intensity = 'moderee';
+      } else if (isLight) {
+        if (!result.intensity || ['crachin'].includes(result.intensity)) result.intensity = 'legere';
+      }
+      // Type : garde le plus severe rencontre
+      const tp = codeToPrecipType(c);
+      result.type = mergeType(result.type, tp);
       if (mm > result.peakMm) {
         result.peakMm = mm;
         result.peakTime = t;
         result.peakType = result.type;
+        result.peakIntensity = result.intensity;
       }
     } else if (lastRaining && result.starting && !result.ending) {
       result.ending = t;
@@ -1056,13 +1135,60 @@ function detectPrecipDetailed(hourly, currentTimeStr, lookaheadHours = 6) {
   return result;
 }
 
+// Fusion de types : garde le plus severe (orage > neige > verglas > forte_pluie > pluie > bruine)
+function mergeType(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  const rank = { orage: 6, grele: 5, neige: 4, verglas: 3, forte_pluie: 2.5, pluie: 2, bruine: 1, neige_fondue: 2 };
+  return (rank[a] || 0) >= (rank[b] || 0) ? a : b;
+}
+
 function codeToPrecipType(code) {
   if ([95, 96, 99].includes(code)) return 'orage';
-  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'neige';
+  if (code === 77) return 'grele';
+  if ([71, 73, 75, 85, 86].includes(code)) return 'neige';
   if ([51, 53, 55].includes(code)) return 'bruine';
   if ([56, 57, 66, 67].includes(code)) return 'verglas';
   if ([65, 82].includes(code)) return 'forte_pluie';
   return 'pluie';
+}
+
+// Classifie la condition actuelle en fonction des observations temps reel.
+// Priorite aux donnees observees sur le forecast WMO hourly.
+function classifyLiveCondition(cur) {
+  if (!cur) return null;
+  const mm = cur.precipitation || 0;
+  const snowMm = cur.snowfall || 0;
+  const showerMm = cur.showers || 0;
+  const rainMm = cur.rain || 0;
+  const code = cur.weather_code;
+
+  // Detection par observation directe (mm)
+  if (snowMm > 0.1 && mm < 0.1) {
+    if (snowMm >= 3) return { code: 75, label: 'Fortes chutes de neige', icon: 'snow-heavy', override: true };
+    if (snowMm >= 1) return { code: 73, label: 'Neige modérée', icon: 'snow', override: true };
+    return { code: 71, label: 'Neige faible', icon: 'snow', override: true };
+  }
+  if (code === 77) return { code: 77, label: 'Grêle', icon: 'hail', override: true };
+
+  // Orage observe
+  if (code >= 95 && code <= 99) {
+    if (code === 99 || (mm >= 8)) return { code: 99, label: 'Orages violents', icon: 'thunder-storm', override: true };
+    return { code: 95, label: 'Orages', icon: 'thunder', override: true };
+  }
+
+  // Pluie observee
+  if (mm > 0.05 || rainMm > 0.05 || showerMm > 0.05) {
+    if (mm >= 8 || showerMm >= 8) return { code: 82, label: 'Fortes averses', icon: 'rain-heavy', override: true };
+    if (mm >= 4) return { code: 65, label: 'Fortes pluies', icon: 'rain-heavy', override: true };
+    if (mm >= 1) {
+      if (showerMm > rainMm) return { code: 81, label: 'Averses', icon: 'rain', override: true };
+      return { code: 63, label: 'Pluie modérée', icon: 'rain', override: true };
+    }
+    if (mm >= 0.3) return { code: 61, label: 'Pluie faible', icon: 'rain', override: true };
+    if (mm > 0.05) return { code: 51, label: 'Bruine', icon: 'drizzle', override: true };
+  }
+  return null;
 }
 
 // Tick live : recupere la meteo courante (pas le forecast) toutes les 60s
@@ -1085,6 +1211,12 @@ async function tickLive() {
     currLiveData = lite;
     lastFetchMs = Date.now();
     state.lastRefreshMs = lastFetchMs;
+
+    // Synchronise state.lastWeather.current avec l'observation live
+    // pour que generateDescription/condition voient toujours les dernieres donnees
+    if (state.lastWeather) {
+      state.lastWeather.current = lite.current;
+    }
 
     // Stocke le hourly precip pour la detection pluie temps reel
     if (lite.hourly && lite.hourly.time && lite.hourly.precipitation_probability) {
@@ -1157,6 +1289,55 @@ function applyLiveTick() {
   const dirTxt = cur.wind_direction_10m != null ? ` ${degToCompass(cur.wind_direction_10m)}` : '';
   setText('windDir', dirTxt.trim());
 
+  // ===== OVERRIDE CONDITION par observation temps reel =====
+  // Si on observe de la pluie/bruine/neige actuellement, on met a jour
+  // immediatement la condition affichee (sans attendre le forecast).
+  const liveInfo = classifyLiveCondition(cur);
+  if (liveInfo) {
+    setText('condition', liveInfo.label);
+    // Theme dynamique selon la nouvelle condition observee
+    const dayCycle = state.lastWeather ? getDayCycleInfo(cur, state.lastWeather.daily) : { isNight: false };
+    app.className = "app " + themeFor(liveInfo.code, dayCycle, cur.wind_speed_10m);
+  } else if (state.lastWeather && state.lastWeather.current && state.lastWeather.current.weather_code !== cur.weather_code) {
+    // Le code observe a change : on suit l'observation
+    const dayCycle = getDayCycleInfo(cur, state.lastWeather.daily);
+    const isNight = dayCycle.isNight;
+    const info = wmoInfo(cur.weather_code, isNight);
+    setText('condition', info.label);
+    app.className = "app " + themeFor(cur.weather_code, dayCycle, cur.wind_speed_10m);
+  }
+
+  // Maj description generee si pluie observee ou changements majeurs
+  if (state.lastWeather && (liveInfo || Math.abs((cur.precipitation || 0) - (prevLiveData?.current?.precipitation || 0)) > 0.5)) {
+    const desc = generateDescription(state.lastWeather);
+    setText('descText', desc);
+  }
+
+  // ===== UV live (mise a jour depuis forecast si dispo) =====
+  if (state.lastWeather && state.lastWeather.daily && state.lastWeather.daily.uv_index_max) {
+    const dayCycle = getDayCycleInfo(cur, state.lastWeather.daily);
+    if (!dayCycle.isNight) {
+      // Interpole UV entre celui d'il y a 1h et maintenant
+      const sunProgress = dayCycle.sunProgress || 0;
+      const uvMax = state.lastWeather.daily.uv_index_max[0] || 0;
+      const uvCurrent = Math.max(0, uvMax * Math.sin(Math.PI * sunProgress));
+      const uvText = uvCurrent.toFixed(1);
+      if ($('uv').textContent !== uvText) {
+        $('uv').textContent = uvText;
+        const uvLabels = ["Faible","Faible","Faible","Modéré","Modéré","Modéré","Élevé","Élevé","Très élevé","Extrême","Extrême"];
+        $('uvSub').textContent = uvLabels[Math.min(10, Math.round(uvCurrent))] || '—';
+        $('uvBar').style.width = `${Math.min(100, uvCurrent * 10)}%`;
+      }
+    } else {
+      // Nuit : UV = 0
+      if ($('uv').textContent !== '0.0') {
+        $('uv').textContent = '0.0';
+        $('uvSub').textContent = 'Aucun (nuit)';
+        $('uvBar').style.width = '0%';
+      }
+    }
+  }
+
   // Detection pluie pour le bandeau d'alerte
   updateRainAlert();
 
@@ -1200,24 +1381,30 @@ function updateRainAlert() {
   if (!hourly) return;
   const now = Date.now();
 
-  // Detection pas trop frequente (2s min pour reactivite max)
-  if (now - lastRainInfoMs < 2000) return;
+  // Detection pas trop frequente (1s pour reactivite max)
+  if (now - lastRainInfoMs < 1000) return;
   lastRainInfoMs = now;
 
-  const info = detectPrecipDetailed(hourly, state.lastWeather.current ? state.lastWeather.current.time : null, 6);
+  // Passe currLiveData.current en priorite pour les observations temps reel
+  const liveCur = currLiveData && currLiveData.current ? currLiveData.current : null;
+  const info = detectPrecipDetailed(hourly, state.lastWeather.current ? state.lastWeather.current.time : null, 6, liveCur);
   lastRainInfo = info;
 
-  // Afficher le bandeau si pluie imminente ou en cours
+  // Afficher le bandeau selon l'etat detecte
   const banner = $('rainBanner');
   if (!banner) return;
 
   let msg = '';
-  if (info.raining && info.inMinutes <= 5) {
+  const live = classifyLiveCondition(liveCur);
+  if (live) {
+    // Observation directe : "Pluie faible en ce moment."
+    msg = `${live.label} en ce moment.`;
+  } else if (info.raining && info.inMinutes > 0 && info.inMinutes <= 5) {
     msg = `Pluie dans ${info.inMinutes || "quelques"} min${info.intensity ? ` (${info.intensity})` : ''}.`;
   } else if (info.raining && info.inMinutes > 5 && info.inMinutes <= 60) {
     msg = `Pluie attendue dans ${info.inMinutes} min${info.intensity ? ` (${info.intensity})` : ''}.`;
-  } else if (info.raining && info.inMinutes === 0 && info.peakMm >= 0.5) {
-    msg = `Pluie en cours${info.intensity ? ` ${info.intensity}` : ''}.`;
+  } else if (info.raining && info.peakMm >= 0.5) {
+    msg = `Pluie en cours${info.intensity ? ` (${info.intensity})` : ''}.`;
   }
 
   if (msg) {
