@@ -853,21 +853,46 @@ function buildWindSentence(wind, dirTxt, period) {
 // ============================================================
 //  API : Open-Meteo (gratuit, sans clé)
 // ============================================================
-async function fetchWeather(lat, lon) {
-  const cur = 'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,pressure_msl,surface_pressure,wind_speed_10m,wind_gusts_10m,wind_direction_10m,dew_point_2m,visibility';
-  let url;
+async function fetchWeather(lat, lon, lite = false) {
+  const cur = 'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_gusts_10m,wind_direction_10m,dew_point_2m';
+  // lite = current only (rapide, <1s)
   if (lite) {
-    // Lite : current only (rapide, <1s)
-    url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&wind_speed_unit=kmh&timezone=auto`;
-  } else {
-    // Full : current + hourly + daily (meteofrance_seamless puis best_match en fallback)
-    const hourly = 'temperature_2m,apparent_temperature,weather_code,precipitation_probability,precipitation,rain,showers,snowfall,wind_speed_10m,wind_gusts_10m,cloud_cover,relative_humidity_2m,visibility,dew_point_2m,wind_direction_10m';
-    const daily = 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max,precipitation_sum,rain_sum,showers_sum,snowfall_sum,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,visibility_min';
-    url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10&models=meteofrance_seamless`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&wind_speed_unit=kmh&timezone=auto`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("API error lite");
+    return res.json();
   }
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("API error");
-  return res.json();
+  // Full : current + hourly + daily, fallback robuste
+  const hourly = 'temperature_2m,apparent_temperature,weather_code,precipitation_probability,precipitation,wind_speed_10m,wind_gusts_10m,cloud_cover,relative_humidity_2m,wind_direction_10m';
+  const daily = 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant';
+  // Essai 1 : meteofrance_seamless (meilleure precision France)
+  try {
+    const url1 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10&models=meteofrance_seamless`;
+    const r1 = await fetch(url1);
+    if (r1.ok) {
+      const d = await r1.json();
+      if (d && d.current && d.current.temperature_2m != null) return d;
+    }
+  } catch (e) { /* continue */ }
+  // Essai 2 : best_match (modele par defaut, dispo partout)
+  try {
+    const url2 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10`;
+    const r2 = await fetch(url2);
+    if (r2.ok) {
+      const d = await r2.json();
+      if (d && d.current && d.current.temperature_2m != null) return d;
+    }
+  } catch (e) { /* continue */ }
+  // Essai 3 : ultra-minimal (au cas où)
+  try {
+    const url3 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m,is_day,precipitation&hourly=temperature_2m,weather_code,precipitation_probability,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max&timezone=auto&forecast_days=10`;
+    const r3 = await fetch(url3);
+    if (r3.ok) {
+      const d = await r3.json();
+      if (d && d.current && d.current.temperature_2m != null) return d;
+    }
+  } catch (e) { /* continue */ }
+  throw new Error("API error: tous les modeles ont echoue");
 }
 
 // ============================================================
