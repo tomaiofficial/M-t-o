@@ -1219,3 +1219,66 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
 .glass-card, .location {
   animation: fadeIn 0.5s ease;
 }
+
+/* ===== Skeleton loader (pendant changement de ville) ===== */
+@keyframes skeleton-shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: 200px 0; }
+}
+body.loading .temp,
+body.loading .condition,
+body.loading .hilo,
+body.loading .desc-card p,
+body.loading .detail-value,
+body.loading .detail-sub,
+body.loading .hour-time,
+body.loading .hour-temp,
+body.loading .hour-icon,
+body.loading .day-name,
+body.loading .day-low,
+body.loading .day-high,
+body.loading #cityName {
+  color: transparent !important;
+  position: relative;
+  background: linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.18) 50%, rgba(255,255,255,0.05) 100%);
+  background-size: 400px 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-shimmer 1.4s infinite linear;
+  border-radius: 6px;
+}
+body.loading .day-icon,
+body.loading .hour-icon,
+body.loading .uv-bar span,
+body.loading .day-bar .fill {
+  opacity: 0.3;
+}
+body.loading .rain-banner { display: none !important; }
+body.loading .temp {
+  font-size: 80px !important;
+  width: 200px;
+  height: 90px;
+  margin: 0 auto;
+}
+body.loading .condition {
+  width: 60%;
+  height: 24px;
+  margin: 8px auto;
+}
+body.loading .hilo {
+  width: 50%;
+  height: 18px;
+  margin: 6px auto;
+}
+body.loading #cityName::after {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

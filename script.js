@@ -56,7 +56,12 @@ const state = {
   unit: "C",
   lastWeather: null,
   lastRefreshMs: 0,
-  favorites: []
+  favorites: [],
+  // Compteur de requetes : chaque appel l'incremente. Les requetes obsoletes
+  // detectent un mismatch et s'arretent immediatement (meme sans AbortController).
+  requestId: 0,
+  // Controller courant pour annuler les requetes reseau de l'ancienne ville.
+  currentFetchController: null
 };
 
 // Bloquer le zoom par double tap, pinch, et copier/coller sur mobile
@@ -853,19 +858,20 @@ function buildWindSentence(wind, dirTxt, period) {
 // ============================================================
 //  API : Open-Meteo (gratuit, sans clé)
 // ============================================================
-async function fetchWeather(lat, lon, lite = false) {
+async function fetchWeather(lat, lon, lite = false, signal = null) {
   const cur = 'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_gusts_10m,wind_direction_10m,dew_point_2m';
+  // Wrapper qui passe le signal d'annulation automatiquement
+  const f = (url) => fetch(url, signal ? { signal } : {});
   // lite = current + next 12h precip (pour detection pluie temps reel chaque minute)
   if (lite) {
     const liteHourly = 'precipitation_probability,precipitation,weather_code';
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${liteHourly}&forecast_hours=12&wind_speed_unit=kmh&timezone=auto`;
-    const res = await fetch(url);
+    const res = await f(url);
     if (!res.ok) throw new Error("API error lite");
     return res.json();
   }
   const hourly = 'temperature_2m,apparent_temperature,weather_code,precipitation_probability,precipitation,wind_speed_10m,wind_gusts_10m,cloud_cover,relative_humidity_2m,wind_direction_10m';
   const daily = 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant';
-  // Validation : au moins 8 jours valides (max+min non-null) sur 10 demandes
   function isDailyComplete(d, minValid = 8) {
     if (!d || !d.daily || !d.daily.time || !d.daily.temperature_2m_max || !d.daily.temperature_2m_min) return false;
     let valid = 0;
@@ -877,15 +883,14 @@ async function fetchWeather(lat, lon, lite = false) {
   // Essai 1 : meteofrance_seamless 10 jours
   try {
     const url1 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10&models=meteofrance_seamless`;
-    const r1 = await fetch(url1);
+    const r1 = await f(url1);
     if (r1.ok) {
       const d = await r1.json();
       if (d && d.current && d.current.temperature_2m != null) {
-        // Hybride si daily incomplet : current+hourly MeteoFrance, daily best_match
         if (!isDailyComplete(d, 8)) {
           try {
             const url1b = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10`;
-            const r1b = await fetch(url1b);
+            const r1b = await f(url1b);
             if (r1b.ok) {
               const db = await r1b.json();
               if (isDailyComplete(db, 8)) {
@@ -899,34 +904,31 @@ async function fetchWeather(lat, lon, lite = false) {
         return d;
       }
     }
-  } catch (e) { /* continue */ }
-  // Essai 2 : best_match 10 jours
+  } catch (e) { if (e.name === 'AbortError') throw e; /* continue */ }
   try {
     const url2 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10`;
-    const r2 = await fetch(url2);
+    const r2 = await f(url2);
     if (r2.ok) {
       const d = await r2.json();
       if (d && d.current && d.current.temperature_2m != null) return d;
     }
-  } catch (e) { /* continue */ }
-  // Essai 3 : gfs_seamless 10 jours (modele NOAA)
+  } catch (e) { if (e.name === 'AbortError') throw e; }
   try {
     const url3 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10&models=gfs_seamless`;
-    const r3 = await fetch(url3);
+    const r3 = await f(url3);
     if (r3.ok) {
       const d = await r3.json();
       if (d && d.current && d.current.temperature_2m != null) return d;
     }
-  } catch (e) { /* continue */ }
-  // Essai 4 : ultra-minimal 10 jours (fallback finale)
+  } catch (e) { if (e.name === 'AbortError') throw e; }
   try {
     const url4 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m,is_day,precipitation,apparent_temperature&hourly=temperature_2m,weather_code,precipitation_probability,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max&timezone=auto&forecast_days=10`;
-    const r4 = await fetch(url4);
+    const r4 = await f(url4);
     if (r4.ok) {
       const d = await r4.json();
       if (d && d.current && d.current.temperature_2m != null) return d;
     }
-  } catch (e) { /* continue */ }
+  } catch (e) { if (e.name === 'AbortError') throw e; }
   throw new Error("API error: tous les modeles ont echoue");
 }
 
@@ -1067,8 +1069,16 @@ function codeToPrecipType(code) {
 async function tickLive() {
   if (!state.city) return;
   const city = state.city;
+  // Capture le requestId actuel : si switchCity est appele pendant le fetch,
+  // le compteur change et on annule toutes les operations de cet ancien tick.
+  const myRequestId = state.requestId;
+  // Si un skeleton est affiche (switch en cours), ne rien faire : c'est
+  // switchCity qui fera le render avec les donnees completes.
+  if (document.body.classList.contains("loading")) return;
   try {
     const lite = await fetchWeather(city.lat, city.lon, true);
+    // Verifie que la requete est toujours pertinente
+    if (myRequestId !== state.requestId) return;
     if (!lite || !lite.current) return;
 
     prevLiveData = currLiveData;
@@ -1085,6 +1095,7 @@ async function tickLive() {
     if (!state.lastWeather || !lastFullRenderMs) {
       try {
         const full = await fetchWeather(city.lat, city.lon, false);
+        if (myRequestId !== state.requestId) return;
         if (full && full.current) {
           state.lastWeather = full;
           renderCity(city, full);
@@ -1092,16 +1103,20 @@ async function tickLive() {
           state.lastRefreshMs = Date.now();
         }
       } catch (e) {
+        if (e.name === 'AbortError') return;
+        if (myRequestId !== state.requestId) return;
         renderCity(city, lite); // fallback
       }
     }
 
     // Si pas de difference majeure, juste tick d'interpolation
-    applyLiveTick();
+    if (myRequestId === state.requestId) applyLiveTick();
   } catch (e) {
+    if (e.name === 'AbortError') return;
+    if (myRequestId !== state.requestId) return;
     console.warn('tickLive failed:', e);
   }
-  updateUpdatedAt();
+  if (myRequestId === state.requestId) updateUpdatedAt();
 }
 
 // Tick d'interpolation (1s) : met a jour progressivement les valeurs actuelles
@@ -1218,14 +1233,22 @@ function updateRainAlert() {
 async function refreshForecastIfNeeded() {
   if (!state.city || !lastFullRenderMs) return;
   if (Date.now() - lastFullRenderMs < REFRESH_FORECAST_MS) return;
+  // Ne pas resync si un changement de ville est en cours (skeleton actif)
+  if (document.body.classList.contains("loading")) return;
+  const myRequestId = state.requestId;
   try {
     const full = await fetchWeather(state.city.lat, state.city.lon, false);
+    if (myRequestId !== state.requestId) return;
     if (full && full.current) {
       state.lastWeather = full;
       lastFullRenderMs = Date.now();
       renderCity(state.city, full);
     }
-  } catch (e) { console.warn('Forecast refresh failed:', e); }
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    if (myRequestId !== state.requestId) return;
+    console.warn('Forecast refresh failed:', e);
+  }
 }
 
 // Demarre la boucle d'interpolation
@@ -1233,6 +1256,7 @@ function startInterpolate() {
   if (interpTimerId) return;
   interpTimerId = setInterval(() => {
     if (!currLiveData) return;
+    if (document.body.classList.contains("loading")) return;
     applyLiveTick();
     refreshForecastIfNeeded();
   }, INTERPOLATE_MS);
@@ -1468,25 +1492,122 @@ function updateUpdatedAt() {
 // ============================================================
 //  Load : Charger la météo pour une ville
 // ============================================================
-async function loadWeather(city) {
+// ============================================================
+//  CITY CHANGE : annulation des requetes + vidage complet + skeleton
+// ============================================================
+// Vide immediatement TOUTES les donnees affichees pour eviter tout
+// melange avec une nouvelle ville. Appele avant chaque changement.
+function clearAllWeatherUI() {
+  // Reset de l'etat live
+  currLiveData = null;
+  prevLiveData = null;
+  livePrecipHourly = null;
+  lastFetchMs = 0;
+  lastFullRenderMs = 0;
+  state.lastWeather = null;
+  state.lastRefreshMs = 0;
+  hourlyCells.length = 0;
+  lastRainInfoMs = 0;
+  lastRainInfo = null;
+
+  // Vidage DOM : temperature, condition, descriptions, alertes
+  $("temp").textContent = "—";
+  $("condition").textContent = "—";
+  $("hilo").textContent = "H:—  L:—";
+  $("descText").textContent = "—";
+  $("feels").textContent = "—";
+  $("feelsSub").textContent = "—";
+  $("humidity").textContent = "—";
+  $("windSpeed").textContent = "—";
+  $("windDir").textContent = "—";
+  $("windGusts").textContent = "—";
+  $("gustsRow").classList.add("hidden");
+  $("precip").textContent = "—";
+  $("precipNow").textContent = "—";
+  $("precipSub").textContent = "—";
+  $("dewPoint").textContent = "—";
+  $("cloudCover").textContent = "—";
+  $("vis").textContent = "—";
+  $("pressure").textContent = "—";
+  $("pressureSub").textContent = "—";
+  $("uv").textContent = "—";
+  $("uvSub").textContent = "—";
+  $("uvBar").style.width = "0%";
+  $("sunrise").textContent = "—";
+  $("sunset").textContent = "—";
+
+  // Vidage listes
+  $("hourly").innerHTML = "";
+  $("daily").innerHTML = "";
+
+  // Bandeau pluie cache
+  const banner = $("rainBanner");
+  if (banner) { banner.textContent = ""; banner.classList.remove("visible"); }
+
+  // Skeleton : on l'active puis le desactive apres render
+  document.body.classList.add("loading");
+  $("cityName").textContent = "Chargement…";
+}
+
+// Desactive le skeleton (apres render reussi)
+function disableSkeleton() {
+  document.body.classList.remove("loading");
+}
+
+// Point d'entree unique pour changer de ville. Annule toute requete
+// precedente, vide l'UI, affiche le skeleton, puis lance le fetch.
+async function switchCity(city) {
+  if (!city || city.lat == null || city.lon == null) return;
+
+  // 1) Annule toutes les requetes reseau en cours
+  if (state.currentFetchController) {
+    try { state.currentFetchController.abort(); } catch (e) {}
+  }
+  const controller = new AbortController();
+  state.currentFetchController = controller;
+
+  // 2) Incremente le requestId pour invalider toute operation async en cours
+  //    (tickLive, applyHourlyInterpolation, etc. testent ce compteur)
+  const myRequestId = ++state.requestId;
+
+  // 3) Vide immediatement TOUTES les donnees affichees
+  clearAllWeatherUI();
+  $("cityName").textContent = city.name + " …";
+
+  // 4) Mets a jour la ville courante tout de suite (pour les shortcuts)
+  state.city = city;
+
+  // 5) Lance le fetch
   try {
-    $("cityName").textContent = city.name + " …";
-    const w = await fetchWeather(city.lat, city.lon);
+    const w = await fetchWeather(city.lat, city.lon, false, controller.signal);
+    // Verifie que cette requete est toujours la courante
+    if (myRequestId !== state.requestId) return; // ignore - une nouvelle ville a ete demandee
     if (!w || !w.current) throw new Error("Invalid data");
-    // Initialise le moteur live
-    if (!currLiveData) {
-      currLiveData = w;
-      lastFetchMs = Date.now();
-    }
+
+    // Initialise le moteur live pour cette ville
+    currLiveData = w;
+    prevLiveData = null;
+    lastFetchMs = Date.now();
+    livePrecipHourly = null;
     state.lastWeather = w;
     state.lastRefreshMs = Date.now();
+    lastFullRenderMs = Date.now();
     renderCity(city, w);
+    disableSkeleton();
   } catch (e) {
-    console.error("loadWeather error:", e);
+    if (e.name === 'AbortError') return; // annulee par une nouvelle requete
+    if (myRequestId !== state.requestId) return;
+    console.error("switchCity error:", e);
     $("cityName").textContent = "Erreur";
     $("temp").textContent = "—";
     $("condition").textContent = "Vérifiez votre connexion";
+    disableSkeleton();
   }
+}
+
+async function loadWeather(city) {
+  // Wrapper conserve pour retrocompatibilite : delegue a switchCity
+  return switchCity(city);
 }
 
 // ============================================================
