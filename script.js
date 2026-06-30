@@ -855,41 +855,40 @@ function buildWindSentence(wind, dirTxt, period) {
 // ============================================================
 async function fetchWeather(lat, lon, lite = false) {
   const cur = 'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_gusts_10m,wind_direction_10m,dew_point_2m';
-  // lite = current only (rapide, <1s)
+  // lite = current + next 12h precip (pour detection pluie temps reel chaque minute)
   if (lite) {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&wind_speed_unit=kmh&timezone=auto`;
+    const liteHourly = 'precipitation_probability,precipitation,weather_code';
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${liteHourly}&forecast_hours=12&wind_speed_unit=kmh&timezone=auto`;
     const res = await fetch(url);
     if (!res.ok) throw new Error("API error lite");
     return res.json();
   }
   const hourly = 'temperature_2m,apparent_temperature,weather_code,precipitation_probability,precipitation,wind_speed_10m,wind_gusts_10m,cloud_cover,relative_humidity_2m,wind_direction_10m';
   const daily = 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant';
-  // Validation : les donnees daily doivent etre completes (max+min non-null sur tous les jours)
-  function isDailyComplete(d) {
+  // Validation : au moins 8 jours valides (max+min non-null) sur 10 demandes
+  function isDailyComplete(d, minValid = 8) {
     if (!d || !d.daily || !d.daily.time || !d.daily.temperature_2m_max || !d.daily.temperature_2m_min) return false;
-    // Au moins 7 jours valides (avec max ET min non-null)
     let valid = 0;
     for (let i = 0; i < d.daily.time.length; i++) {
       if (d.daily.temperature_2m_max[i] != null && d.daily.temperature_2m_min[i] != null) valid++;
     }
-    return valid >= 5;
+    return valid >= minValid;
   }
-  // Essai 1 : meteofrance_seamless 7 jours
+  // Essai 1 : meteofrance_seamless 10 jours
   try {
-    const url1 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=7&models=meteofrance_seamless`;
+    const url1 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10&models=meteofrance_seamless`;
     const r1 = await fetch(url1);
     if (r1.ok) {
       const d = await r1.json();
       if (d && d.current && d.current.temperature_2m != null) {
-        // Completer avec best_match si daily est incomplet
-        if (!isDailyComplete(d)) {
+        // Hybride si daily incomplet : current+hourly MeteoFrance, daily best_match
+        if (!isDailyComplete(d, 8)) {
           try {
-            const url1b = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=7`;
+            const url1b = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10`;
             const r1b = await fetch(url1b);
             if (r1b.ok) {
               const db = await r1b.json();
-              if (isDailyComplete(db)) {
-                // Utilise current+hourly de MeteoFrance (plus precis), daily de best_match (plus complet)
+              if (isDailyComplete(db, 8)) {
                 db.current = d.current;
                 db.hourly = d.hourly;
                 return db;
@@ -901,18 +900,18 @@ async function fetchWeather(lat, lon, lite = false) {
       }
     }
   } catch (e) { /* continue */ }
-  // Essai 2 : best_match 7 jours
+  // Essai 2 : best_match 10 jours
   try {
-    const url2 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=7`;
+    const url2 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10`;
     const r2 = await fetch(url2);
     if (r2.ok) {
       const d = await r2.json();
       if (d && d.current && d.current.temperature_2m != null) return d;
     }
   } catch (e) { /* continue */ }
-  // Essai 3 : gfs_seamless 7 jours (modele NOAA)
+  // Essai 3 : gfs_seamless 10 jours (modele NOAA)
   try {
-    const url3 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=7&models=gfs_seamless`;
+    const url3 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10&models=gfs_seamless`;
     const r3 = await fetch(url3);
     if (r3.ok) {
       const d = await r3.json();
@@ -940,6 +939,7 @@ const REFRESH_FORECAST_MS = 5 * 60 * 1000; // re-render forecast complet chaque 
 
 let prevLiveData = null;
 let currLiveData = null;
+let livePrecipHourly = null; // hourly precip rafraîchi chaque minute (lite fetch)
 let lastFetchMs = 0;
 let lastFullRenderMs = 0;
 let interpTimerId = null;
@@ -1076,6 +1076,11 @@ async function tickLive() {
     lastFetchMs = Date.now();
     state.lastRefreshMs = lastFetchMs;
 
+    // Stocke le hourly precip pour la detection pluie temps reel
+    if (lite.hourly && lite.hourly.time && lite.hourly.precipitation_probability) {
+      livePrecipHourly = lite.hourly;
+    }
+
     // Premier fetch : full render
     if (!state.lastWeather || !lastFullRenderMs) {
       try {
@@ -1147,7 +1152,8 @@ function applyLiveTick() {
 // Met a jour les % hourly avec interpolation
 function applyHourlyInterpolation() {
   if (!state.lastWeather || !hourlyCells.length) return;
-  const hourly = state.lastWeather.hourly;
+  // Priorite : livePrecipHourly (refresh chaque minute) > state.lastWeather.hourly
+  const hourly = livePrecipHourly || (state.lastWeather && state.lastWeather.hourly);
   if (!hourly || !hourly.time) return;
   const now = Date.now();
   const REFR = REFRESH_LIVE_MS;
@@ -1174,12 +1180,13 @@ function applyHourlyInterpolation() {
 // Detection pluie en temps reel (bandeau alerte)
 function updateRainAlert() {
   if (!state.lastWeather) return;
-  const hourly = state.lastWeather.hourly;
+  // Priorite : livePrecipHourly (refresh chaque minute) > state.lastWeather.hourly
+  const hourly = livePrecipHourly || state.lastWeather.hourly;
   if (!hourly) return;
   const now = Date.now();
 
-  // Detection pas trop frequente (5s min)
-  if (now - lastRainInfoMs < 5000) return;
+  // Detection pas trop frequente (2s min pour reactivite max)
+  if (now - lastRainInfoMs < 2000) return;
   lastRainInfoMs = now;
 
   const info = detectPrecipDetailed(hourly, state.lastWeather.current ? state.lastWeather.current.time : null, 6);
