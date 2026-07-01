@@ -4,6 +4,7 @@
 // ============================================================
 
 // ===== WMO codes (style Apple Weather) =====
+// Les codes Tomorrow.io sont convertis en codes WMO dans fetchWeather()
 const WMO = {
   0:  { label: "Ciel dégagé",            icon: "apple-clear-day",         night: "apple-clear-night" },
   1:  { label: "Plutôt ensoleillé",      icon: "apple-clear-day",         night: "apple-clear-night" },
@@ -993,80 +994,145 @@ function buildWindSentence(wind, dirTxt, period) {
 }
 
 // ============================================================
-//  API : Open-Meteo (gratuit, sans clé)
+//  MAPPING : Tomorrow.io codes → WMO codes (pour compatibilité)
 // ============================================================
+const TOMORROW_TO_WMO = {
+  1000: 0,  // Clear → Ciel dégagé
+  1100: 1,  // Mostly Clear → Plutôt ensoleillé
+  1101: 2,  // Partly Cloudy → Partiellement nuageux
+  1102: 3,  // Mostly Cloudy → Couvert
+  1001: 3,  // Cloudy → Couvert
+  2000: 45, // Fog → Brouillard
+  2100: 45, // Light Fog → Brouillard
+  4000: 51, // Drizzle → Bruine
+  4001: 61, // Rain → Pluie
+  4200: 61, // Light Rain → Pluie faible
+  4201: 65, // Heavy Rain → Fortes pluies
+  5000: 73, // Snow → Neige
+  5001: 71, // Flurries → Neige faible
+  5100: 71, // Light Snow → Neige faible
+  5101: 75, // Heavy Snow → Fortes chutes de neige
+  6000: 56, // Freezing Drizzle → Bruine verglaçante
+  6001: 66, // Freezing Rain → Pluie verglaçante
+  6200: 66, // Light Freezing Rain → Pluie verglaçante
+  6201: 67, // Heavy Freezing Rain → Verglas
+  7000: 77, // Ice Pellets → Grains de neige
+  7101: 77, // Heavy Ice Pellets → Grains de neige
+  7102: 77, // Light Ice Pellets → Grains de neige
+  8000: 95  // Thunderstorm → Orages
+};
+
+function mapWeatherCode(tomorrowCode) {
+  return TOMORROW_TO_WMO[tomorrowCode] ?? 0;
+}
+
+// ============================================================
+//  API : Tomorrow.io (IA)
+// ============================================================
+const TOMORROW_API_KEY = "DJIbi4iXqX4DjTRS8RPHmgkB7aZluEHc";
+
 async function fetchWeather(lat, lon, lite = false, signal = null) {
-  const cur = 'temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_gusts_10m,wind_direction_10m,dew_point_2m';
-  // Wrapper qui passe le signal d'annulation automatiquement
   const f = (url) => fetch(url, signal ? { signal } : {});
-  // lite = current + next 12h precip (pour detection pluie temps reel chaque minute)
+
   if (lite) {
-    const liteHourly = 'precipitation_probability,precipitation,weather_code';
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${liteHourly}&forecast_hours=12&wind_speed_unit=kmh&timezone=auto`;
+    // Mode lite : juste les prochaines 12h pour la détection pluie
+    const url = `https://api.tomorrow.io/v4/weather/forecast?location=${lat},${lon}&apikey=${TOMORROW_API_KEY}&timesteps=1h&units=metric`;
     const res = await f(url);
     if (!res.ok) throw new Error("API error lite");
-    return res.json();
+    const data = await res.json();
+    // Transformer en structure Open-Meteo compatible
+    const intervals = data.timelines.hourly || [];
+    const now = new Date();
+    const result = {
+      current: { temperature_2m: intervals[0]?.values?.temperature ?? 0, weather_code: mapWeatherCode(intervals[0]?.values?.weatherCode ?? 1000), precipitation: intervals[0]?.values?.rainIntensity ?? 0 },
+      hourly: { time: [], precipitation_probability: [], precipitation: [], weather_code: [] }
+    };
+    for (const iv of intervals) {
+      result.hourly.time.push(iv.time);
+      result.hourly.precipitation_probability.push(iv.values.precipitationProbability ?? 0);
+      result.hourly.precipitation.push(iv.values.rainIntensity ?? 0);
+      result.hourly.weather_code.push(mapWeatherCode(iv.values.weatherCode ?? 1000));
+    }
+    return result;
   }
-  const hourly = 'temperature_2m,apparent_temperature,weather_code,precipitation_probability,precipitation,wind_speed_10m,wind_gusts_10m,cloud_cover,relative_humidity_2m,wind_direction_10m';
-  const daily = 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant';
-  function isDailyComplete(d, minValid = 8) {
-    if (!d || !d.daily || !d.daily.time || !d.daily.temperature_2m_max || !d.daily.temperature_2m_min) return false;
-    let valid = 0;
-    for (let i = 0; i < d.daily.time.length; i++) {
-      if (d.daily.temperature_2m_max[i] != null && d.daily.temperature_2m_min[i] != null) valid++;
-    }
-    return valid >= minValid;
+
+  // Full forecast
+  const url = `https://api.tomorrow.io/v4/weather/forecast?location=${lat},${lon}&apikey=${TOMORROW_API_KEY}&timesteps=1h,1d&units=metric`;
+  const res = await f(url);
+  if (!res.ok) throw new Error("API error Tomorrow.io");
+  const raw = await res.json();
+
+  const hourlyIntervals = raw.timelines.hourly || [];
+  const dailyIntervals = raw.timelines.daily || [];
+
+  // ---- Construire current ----
+  const first = hourlyIntervals[0]?.values || {};
+  const curTime = hourlyIntervals[0]?.time || new Date().toISOString();
+  const current = {
+    time: curTime,
+    temperature_2m: first.temperature ?? 0,
+    relative_humidity_2m: first.humidity ?? 0,
+    apparent_temperature: first.temperatureApparent ?? first.temperature ?? 0,
+    is_day: 1,
+    precipitation: first.rainIntensity ?? 0,
+    rain: first.rainIntensity ?? 0,
+    showers: 0,
+    snowfall: first.snowIntensity ?? 0,
+    weather_code: mapWeatherCode(first.weatherCode ?? 1000),
+    cloud_cover: first.cloudCover ?? 0,
+    pressure_msl: first.pressureSeaLevel ?? 0,
+    surface_pressure: first.pressureSurfaceLevel ?? 0,
+    wind_speed_10m: first.windSpeed ?? 0,
+    wind_gusts_10m: first.windGust ?? 0,
+    wind_direction_10m: first.windDirection ?? 0,
+    dew_point_2m: first.dewPoint ?? 0,
+    visibility: first.visibility ?? 10
+  };
+
+  // ---- Construire hourly ----
+  const hourly = { time: [], temperature_2m: [], apparent_temperature: [], weather_code: [], precipitation_probability: [], precipitation: [], wind_speed_10m: [], wind_gusts_10m: [], cloud_cover: [], relative_humidity_2m: [], wind_direction_10m: [] };
+  for (const iv of hourlyIntervals) {
+    const v = iv.values;
+    hourly.time.push(iv.time);
+    hourly.temperature_2m.push(v.temperature ?? 0);
+    hourly.apparent_temperature.push(v.temperatureApparent ?? v.temperature ?? 0);
+    hourly.weather_code.push(mapWeatherCode(v.weatherCode ?? 1000));
+    hourly.precipitation_probability.push(v.precipitationProbability ?? 0);
+    hourly.precipitation.push(v.rainIntensity ?? 0);
+    hourly.wind_speed_10m.push(v.windSpeed ?? 0);
+    hourly.wind_gusts_10m.push(v.windGust ?? 0);
+    hourly.cloud_cover.push(v.cloudCover ?? 0);
+    hourly.relative_humidity_2m.push(v.humidity ?? 0);
+    hourly.wind_direction_10m.push(v.windDirection ?? 0);
   }
-  // Essai 1 : meteofrance_seamless 10 jours
-  try {
-    const url1 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10&models=meteofrance_seamless`;
-    const r1 = await f(url1);
-    if (r1.ok) {
-      const d = await r1.json();
-      if (d && d.current && d.current.temperature_2m != null) {
-        if (!isDailyComplete(d, 8)) {
-          try {
-            const url1b = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10`;
-            const r1b = await f(url1b);
-            if (r1b.ok) {
-              const db = await r1b.json();
-              if (isDailyComplete(db, 8)) {
-                db.current = d.current;
-                db.hourly = d.hourly;
-                return db;
-              }
-            }
-          } catch (e) {}
-        }
-        return d;
-      }
-    }
-  } catch (e) { if (e.name === 'AbortError') throw e; /* continue */ }
-  try {
-    const url2 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10`;
-    const r2 = await f(url2);
-    if (r2.ok) {
-      const d = await r2.json();
-      if (d && d.current && d.current.temperature_2m != null) return d;
-    }
-  } catch (e) { if (e.name === 'AbortError') throw e; }
-  try {
-    const url3 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=${cur}&hourly=${hourly}&daily=${daily}&wind_speed_unit=kmh&timezone=auto&forecast_days=10&models=gfs_seamless`;
-    const r3 = await f(url3);
-    if (r3.ok) {
-      const d = await r3.json();
-      if (d && d.current && d.current.temperature_2m != null) return d;
-    }
-  } catch (e) { if (e.name === 'AbortError') throw e; }
-  try {
-    const url4 = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m,is_day,precipitation,apparent_temperature&hourly=temperature_2m,weather_code,precipitation_probability,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max&timezone=auto&forecast_days=10`;
-    const r4 = await f(url4);
-    if (r4.ok) {
-      const d = await r4.json();
-      if (d && d.current && d.current.temperature_2m != null) return d;
-    }
-  } catch (e) { if (e.name === 'AbortError') throw e; }
-  throw new Error("API error: tous les modeles ont echoue");
+
+  // ---- Construire daily ----
+  const daily = { time: [], weather_code: [], temperature_2m_max: [], temperature_2m_min: [], sunrise: [], sunset: [], uv_index_max: [], precipitation_probability_max: [], precipitation_sum: [], wind_speed_10m_max: [], wind_gusts_10m_max: [], wind_direction_10m_dominant: [] };
+  for (const iv of dailyIntervals) {
+    const v = iv.values;
+    daily.time.push(iv.time);
+    daily.weather_code.push(mapWeatherCode(v.weatherCodeMax ?? v.weatherCodeAvg ?? 1000));
+    daily.temperature_2m_max.push(v.temperatureMax ?? 0);
+    daily.temperature_2m_min.push(v.temperatureMin ?? 0);
+    daily.sunrise.push(v.sunriseTime ?? "");
+    daily.sunset.push(v.sunsetTime ?? "");
+    daily.uv_index_max.push(v.uvIndexMax ?? 0);
+    daily.precipitation_probability_max.push(v.precipitationProbabilityMax ?? 0);
+    daily.precipitation_sum.push(v.rainAccumulationSum ?? 0);
+    daily.wind_speed_10m_max.push(v.windSpeedMax ?? 0);
+    daily.wind_gusts_10m_max.push(v.windGustMax ?? 0);
+    daily.wind_direction_10m_dominant.push(v.windDirectionMax ?? 0);
+  }
+
+  // Déterminer is_day à partir du sunrise/sunset
+  if (daily.sunrise.length > 0 && daily.sunset.length > 0 && daily.sunrise[0] && daily.sunset[0]) {
+    const now = new Date().getTime();
+    const rise = new Date(daily.sunrise[0]).getTime();
+    const set = new Date(daily.sunset[0]).getTime();
+    current.is_day = (now >= rise && now < set) ? 1 : 0;
+  }
+
+  return { current, hourly, daily };
 }
 
 // ============================================================
