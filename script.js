@@ -623,93 +623,58 @@ function findTempEvolution(hourly, nowMs) {
 const AI_CACHE_KEY = "meteo_ai_desc_v1";
 const AI_CACHE_TTL_MS = 30 * 60 * 1000; // 30 min
 
-// Construit un résumé compact des données météo pour le prompt LLM.
-// Objectif : donner à l'IA juste assez de contexte pour écrire
-// un bulletin naturel, sans inonder le prompt.
+// Construit un résumé compact des données météo ACTUELLES pour le prompt LLM.
+// Objectif : donner à l'IA UNIQUEMENT les conditions du moment présent,
+// SANS aucune prévision (ni prochaine pluie, ni amplitude du jour, ni cumul attendu).
+// L'IA hallucine si on lui donne trop de contexte : on reste minimal.
 function buildWeatherSummary(w) {
   if (!w || !w.current) return null;
   const cur = w.current;
-  const daily = w.daily || {};
-  const hourly = w.hourly || {};
   const code = cur.weather_code;
   const wmo = WMO[code] || { label: "Conditions variables" };
-  const t = Math.round(cur.temperature_2m);
-  const feels = Math.round(cur.apparent_temperature);
-  const wind = Math.round(cur.wind_speed_10m);
-  const hum = Math.round(cur.relative_humidity_2m);
-  const isDay = cur.is_day === 1;
-  const sunrise = (daily.sunrise && daily.sunrise[0]) || "";
-  const sunset = (daily.sunset && daily.sunset[0]) || "";
-  const tMax = daily.temperature_2m_max && daily.temperature_2m_max[0];
-  const tMin = daily.temperature_2m_min && daily.temperature_2m_min[0];
-  const popMax = daily.precipitation_probability_max && daily.precipitation_probability_max[0];
-  const totalPrecip = daily.precipitation_sum && daily.precipitation_sum[0];
-
-  // Prochain épisode de pluie (prochaines 6h)
-  let nextRain = null;
-  if (hourly.time && hourly.weather_code) {
-    const nowMs = Date.now();
-    for (let i = 0; i < Math.min(6, hourly.time.length); i++) {
-      const tMs = new Date(hourly.time[i]).getTime();
-      if (tMs < nowMs - 30 * 60000) continue;
-      const c = hourly.weather_code[i];
-      if ([51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99].includes(c)) {
-        const inMin = Math.max(0, Math.round((tMs - nowMs) / 60000));
-        nextRain = { inMin, code: c, type: getPrecipLabel(c) };
-        break;
-      }
-    }
-  }
-
   return {
     condition: wmo.label,
-    temperature: t,
-    feelsLike: feels,
-    wind,
-    humidity: hum,
-    isDay,
-    sunrise, sunset,
-    tMax, tMin,
-    popMax, totalPrecip,
-    nextRain
+    temperature: Math.round(cur.temperature_2m),
+    feelsLike: Math.round(cur.apparent_temperature),
+    wind: Math.round(cur.wind_speed_10m),
+    humidity: Math.round(cur.relative_humidity_2m),
+    precipNow: +(cur.precipitation || 0).toFixed(1), // mm/h en ce moment
+    isDay: cur.is_day === 1
   };
 }
 
-// Construit le prompt envoyé à l'IA. On lui demande un bulletin court,
-// naturel, en français, sans emojis ni markdown.
+// Construit le prompt envoyé à l'IA. Strictement "maintenant", aucune prévision.
+// On lui donne le strict minimum factuel pour éviter l'hallucination.
 function buildAIPrompt(city, summary) {
   const timeOfDay = (() => {
     const h = new Date().getHours();
     if (h < 6) return "nuit";
-    if (h < 12) return "matinée";
+    if (h < 12) return "matin";
     if (h < 14) return "midi";
     if (h < 18) return "après-midi";
     if (h < 21) return "soirée";
     return "nuit";
   })();
-  const parts = [
-    `Tu es la météo pour ${city.name}, ${timeOfDay}.`,
-    `Conditions actuelles : ${summary.condition}, ${summary.temperature}°C (ressenti ${summary.feelsLike}°C).`,
-    `Vent : ${summary.wind} km/h. Humidité : ${summary.humidity}%.`
+  // Liste STRICTE des conditions possibles (codes WMO) pour cadrer l'IA
+  const lines = [
+    `Météo actuelle à ${city.name} (${timeOfDay}) :`,
+    `- Condition : ${summary.condition}`,
+    `- Température : ${summary.temperature}°C (ressenti ${summary.feelsLike}°C)`,
+    `- Vent : ${summary.wind} km/h`,
+    `- Humidité : ${summary.humidity}%`
   ];
-  if (summary.tMax != null && summary.tMin != null) {
-    parts.push(`Amplitude du jour : ${Math.round(summary.tMin)}°C à ${Math.round(summary.tMax)}°C.`);
+  if (summary.precipNow > 0) {
+    lines.push(`- Pluie en ce moment : ${summary.precipNow} mm/h`);
   }
-  if (summary.popMax != null && summary.totalPrecip != null) {
-    parts.push(`Risque de pluie : ${summary.popMax}% avec cumul attendu de ${summary.totalPrecip.toFixed(1)} mm.`);
-  }
-  if (summary.nextRain) {
-    if (summary.nextRain.inMin < 60) {
-      parts.push(`Pluie attendue dans ${summary.nextRain.inMin} min (${summary.nextRain.type}).`);
-    } else {
-      parts.push(`Pluie attendue dans ${Math.round(summary.nextRain.inMin / 60)}h (${summary.nextRain.type}).`);
-    }
-  }
-  parts.push(
+  lines.push(
     "",
-    "Rédige UN bulletin météo de 2 phrases courtes en français naturel, style Apple Weather. Pas d'introduction, pas d'emojis, pas de markdown. Commence directement par décrire la situation. Donne un conseil pratique uniquement si pertinent (parapluie, veste, prudence route). Maximum 200 caractères au total."
+    "Consignes STRICTES :",
+    "- Décris UNIQUEMENT la condition actuelle ci-dessus. Pas de prévision, pas de 'plus tard', pas de 'cette nuit'.",
+    "- Ne change JAMAIS la condition donnée (si on dit 'Couvert', reste sur 'Couvert', n'invente pas 'Orages' ou 'Pluie').",
+    "- Phrase courte en français, commence directement par la condition, 1 à 2 phrases, max 150 caractères.",
+    "- Pas d'emojis, pas de markdown, pas de listes."
   );
-  return parts.join("\n");
+  return lines.join("\n");
 }
 
 // Lit le cache de descriptions depuis localStorage.
