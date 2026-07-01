@@ -1036,7 +1036,7 @@ function seededRand(seed) {
 function getBand(lat) { const a=Math.abs(lat); return a>=66?0: a>=55?1: a>=40?2: a>=25?3: 4; }
 
 function smoothVal(data, day) {
-  const p = day/365*12; const i=Math.floor(p)%12; const f=p-i; const t=f*f*(3-2*f);
+  const p = (day/365*12)%12; const i=Math.floor(p); const f=p-i; const t=f*f*(3-2*f);
   return data[i] + (data[(i+1)%12]-data[i])*t;
 }
 
@@ -1068,25 +1068,31 @@ function appTemp(t,wind,hum){
 function weatherWeights(band, month, seed) {
   const rng = () => seededRand(seed++);
   const c=CLIMATE[band]; const m=month-1;
-  const temp=c[0][m], precipDays=c[3][m], cloud=c[4][m], hum=c[2][m];
-  const precipProb=precipDays/30; const isCold=temp<5; const isWarm=temp>20; const isHot=temp>28;
+  const t=c[0][m], pDays=c[3][m], cloud=c[4][m], hum=c[2][m];
+  const pProb=pDays/30; const isCold=t<5; const isWarm=t>18; const isHot=t>28;
+  const clearW=Math.max(0.02,(100-cloud)/100);
+  const cloudW=Math.max(0.02,cloud/100);
   const w=[0,0,0,0,0,0,0,0,0,0,0];
-  w[0]=Math.max(0,(100-cloud)/100*0.35+0.05*rng());
-  w[1]=Math.max(0,(100-cloud)/100*0.25+0.05*rng());
-  w[2]=Math.max(0,0.15+(cloud>50?-0.05:0.05)+0.05*rng());
-  w[3]=Math.max(0,cloud/100*0.25+0.05*rng());
-  if(hum>75&&temp<15&&temp>-5) w[4]=0.08+0.04*rng();
-  if(precipProb>0.1){
-    if(isCold){w[8]=precipProb*0.5+0.05*rng();w[9]=precipProb*0.08+0.02*rng();w[6]=precipProb*0.08;}
-    else{w[5]=precipProb*0.15+0.03*rng();w[6]=precipProb*0.4+0.05*rng();w[7]=precipProb*0.08+0.02*rng();}
-    if(isWarm&&hum>55)w[10]=0.06+0.06*rng();if(isHot&&hum>45)w[10]=0.1+0.1*rng();
+  // Ciel dégagé → couvert basé sur la couverture nuageuse
+  w[0]=clearW*0.25;   w[1]=clearW*0.20;
+  w[2]=0.12+0.06*rng(); // partiellement nuageux (toujours possible)
+  w[3]=cloudW*0.35;
+  // Brouillard
+  if(hum>80&&t<15&&t>-5) w[4]=0.08+0.04*rng();
+  // Précipitations
+  if(pProb>0.05){
+    const rainBase=pProb*0.6;
+    if(isCold){w[8]=rainBase*0.5;w[9]=rainBase*0.12;w[6]=rainBase*0.12;}
+    else{w[5]=rainBase*0.18;w[6]=rainBase*0.45;w[7]=rainBase*0.12;}
+    if(isWarm&&hum>50)w[10]=pProb*0.2+0.02*rng();
+    if(isHot&&hum>40)w[10]=pProb*0.35+0.05*rng();
   }
   return w;
 }
 
 // Choisit un état météo selon les poids, avec persistance Markov
 function pickState(weights, prevState, persist) {
-  if(prevState!=null&&seededRand(~~(persist*1e6))<0.65) return prevState;
+  if(prevState!=null&&seededRand(~~(persist*1e6))<0.45) return prevState;
   const total=weights.reduce((a,b)=>a+b,0); if(total<=0) return 0;
   let r=seededRand(~~(persist*1e6+prevState*100))%total;
   for(let i=0;i<weights.length;i++){r-=weights[i];if(r<=0)return i;}
@@ -1096,10 +1102,12 @@ function pickState(weights, prevState, persist) {
 // ---------- Génération météo pour un jour ----------
 function genDayWeather(band, lat, lon, dayOfYear, daySeed, isToday) {
   const rad=Math.PI/180; const rng=()=>seededRand(daySeed++);
-  const month=((dayOfYear/365*12)%12)+1; const m=Math.floor(month)-1;
-  const c=CLIMATE[band]; const tMean=smoothVal(c[0],dayOfYear);
-  const tRange=smoothVal(c[1],dayOfYear); const hMean=smoothVal(c[2],dayOfYear);
-  const wMean=smoothVal(c[5],dayOfYear); const cloudMean=smoothVal(c[4],dayOfYear);
+  // Ajustement hémisphère sud : décaler le climat de 6 mois
+  const hemAdj=lat<0?183:0; const adjDay=(dayOfYear+hemAdj)%365||365;
+  const month=((adjDay/365*12)%12)+1;
+  const c=CLIMATE[band]; const tMean=smoothVal(c[0],adjDay);
+  const tRange=smoothVal(c[1],adjDay); const hMean=smoothVal(c[2],adjDay);
+  const wMean=smoothVal(c[5],adjDay); const cloudMean=smoothVal(c[4],adjDay);
   const HOURS=[];
 
   // Choisir l'état météo du jour
@@ -1108,23 +1116,24 @@ function genDayWeather(band, lat, lon, dayOfYear, daySeed, isToday) {
   const state=STATES[stateIdx]; const wmoCode=state[0]; const cloudFactor=state[2];
   const precipFactor=state[3]; const snowThreshold=state[4];
 
-  // Température de base du jour (moyenne ± variation aléatoire)
-  const dayTempBase=tMean+(rng()-0.5)*tRange*0.3;
+  // Température de base du jour (moyenne ± variation aléatoire réaliste)
+  const dayTempBase=tMean+(rng()-0.5)*tRange*0.6;
   const isSnow=wmoCode>=71&&wmoCode<=75;
   const isRain=wmoCode>=51&&wmoCode<=65||wmoCode===95;
   const tempAdj=isSnow?-2:isRain?-1:0;
 
-  // Heures de lever/coucher (format ISO pour compatibilité)
-  const sun=calcSun(lat,lon,dayOfYear); // renvoie des heures UTC
+  // Date de base = minuit UTC du jour
   const baseDate=new Date(dayOfYear*86400000+new Date(Date.UTC(2024,0,0)).getTime());
-  const tzHours=-(baseDate.getTimezoneOffset())/60; // décalage local p.ex. +2 pour Paris été
-  const localRise=(sun.sunrise+tzHours+24)%24;
-  const localSet=(sun.sunset+tzHours+24)%24;
-  const sunH=Math.floor(localRise); const sunM=(localRise-sunH)*60;
-  const setH=Math.floor(localSet); const setM=(localSet-setH)*60;
-  const riseDate=new Date(baseDate); riseDate.setHours(sunH,Math.round(sunM),0);
-  const setDate=new Date(baseDate); setDate.setHours(setH,Math.round(setM),0);
-  const sunriseStr=dateToISO(riseDate); const sunsetStr=dateToISO(setDate);
+  // Heures de lever/coucher (format ISO en UTC avec Z)
+  const sun=calcSun(lat,lon,dayOfYear);
+  // Gestion du débordement jour UTC (sunset après minuit / sunrise avant)
+  const riseH=((sun.sunrise%24)+24)%24; const riseDayOff=Math.floor(sun.sunrise/24);
+  const setH=((sun.sunset%24)+24)%24; const setDayOff=Math.floor(sun.sunset/24);
+  const riseDate=new Date(Date.UTC(2024,0,dayOfYear+riseDayOff,Math.floor(riseH),Math.round((riseH%1)*60)));
+  const setDate=new Date(Date.UTC(2024,0,dayOfYear+setDayOff,Math.floor(setH),Math.round((setH%1)*60)));
+  // Formater "YYYY-MM-DDTHH:MMZ" (UTC explicite)
+  function fmtUTC(d){const y=d.getUTCFullYear(),mo=String(d.getUTCMonth()+1).padStart(2,'0'),da=String(d.getUTCDate()).padStart(2,'0'),h=String(d.getUTCHours()).padStart(2,'0'),mi=String(d.getUTCMinutes()).padStart(2,'0');return y+'-'+mo+'-'+da+'T'+h+':'+mi+'Z';}
+  const sunriseStr=fmtUTC(riseDate); const sunsetStr=fmtUTC(setDate);
 
   // Générer les 24h
 
@@ -1214,7 +1223,8 @@ async function fetchWeather(lat, lon, lite = false, signal = null) {
   for(let d=1;d<10;d++){
     const day=genDayWeather(band,lat,lon,dayOfYear+d,baseSeed+d*1000,false);
     // Ajuster l'état pour la cohérence Markov
-    const w=weatherWeights(band,Math.floor(((dayOfYear+d)/365*12)%12)+1,baseSeed+d*2000);
+    const hemAdj=lat<0?183:0; const adjDayM=(dayOfYear+d+hemAdj)%365||365;
+    const w=weatherWeights(band,Math.floor(adjDayM/365*12)%12+1,baseSeed+d*2000);
     day.stateIdx=pickState(w,prevStateIdx,baseSeed+d*3000);
     prevStateIdx=day.stateIdx;
     const st=STATES[day.stateIdx];
