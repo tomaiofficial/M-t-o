@@ -1099,6 +1099,7 @@ function genDayWeather(band, lat, lon, dayOfYear, daySeed, isToday) {
   const c=CLIMATE[band]; const tMean=smoothVal(c[0],dayOfYear);
   const tRange=smoothVal(c[1],dayOfYear); const hMean=smoothVal(c[2],dayOfYear);
   const wMean=smoothVal(c[5],dayOfYear); const cloudMean=smoothVal(c[4],dayOfYear);
+  const HOURS=[];
 
   // Choisir l'état météo du jour
   const weights=weatherWeights(band,month,daySeed+1000);
