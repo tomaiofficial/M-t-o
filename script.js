@@ -1158,6 +1158,126 @@ function buildWindSentence(wind, dirTxt, period) {
 //  Modélisation climatique + cycles diurnes + chaîne de Markov
 // ============================================================
 
+// ============================================================
+// Pirate Weather API : donnees reelles NOAA NWS (gratuit, sans pub)
+// https://pirate-weather.api.service.gov.uk/
+// ============================================================
+const PIRATE_WEATHER_KEY = "Zn2AgEk2Jx11czBPsCujuj1v2Cppvt4t";
+
+// Convertit un code Pirate Weather (Dark Sky-like) en code WMO standard
+function pirateToWmoCode(pwIcon) {
+  const map = {
+    "clear-day": 0,
+    "clear-night": 0,
+    "partly-cloudy-day": 2,
+    "partly-cloudy-night": 2,
+    "cloudy": 3,
+    "fog": 45,
+    "wind": 0,
+    "rain": 61,
+    "snow": 71,
+    "sleet": 67,
+    "hail": 77,
+    "thunderstorm": 95,
+    "tornado": 99
+  };
+  return map[pwIcon] != null ? map[pwIcon] : 0;
+}
+
+// Convertit la reponse Pirate Weather vers le format interne de l'app
+// (memes champs que ce que produisait Open-Meteo)
+function pirateToInternal(json) {
+  const cur = json.currently || {};
+  const daily = json.daily || {};
+  const hourly = json.hourly || {};
+
+  const curCode = pirateToWmoCode(cur.icon);
+  const isNight = cur.icon && cur.icon.endsWith("-night");
+
+  const current = {
+    time: new Date((cur.time || Math.floor(Date.now() / 1000)) * 1000).toISOString(),
+    temperature_2m: cur.temperature,
+    apparent_temperature: cur.apparentTemperature,
+    relative_humidity_2m: (cur.humidity || 0) * 100,
+    dew_point_2m: cur.dewPoint,
+    pressure_msl: cur.pressure,
+    surface_pressure: cur.pressure,
+    wind_speed_10m: cur.windSpeed,
+    wind_direction_10m: cur.windBearing,
+    wind_gusts_10m: cur.windGust || 0,
+    weather_code: curCode,
+    is_day: isNight ? 0 : 1,
+    precipitation: cur.precipIntensity || 0,
+    rain: cur.precipIntensity || 0,
+    snowfall: 0,
+    showers: 0,
+    cloud_cover: (cur.cloudCover || 0) * 100,
+    visibility: cur.visibility
+  };
+
+  // ---- HOURLY (prochaines 24h) ----
+  const hOut = {
+    time: [], temperature_2m: [], apparent_temperature: [], weather_code: [],
+    precipitation_probability: [], precipitation: [], wind_speed_10m: [],
+    wind_gusts_10m: [], cloud_cover: [], relative_humidity_2m: [],
+    wind_direction_10m: [], dew_point_2m: [], visibility: []
+  };
+  if (hourly.data) {
+    for (const h of hourly.data.slice(0, 24)) {
+      hOut.time.push(new Date(h.time * 1000).toISOString());
+      hOut.temperature_2m.push(h.temperature);
+      hOut.apparent_temperature.push(h.apparentTemperature);
+      hOut.weather_code.push(pirateToWmoCode(h.icon));
+      hOut.precipitation_probability.push(Math.round((h.precipProbability || 0) * 100));
+      hOut.precipitation.push(h.precipIntensity || 0);
+      hOut.wind_speed_10m.push(h.windSpeed);
+      hOut.wind_gusts_10m.push(h.windGust || 0);
+      hOut.cloud_cover.push((h.cloudCover || 0) * 100);
+      hOut.relative_humidity_2m.push((h.humidity || 0) * 100);
+      hOut.wind_direction_10m.push(h.windBearing || 0);
+      hOut.dew_point_2m.push(h.dewPoint);
+      hOut.visibility.push(h.visibility);
+    }
+  }
+
+  // ---- DAILY (10 jours) ----
+  const dOut = {
+    time: [], weather_code: [], temperature_2m_max: [], temperature_2m_min: [],
+    sunrise: [], sunset: [], uv_index_max: [], precipitation_probability_max: [],
+    precipitation_sum: [], wind_speed_10m_max: [], wind_gusts_10m_max: [],
+    wind_direction_10m_dominant: []
+  };
+  if (daily.data) {
+    for (const d of daily.data.slice(0, 10)) {
+      dOut.time.push(new Date(d.time * 1000).toISOString().split("T")[0]);
+      dOut.weather_code.push(pirateToWmoCode(d.icon));
+      dOut.temperature_2m_max.push(d.temperatureHigh);
+      dOut.temperature_2m_min.push(d.temperatureLow);
+      dOut.sunrise.push(new Date(d.sunriseTime * 1000).toISOString());
+      dOut.sunset.push(new Date(d.sunsetTime * 1000).toISOString());
+      dOut.uv_index_max.push(d.uvIndex || 0);
+      dOut.precipitation_probability_max.push(Math.round((d.precipProbability || 0) * 100));
+      dOut.precipitation_sum.push(d.precipIntensity || 0);
+      dOut.wind_speed_10m_max.push(d.windSpeed || 0);
+      dOut.wind_gusts_10m_max.push(d.windGust || 0);
+      dOut.wind_direction_10m_dominant.push(d.windBearing || 0);
+    }
+  }
+
+  return { current, hourly: hOut, daily: dOut };
+}
+
+// Appel Pirate Weather avec timeout
+async function callPirateWeather(lat, lon, signal = null) {
+  if (!PIRATE_WEATHER_KEY) throw new Error("PIRATE_WEATHER_KEY non configurée");
+  const url = `https://api.pirateweather.net/forecast/${PIRATE_WEATHER_KEY}/${lat},${lon}` +
+              `?units=si&lang=fr&exclude=minutely,alerts,flags`;
+  const res = await fetchWithTimeout(url, { signal }, 10000);
+  if (!res.ok) throw new Error(`Pirate Weather HTTP ${res.status}`);
+  const json = await res.json();
+  return pirateToInternal(json);
+}
+
 // ---------- Données climatiques mensuelles ----------
 // 5 bandes de latitude : 0=polaire(66-90°), 1=subpolaire(55-66°),
 // 2=tempérée(40-55°), 3=subtropicale(25-40°), 4=tropicale(0-25°)
@@ -1372,8 +1492,18 @@ function genDayWeather(band, lat, lon, dayOfYear, daySeed, isToday) {
   };
 }
 
-// ---------- Point d'entrée : génère toute la météo ----------
+// ---------- Point d'entrée : recupere la météo REELLE via Pirate Weather ----------
+// Fallback sur le générateur procédural si Pirate Weather échoue (no key, 429, etc.)
 async function fetchWeather(lat, lon, lite = false, signal = null) {
+  try {
+    return await callPirateWeather(lat, lon, signal);
+  } catch (e) {
+    console.warn("[Pirate Weather] fallback procédural :", e.message);
+    return await fetchWeatherProcedural(lat, lon, lite, signal);
+  }
+}
+
+async function fetchWeatherProcedural(lat, lon, lite = false, signal = null) {
   const now=new Date();
   const dayOfYear=Math.floor((now-new Date(now.getFullYear(),0,0))/86400000);
   const hour=now.getHours(); const minute=now.getMinutes();
