@@ -1007,11 +1007,19 @@ function buildWindSentence(wind, dirTxt, period) {
 // 2=tempérée(40-55°), 3=subtropicale(25-40°), 4=tropicale(0-25°)
 // Pour chaque bande : 12 mois de [temp_moy, ampl_diurne, hum%, precip_j/30, nuages%, vent_kmh]
 const CLIMATE = [
+  // Bande 0: Polaire 66-90° (Arctique, Antarctique) - inchangé, déjà réaliste
   [[-16,-14,-10,-4,2,8,12,10,6,0,-6,-12],[3,4,5,6,8,10,10,9,7,5,3,3],[82,80,78,75,72,68,70,74,78,80,82,83],[16,14,13,11,9,7,9,11,13,15,17,17],[72,70,66,62,56,50,52,58,64,68,72,74],[24,22,20,18,16,14,15,16,18,20,22,24]],
-  [[-8,-6,-1,4,10,16,18,17,12,6,1,-4],[4,5,6,8,10,12,12,11,9,7,5,4],[84,82,78,74,70,66,68,72,76,80,82,84],[19,16,15,13,11,9,11,13,15,17,19,20],[76,74,70,64,58,52,54,58,64,70,74,76],[20,18,16,15,14,12,12,14,15,16,18,20]],
-  [[2,4,8,12,18,22,25,24,20,14,8,4],[6,7,8,10,12,14,14,13,11,9,7,6],[80,76,70,66,62,58,56,58,62,68,76,80],[12,11,12,10,8,6,6,8,10,12,13,14],[66,62,56,50,46,42,40,42,48,54,62,66],[16,15,14,12,10,9,9,10,12,14,15,16]],
-  [[10,12,15,18,22,28,32,30,26,20,14,10],[8,9,10,12,14,16,16,15,13,11,9,8],[70,66,60,55,50,45,40,42,48,56,64,70],[8,7,6,4,2,1,1,2,3,5,7,8],[54,50,44,38,32,28,26,28,34,40,48,54],[12,11,10,9,8,7,7,8,9,10,11,12]],
-  [[24,24,25,26,27,27,27,27,27,27,26,24],[10,10,10,10,10,10,10,10,10,10,10,10],[78,76,74,72,70,68,68,70,72,74,76,78],[10,8,8,6,4,2,2,4,6,8,10,12],[60,56,52,48,44,40,40,44,48,52,58,60],[8,8,7,7,6,6,6,6,7,7,8,8]]
+  // Bande 1: Subpolaire 55-66° (Scandinavie, Sibérie) - léger ajustement amplitude
+  [[-7,-5,0,5,10,15,17,16,11,5,0,-5],[4,5,6,8,10,11,11,10,9,7,5,4],[84,82,78,74,70,66,68,72,76,80,82,84],[18,16,15,13,11,10,11,13,15,17,19,20],[76,74,70,64,58,54,54,58,64,70,74,76],[20,18,16,15,14,13,13,14,15,16,18,20]],
+  // Bande 2: Tempérée 40-55° (France, UK, Allemagne, nord USA)
+  // CORRIGÉ : été moins chaud, amplitude réduite, plus de pluie
+  [[4,5,8,11,15,18,20,20,16,12,7,5],[5,6,7,8,9,10,10,9,8,7,6,5],[83,80,76,72,68,64,62,64,68,74,80,84],[13,12,12,11,10,9,9,10,11,12,14,14],[70,66,62,56,52,48,46,48,52,58,64,70],[18,17,16,14,12,11,11,12,14,16,17,18]],
+  // Bande 3: Subtropicale 25-40° (Méditerranée, Japon, sud USA)
+  // CORRIGÉ : été moins extrême, plus de précipitations, amplitude réduite
+  [[9,11,14,17,21,25,27,27,24,19,14,10],[7,8,9,10,11,11,11,11,10,9,8,7],[72,68,64,60,56,55,55,56,58,62,68,74],[10,9,9,7,5,5,5,5,6,8,9,10],[54,50,46,42,36,32,30,32,36,42,48,54],[13,12,11,10,9,8,8,9,10,11,12,13]],
+  // Bande 4: Tropicale 0-25° (Amazonie, Indonésie, Congo)
+  // CORRIGÉ : plus de précipitations cohérent avec climats tropicaux
+  [[25,25,26,26,27,27,27,27,27,27,26,25],[8,8,8,8,8,8,8,8,8,8,8,8],[80,78,76,74,72,70,70,72,74,76,78,80],[12,10,10,8,6,4,4,6,8,10,12,14],[60,56,52,48,44,40,40,44,48,52,58,62],[8,8,7,7,6,6,6,6,7,7,8,8]]
 ];
 
 const MEAN_PRESSURE = [1008,1012,1015,1017,1010];
@@ -1069,34 +1077,39 @@ function weatherWeights(band, month, seed) {
   const rng = () => seededRand(seed++);
   const c=CLIMATE[band]; const m=month-1;
   const t=c[0][m], pDays=c[3][m], cloud=c[4][m], hum=c[2][m];
-  const pProb=pDays/30; const isCold=t<5; const isWarm=t>18; const isHot=t>28;
+  const pProb=pDays/30; const isCold=t<5; const isWarm=t>18; const isHot=t>28; const isHumid=hum>50;
   const clearW=Math.max(0.02,(100-cloud)/100);
   const cloudW=Math.max(0.02,cloud/100);
   const w=[0,0,0,0,0,0,0,0,0,0,0];
   // Ciel dégagé → couvert basé sur la couverture nuageuse
-  w[0]=clearW*0.25;   w[1]=clearW*0.20;
-  w[2]=0.12+0.06*rng(); // partiellement nuageux (toujours possible)
+  // Plus de poids sur les états nuageux quand cloud est élevé
+  w[0]=clearW*0.20;   w[1]=clearW*0.18;
+  w[2]=0.10+0.08*cloudW; // partiellement nuageux corrélé à la couverture
   w[3]=cloudW*0.35;
-  // Brouillard
-  if(hum>80&&t<15&&t>-5) w[4]=0.08+0.04*rng();
-  // Précipitations
-  if(pProb>0.05){
-    const rainBase=pProb*0.6;
-    if(isCold){w[8]=rainBase*0.5;w[9]=rainBase*0.12;w[6]=rainBase*0.12;}
-    else{w[5]=rainBase*0.18;w[6]=rainBase*0.45;w[7]=rainBase*0.12;}
-    if(isWarm&&hum>50)w[10]=pProb*0.2+0.02*rng();
-    if(isHot&&hum>40)w[10]=pProb*0.35+0.05*rng();
+  // Brouillard (quand humide et frais)
+  if(hum>75&&t<18&&t>-3) w[4]=0.06+0.06*rng();
+  // Précipitations (seuil abaissé à 1% pour inclure les mois secs)
+  if(pProb>0.01){
+    const rainBase=Math.min(pProb,0.5)*0.7;
+    if(isCold){w[8]=rainBase*0.45;w[9]=rainBase*0.10;w[6]=rainBase*0.10;}
+    else{w[5]=rainBase*0.15;w[6]=rainBase*0.45;w[7]=rainBase*0.12;}
+    // Orages : quand chaud + humide ou instable
+    if((isHot&&hum>40)||(isWarm&&isHumid))w[10]=Math.min(pProb,0.4)*0.5+0.04*rng();
+    // Bruine possible même par faible proba
+    if(!isCold&&pProb<0.2)w[5]=Math.max(w[5],0.02+0.03*rng());
   }
   return w;
 }
 
 // Choisit un état météo selon les poids, avec persistance Markov
+// Retourne l'index du tableau STATES
 function pickState(weights, prevState, persist) {
-  if(prevState!=null&&seededRand(~~(persist*1e6))<0.45) return prevState;
+  if(prevState!=null&&seededRand(~~(persist*1e6))<0.55) return prevState;
   const total=weights.reduce((a,b)=>a+b,0); if(total<=0) return 0;
-  let r=seededRand(~~(persist*1e6+prevState*100))%total;
-  for(let i=0;i<weights.length;i++){r-=weights[i];if(r<=0)return i;}
-  return 0;
+  const r=seededRand(~~(persist*1e6+prevState*100))*total;
+  let acc=0;
+  for(let i=0;i<weights.length;i++){acc+=weights[i];if(r<acc)return i;}
+  return weights.length-1;
 }
 
 // ---------- Génération météo pour un jour ----------
