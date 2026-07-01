@@ -314,13 +314,6 @@ function fmtTemp(c) {
   return `${Math.round(c)}°`;
 }
 
-// Format precis : une decimale (utilise pour temperature courante + ressenti)
-function fmtTempPrecise(c) {
-  if (c == null || isNaN(c)) return "—";
-  if (state.unit === "F") return `${(c * 9/5 + 32).toFixed(1)}°`;
-  return `${c.toFixed(1)}°`;
-}
-
 function getHourFromISO(iso) {
   if (!iso) return null;
   const d = new Date(iso);
@@ -1919,8 +1912,8 @@ function applyLiveTick() {
   if (!cur) return;
 
   // Temp + ressent
-  setText('temp', fmtTempPrecise(cur.temperature_2m));
-  setText('feels', fmtTempPrecise(cur.apparent_temperature));
+  setText('temp', fmtTemp(cur.temperature_2m));
+  setText('feels', fmtTemp(cur.apparent_temperature));
   setText('feelsLbl', 'Ressenti');
 
   // Autres infos live : humidite, vent, rafales, precip, nuages, point de rosee, pression
@@ -2198,7 +2191,7 @@ function renderCity(city, w) {
 
   // Location
   $("cityName").textContent = city.name;
-  $("temp").textContent = fmtTempPrecise(cur.temperature_2m);
+  $("temp").textContent = fmtTemp(cur.temperature_2m);
   $("condition").textContent = info.label;
   $("hilo").textContent = `H:${fmtTemp(daily.temperature_2m_max[0])}  L:${fmtTemp(daily.temperature_2m_min[0])}`;
 
@@ -2270,7 +2263,7 @@ function renderCity(city, w) {
       <div class="hour-time">${timeLabel}</div>
       <div class="hour-icon">${icon(wi.icon, 32)}</div>
       <div class="hour-pop${popVisible ? popClass : " empty"}">${popVisible ? Math.round(pop) + "%" : ""}</div>
-      <div class="hour-temp${hasData ? "" : " pending"}">${hasData ? fmtTempPrecise(hourTemp) : "—"}</div>
+      <div class="hour-temp${hasData ? "" : " pending"}">${hasData ? fmtTemp(hourTemp) : "—"}</div>
     `;
     $hourly.appendChild(h);
     hourlyCells.push({
@@ -2347,9 +2340,9 @@ function renderCity(city, w) {
   $("precipSub").textContent = `Risque ${daily.precipitation_probability_max[0] || 0}% aujourd'hui`;
   $("precipNow").textContent = cur.precipitation != null ? `${(cur.precipitation || 0).toFixed(1)} mm/h` : "—";
   $("humidity").textContent = `${Math.round(cur.relative_humidity_2m)}%`;
-  $("dewPoint").textContent = `Point de rosée ${fmtTempPrecise(cur.dew_point_2m || (cur.temperature_2m - (100 - cur.relative_humidity_2m) / 5))}`;
+  $("dewPoint").textContent = `Point de rosée ${fmtTemp(cur.dew_point_2m || (cur.temperature_2m - (100 - cur.relative_humidity_2m) / 5))}`;
   $("cloudCover").textContent = `Nuages ${Math.round(cur.cloud_cover || 0)}%`;
-  $("feels").textContent = fmtTempPrecise(cur.apparent_temperature);
+  $("feels").textContent = fmtTemp(cur.apparent_temperature);
   $("feelsSub").textContent = cur.apparent_temperature < cur.temperature_2m - 0.5 ? "Plus frais" : cur.apparent_temperature > cur.temperature_2m + 0.5 ? "Plus chaud" : "Similaire";
   // Visibilite reelle via API (km)
   if (cur.visibility != null) {
