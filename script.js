@@ -296,13 +296,16 @@ function fmtTemp(c) {
 }
 
 function getHourFromISO(iso) {
-  const m = (iso || "").match(/T(\d{2})/);
-  return m ? parseInt(m[1], 10) : null;
+  if (!iso) return null;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d.getHours();
 }
 
 function getMinutesFromISO(iso) {
-  const m = (iso || "").match(/T(\d{2}):(\d{2})/);
-  return m ? `${m[1]}:${m[2]}` : null;
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 function fmtTime(iso) {
@@ -1057,6 +1060,7 @@ async function fetchWeather(lat, lon, lite = false, signal = null) {
   }
 
   // Full forecast
+  // Étape A : Tomorrow.io pour current + hourly (précis, IA)
   const url = `https://api.tomorrow.io/v4/weather/forecast?location=${lat},${lon}&apikey=${TOMORROW_API_KEY}&timesteps=1h,1d&units=metric`;
   const res = await f(url);
   if (!res.ok) throw new Error("API error Tomorrow.io");
@@ -1106,26 +1110,45 @@ async function fetchWeather(lat, lon, lite = false, signal = null) {
     hourly.wind_direction_10m.push(v.windDirection ?? 0);
   }
 
-  // ---- Construire daily ----
-  const daily = { time: [], weather_code: [], temperature_2m_max: [], temperature_2m_min: [], sunrise: [], sunset: [], uv_index_max: [], precipitation_probability_max: [], precipitation_sum: [], wind_speed_10m_max: [], wind_gusts_10m_max: [], wind_direction_10m_dominant: [] };
-  for (const iv of dailyIntervals) {
-    const v = iv.values;
-    daily.time.push(iv.time);
-    daily.weather_code.push(mapWeatherCode(v.weatherCodeMax ?? v.weatherCodeAvg ?? 1000));
-    daily.temperature_2m_max.push(v.temperatureMax ?? 0);
-    daily.temperature_2m_min.push(v.temperatureMin ?? 0);
-    daily.sunrise.push(v.sunriseTime ?? "");
-    daily.sunset.push(v.sunsetTime ?? "");
-    daily.uv_index_max.push(v.uvIndexMax ?? 0);
-    daily.precipitation_probability_max.push(v.precipitationProbabilityMax ?? 0);
-    daily.precipitation_sum.push(v.rainAccumulationSum ?? 0);
-    daily.wind_speed_10m_max.push(v.windSpeedMax ?? 0);
-    daily.wind_gusts_10m_max.push(v.windGustMax ?? 0);
-    daily.wind_direction_10m_dominant.push(v.windDirectionMax ?? 0);
+  // ---- Construire daily avec Open-Meteo (10 jours) ----
+  const dailyFields = 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant';
+  let daily = { time: [], weather_code: [], temperature_2m_max: [], temperature_2m_min: [], sunrise: [], sunset: [], uv_index_max: [], precipitation_probability_max: [], precipitation_sum: [], wind_speed_10m_max: [], wind_gusts_10m_max: [], wind_direction_10m_dominant: [] };
+
+  try {
+    const omUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=${dailyFields}&wind_speed_unit=kmh&timezone=auto&forecast_days=10`;
+    const omRes = await f(omUrl);
+    if (omRes.ok) {
+      const om = await omRes.json();
+      if (om && om.daily && om.daily.time && om.daily.time.length >= 7) {
+        daily = om.daily;
+      }
+    }
+  } catch (e) {
+    // Fallback : utiliser les données Tomorrow.io (5-6 jours)
+  }
+
+  // Si Open-Meteo a échoué, on prend les daily Tomorrow.io
+  if (!daily.time || daily.time.length < 2) {
+    daily = { time: [], weather_code: [], temperature_2m_max: [], temperature_2m_min: [], sunrise: [], sunset: [], uv_index_max: [], precipitation_probability_max: [], precipitation_sum: [], wind_speed_10m_max: [], wind_gusts_10m_max: [], wind_direction_10m_dominant: [] };
+    for (const iv of dailyIntervals) {
+      const v = iv.values;
+      daily.time.push(iv.time);
+      daily.weather_code.push(mapWeatherCode(v.weatherCodeMax ?? v.weatherCodeAvg ?? 1000));
+      daily.temperature_2m_max.push(v.temperatureMax ?? 0);
+      daily.temperature_2m_min.push(v.temperatureMin ?? 0);
+      daily.sunrise.push(v.sunriseTime ?? "");
+      daily.sunset.push(v.sunsetTime ?? "");
+      daily.uv_index_max.push(v.uvIndexMax ?? 0);
+      daily.precipitation_probability_max.push(v.precipitationProbabilityMax ?? 0);
+      daily.precipitation_sum.push(v.rainAccumulationSum ?? 0);
+      daily.wind_speed_10m_max.push(v.windSpeedMax ?? 0);
+      daily.wind_gusts_10m_max.push(v.windGustMax ?? 0);
+      daily.wind_direction_10m_dominant.push(v.windDirectionMax ?? 0);
+    }
   }
 
   // Déterminer is_day à partir du sunrise/sunset
-  if (daily.sunrise.length > 0 && daily.sunset.length > 0 && daily.sunrise[0] && daily.sunset[0]) {
+  if (daily.sunrise && daily.sunrise.length > 0 && daily.sunset && daily.sunset.length > 0 && daily.sunrise[0] && daily.sunset[0]) {
     const now = new Date().getTime();
     const rise = new Date(daily.sunrise[0]).getTime();
     const set = new Date(daily.sunset[0]).getTime();
