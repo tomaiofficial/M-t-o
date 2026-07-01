@@ -79,6 +79,11 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   overflow-x: hidden;
   scroll-behavior: smooth;
   background: transparent;
+  /* Transition douce pour eviter les flickers jour/nuit lors des changements de ville */
+  transition: opacity 0.4s ease;
+}
+.weather-bg {
+  transition: opacity 0.6s ease;
 }
 
 /* ============================================================
@@ -978,6 +983,7 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   font-size: 15px;
   font-weight: 500;
 }
+.hour-temp.pending { opacity: 0.35; }
 
 /* ===== Daily ===== */
 .daily { display: flex; flex-direction: column; }

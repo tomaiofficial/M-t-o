@@ -416,29 +416,46 @@ function getDayCycleInfo(cur, daily) {
   let phase;
 
   if (sunriseMs == null || sunsetMs == null) {
-    const h = now.getHours();
-    isNight = h >= 21 || h < 6;
-    phase = isNight ? "night" : "day";
+    // Pas de sunrise/sunset dispo : utiliser cur.is_day (precis) ou fallback h
+    if (cur && typeof cur.is_day === 'number') {
+      isNight = cur.is_day === 0;
+      phase = isNight ? "night" : "day";
+    } else {
+      const h = now.getHours();
+      isNight = h >= 21 || h < 6;
+      phase = isNight ? "night" : "day";
+    }
   } else {
     // Marges crépuscule : 30 min avant lever (aube) / 30 min après coucher (crépuscule)
     const dawnMs = sunriseMs - 30 * 60 * 1000;
     const duskMs = sunsetMs + 30 * 60 * 1000;
 
-    if (nowMs < dawnMs) {
-      isNight = true;
-      phase = "night";
-    } else if (nowMs < sunriseMs) {
-      isNight = false;
-      phase = "dawn";
-    } else if (nowMs < duskMs && nowMs >= sunsetMs) {
-      isNight = false;
-      phase = "dusk";
-    } else if (nowMs >= duskMs) {
-      isNight = true;
-      phase = "night";
+    // Priorite a cur.is_day : evite les flicker entre h-based et sun-based
+    // (ex: aube a 5h55 avec sunrise a 6h00 -> h-based dit nuit, sun-based dit aube)
+    if (cur && typeof cur.is_day === 'number') {
+      isNight = cur.is_day === 0;
+      if (isNight) {
+        phase = (nowMs >= duskMs || nowMs < dawnMs) ? "night" : "night";
+      } else {
+        phase = (nowMs < sunriseMs) ? "dawn" : (nowMs >= sunsetMs ? "dusk" : "day");
+      }
     } else {
-      isNight = false;
-      phase = "day";
+      if (nowMs < dawnMs) {
+        isNight = true;
+        phase = "night";
+      } else if (nowMs < sunriseMs) {
+        isNight = false;
+        phase = "dawn";
+      } else if (nowMs < duskMs && nowMs >= sunsetMs) {
+        isNight = false;
+        phase = "dusk";
+      } else if (nowMs >= duskMs) {
+        isNight = true;
+        phase = "night";
+      } else {
+        isNight = false;
+        phase = "day";
+      }
     }
   }
 
@@ -1356,6 +1373,8 @@ function applyHourlyInterpolation() {
 
   hourlyCells.forEach(cell => {
     const i = cell.idx;
+    // Skip cells sans donnees (placeholder en attente du full)
+    if (!hourly.time || hourly.time[i] == null) return;
     if (!hourly.precipitation_probability || hourly.precipitation_probability[i] == null) return;
     const targetPop = hourly.precipitation_probability[i];
     const targetMm = (hourly.precipitation && hourly.precipitation[i]) || 0;
@@ -1363,10 +1382,8 @@ function applyHourlyInterpolation() {
       ? (prevLiveData.hourly.precipitation_probability[i] ?? targetPop) : targetPop;
     const t = Math.min(1, (now - lastFetchMs) / REFR);
     const interpPop = lerp(prevPop, targetPop, t);
-    // Seuil 1% : affiche des qu'il y a un risque
     const visible = interpPop >= 1;
     const txt = visible ? Math.round(interpPop) + '%' : '';
-    // Intensite : heavy si pop>=70% OU mm>=4
     const heavy = interpPop >= 70 || targetMm >= 4;
     const medium = !heavy && (interpPop >= 30 || targetMm >= 1);
     const wantClass = visible ? (heavy ? ' heavy' : (medium ? ' medium' : '')) : ' empty';
@@ -1544,38 +1561,63 @@ function renderCity(city, w) {
   $hourly.innerHTML = "";
   hourlyCells.length = 0;
 
+  // Determiner l'heure actuelle
   const currentHour = getHourFromISO(cur.time);
-  const nowIdx = currentHour != null
-    ? hourly.time.findIndex(t => getHourFromISO(t) === currentHour)
-    : 0;
-  const startIdx = nowIdx >= 0 ? nowIdx : 0;
+  // Trouver l'index de l'heure courante dans hourly.time
+  let nowIdx = -1;
+  if (hourly && hourly.time && hourly.time.length > 0) {
+    if (currentHour != null) {
+      nowIdx = hourly.time.findIndex(t => getHourFromISO(t) === currentHour);
+    }
+    if (nowIdx < 0) nowIdx = 0; // fallback
+  }
+  // Forcer 24 cellules meme si hourly est vide (lite phase)
+  const TOTAL_HOURS = 24;
+  const hasHourlyData = hourly && hourly.time && hourly.time.length > 0;
 
-  for (let i = startIdx; i < Math.min(startIdx + 24, hourly.time.length); i++) {
+  for (let k = 0; k < TOTAL_HOURS; k++) {
+    const i = hasHourlyData ? (nowIdx + k) : k;
+    const hasData = hasHourlyData && i < hourly.time.length;
     const h = document.createElement("div");
     h.className = "hour";
-    const isNow = i === startIdx;
-    const timeLabel = isNow ? "Maint." : fmtHourLabel(hourly.time[i]);
-    const hHour = getHourFromISO(hourly.time[i]);
-    // Pour "Maint.", utiliser les données current (réelles) au lieu de hourly (prévision)
-    const hourCode = isNow ? cur.weather_code : hourly.weather_code[i];
-    const hourTemp = isNow ? cur.temperature_2m : hourly.temperature_2m[i];
-    const hourIsNight = isNow ? isNight : isHourAtNight(hourly.time[i], daily);
-    const wi = wmoInfo(hourCode, hourIsNight);
-    const pop = (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0;
-    const mmHour = (hourly.precipitation && hourly.precipitation[i]) || 0;
-    // Afficher les % a partir de 1% (avec code couleur d'intensite)
-    const popVisible = pop >= 1;
+    const isNow = k === 0;
+    let timeLabel;
+    let hourCode;
+    let hourTemp;
+    let hourIsNight;
+    let pop = 0;
+    let mmHour = 0;
+    let popVisible = false;
     let popClass = '';
-    if (pop >= 70 || mmHour >= 4) popClass = ' heavy';
-    else if (pop >= 30 || mmHour >= 1) popClass = ' medium';
+    if (hasData) {
+      timeLabel = isNow ? "Maint." : fmtHourLabel(hourly.time[i]);
+      hourCode = isNow ? cur.weather_code : hourly.weather_code[i];
+      hourTemp = isNow ? cur.temperature_2m : hourly.temperature_2m[i];
+      hourIsNight = isNow ? isNight : isHourAtNight(hourly.time[i], daily);
+      pop = (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0;
+      mmHour = (hourly.precipitation && hourly.precipitation[i]) || 0;
+      popVisible = pop >= 1;
+      if (pop >= 70 || mmHour >= 4) popClass = ' heavy';
+      else if (pop >= 30 || mmHour >= 1) popClass = ' medium';
+    } else {
+      // Pas de donnee : construire l'heure depuis maintenant + k
+      const baseTime = cur.time ? new Date(cur.time) : new Date();
+      baseTime.setMinutes(0, 0, 0);
+      baseTime.setHours(baseTime.getHours() + k);
+      timeLabel = isNow ? "Maint." : fmtHourLabel(baseTime.toISOString());
+      hourCode = cur.weather_code || 0;
+      hourTemp = cur.temperature_2m;
+      hourIsNight = baseTime.getHours() >= 21 || baseTime.getHours() < 6;
+      // Pas de precip connue -> placeholder
+    }
+    const wi = wmoInfo(hourCode, hourIsNight);
     h.innerHTML = `
       <div class="hour-time">${timeLabel}</div>
       <div class="hour-icon">${icon(wi.icon, 32)}</div>
       <div class="hour-pop${popVisible ? popClass : " empty"}">${popVisible ? Math.round(pop) + "%" : ""}</div>
-      <div class="hour-temp">${fmtTemp(hourTemp)}</div>
+      <div class="hour-temp${hasData ? "" : " pending"}">${hasData ? fmtTemp(hourTemp) : "—"}</div>
     `;
     $hourly.appendChild(h);
-    // Stocke les references DOM pour le diffing ulterieur
     hourlyCells.push({
       idx: i,
       root: h,
@@ -1585,7 +1627,9 @@ function renderCity(city, w) {
       elTemp: h.querySelector(".hour-temp"),
       isNight: hourIsNight,
       isPopVisible: popVisible,
-      isNow
+      isNow,
+      hasData,
+      k
     });
   }
 
@@ -1749,6 +1793,17 @@ function clearAllWeatherUI() {
 // Desactive le skeleton (apres render reussi)
 function disableSkeleton() {
   document.body.classList.remove("loading");
+  // Reinitialise l'animation shimmer en supprimant/ajoutant la classe
+  // sur tous les elements qui ont le shimmer inline (defense en profondeur)
+  const shimmered = document.querySelectorAll('.temp, .condition, .hilo, .desc-card p, .detail-value, .detail-sub, .hour-time, .hour-temp, .hour-icon, .day-name, .day-low, .day-high, #cityName');
+  shimmered.forEach(el => {
+    el.style.color = '';
+    el.style.background = '';
+    el.style.animation = '';
+  });
+  // Force aussi cityName::after (spinner) a disparaitre
+  const cityName = $('cityName');
+  if (cityName) cityName.classList.remove('loading-city');
 }
 
 // Point d'entree unique pour changer de ville. Annule toute requete
@@ -1762,6 +1817,21 @@ async function switchCity(city) {
   }
   const controller = new AbortController();
   state.currentFetchController = controller;
+
+  // SECURITE : timeout 8s pour forcer la suppression du skeleton
+  const skeletonTimeout = setTimeout(() => {
+    if (document.body.classList.contains('loading')) {
+      console.warn('Skeleton timeout - force disable');
+      disableSkeleton();
+      // Affiche un message d'erreur clair
+      const c = $('cityName');
+      if (c && (c.textContent.includes('…') || c.textContent.includes('Chargement'))) {
+        c.textContent = "Ville introuvable";
+        $("temp").textContent = "—";
+        $("condition").textContent = "Réseau lent";
+      }
+    }
+  }, 8000);
 
   // 2) Incremente le requestId pour invalider toute operation async en cours
   const myRequestId = ++state.requestId;
@@ -1812,17 +1882,34 @@ async function switchCity(city) {
     renderCity(city, w);
     disableSkeleton();
   } catch (e) {
-    if (e.name === 'AbortError') return;
-    if (myRequestId !== state.requestId) return;
+    if (e.name === 'AbortError') {
+      clearTimeout(skeletonTimeout);
+      return;
+    }
+    if (myRequestId !== state.requestId) {
+      clearTimeout(skeletonTimeout);
+      return;
+    }
     // Continue quand meme vers le full fetch en fallback
   }
 
   // 6) PHASE 2 : FULL FETCH (3-5s) - en arriere-plan, ajoute 10 jours, hourly 24h
-  if (myRequestId !== state.requestId) return;
+  if (myRequestId !== state.requestId) {
+    clearTimeout(skeletonTimeout);
+    return;
+  }
   try {
     const full = await fetchWeather(city.lat, city.lon, false, controller.signal);
-    if (myRequestId !== state.requestId) return; // nouvelle ville demandee
-    if (!full || !full.current) return; // silencieux si echec (lite est deja affiche)
+    if (myRequestId !== state.requestId) {
+      clearTimeout(skeletonTimeout);
+      return;
+    } // nouvelle ville demandee
+    if (!full || !full.current) {
+      // Silencieux : le lite est deja affiche. Mais on enleve le skeleton au cas ou.
+      disableSkeleton();
+      clearTimeout(skeletonTimeout);
+      return;
+    }
 
     // Met a jour avec les donnees completes sans reflicker
     state.lastWeather = full;
@@ -1831,9 +1918,16 @@ async function switchCity(city) {
     // Mets a jour currLiveData.current (le reste est garde du lite)
     if (currLiveData) currLiveData.current = full.current;
     renderCity(city, full);
+    disableSkeleton(); // SECURITE : assure que le skeleton est bien enleve
   } catch (e) {
-    if (e.name === 'AbortError') return;
-    if (myRequestId !== state.requestId) return;
+    if (e.name === 'AbortError') {
+      clearTimeout(skeletonTimeout);
+      return;
+    }
+    if (myRequestId !== state.requestId) {
+      clearTimeout(skeletonTimeout);
+      return;
+    }
     // Si on a deja le lite affiche, on n'affiche pas d'erreur
     if (!state.lastWeather) {
       $("cityName").textContent = "Erreur";
@@ -1841,6 +1935,8 @@ async function switchCity(city) {
       $("condition").textContent = "Vérifiez votre connexion";
     }
     disableSkeleton();
+  } finally {
+    clearTimeout(skeletonTimeout);
   }
 }
 
