@@ -1047,10 +1047,11 @@ function calcSun(lat, lon, day) {
   const dec=23.44*rad*Math.sin((2*Math.PI/365)*(day-81));
   const latR=clampedLat*rad;
   const cosH=-Math.tan(latR)*Math.tan(dec);
-  const h=Math.acos(Math.max(-1,Math.min(1,cosH)))/15;
+  // acos retourne des radians → convertir en heures : *180/π puis /15
+  const dayHalfHours=Math.acos(Math.max(-1,Math.min(1,cosH)))*12/Math.PI;
   const noon=12-lon/15;
-  if(h===0) return{sunrise:12,sunset:12}; // nuit polaire
-  return{sunrise:noon-h/2,sunset:noon+h/2};
+  if(dayHalfHours===0) return{sunrise:12,sunset:12}; // nuit polaire
+  return{sunrise:noon-dayHalfHours,sunset:noon+dayHalfHours};
 }
 
 function dateToISO(date){const y=date.getFullYear(),m=String(date.getMonth()+1).padStart(2,'0'),d=String(date.getDate()).padStart(2,'0'),h=String(date.getHours()).padStart(2,'0'),min=String(date.getMinutes()).padStart(2,'0');return y+'-'+m+'-'+d+'T'+h+':'+min;}
@@ -1114,10 +1115,13 @@ function genDayWeather(band, lat, lon, dayOfYear, daySeed, isToday) {
   const tempAdj=isSnow?-2:isRain?-1:0;
 
   // Heures de lever/coucher (format ISO pour compatibilité)
-  const sun=calcSun(lat,lon,dayOfYear);
-  const sunH=Math.floor(sun.sunrise); const sunM=(sun.sunrise-sunH)*60;
-  const setH=Math.floor(sun.sunset); const setM=(sun.sunset-setH)*60;
+  const sun=calcSun(lat,lon,dayOfYear); // renvoie des heures UTC
   const baseDate=new Date(dayOfYear*86400000+new Date(Date.UTC(2024,0,0)).getTime());
+  const tzHours=-(baseDate.getTimezoneOffset())/60; // décalage local p.ex. +2 pour Paris été
+  const localRise=(sun.sunrise+tzHours+24)%24;
+  const localSet=(sun.sunset+tzHours+24)%24;
+  const sunH=Math.floor(localRise); const sunM=(localRise-sunH)*60;
+  const setH=Math.floor(localSet); const setM=(localSet-setH)*60;
   const riseDate=new Date(baseDate); riseDate.setHours(sunH,Math.round(sunM),0);
   const setDate=new Date(baseDate); setDate.setHours(setH,Math.round(setM),0);
   const sunriseStr=dateToISO(riseDate); const sunsetStr=dateToISO(setDate);
@@ -1125,9 +1129,8 @@ function genDayWeather(band, lat, lon, dayOfYear, daySeed, isToday) {
   // Générer les 24h
 
   for(let h=0;h<24;h++){
-    // Température diurne : sinusoïde avec max à 14h, min à 5h
-    const diurnalPos=((h-5+24)%24)/24; // 0 à 1, 0 = 5h (min)
-    const diurnalFactor=Math.sin(diurnalPos*Math.PI-0.5*Math.PI); // -1 à 1
+    // Température diurne : min à 5h, max à 17h (5 PM) - sinusoïde réaliste
+    const diurnalFactor=-Math.cos(2*Math.PI*(h-5)/24); // -1 à 5h, +1 à 17h
     const hourTemp=dayTempBase+tempAdj+diurnalFactor*tRange/2+(rng()-0.5)*1.5;
 
     // Humidité
@@ -1230,7 +1233,7 @@ async function fetchWeather(lat, lon, lite = false, signal = null) {
       relative_humidity_2m:cur.relative_humidity_2m,
       apparent_temperature:cur.apparent_temperature,
       is_day:cur.time?(()=>{
-        const h=new Date(cur.time).getHours();
+        const h=new Date(cur.time).getUTCHours();
         const s=calcSun(lat,lon,dayOfYear);
         return(h>=s.sunrise&&h<s.sunset)?1:0;
       })():1,
