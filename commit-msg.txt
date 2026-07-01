@@ -1,0 +1,26 @@
+feat: vraie IA LLM pour les descriptions météo
+
+Pollinations.ai (gratuit, sans cle API) genere un paragraphe naturel en
+francais a partir des vraies conditions observees. Les templates
+statiques sont gardes uniquement en fallback immediat et en cas
+d'echec du LLM.
+
+- generateAIDescription() : appelle text.pollinations.ai avec un
+  prompt structure (ville, condition, temperatures, vent, prochaine
+  pluie) et recoit un bulletin de 2-3 phrases.
+- Cache localStorage par (ville + tranche de 30 min) pour eviter de
+  re-frapper l'API a chaque refresh. TTL 30 min, nettoyage auto.
+- Fallback transparent : le template reste affiche pendant l'appel
+  LLM, puis est remplace des que la reponse arrive.
+- Timeout 15s sur l'appel LLM via fetchWithTimeout pour ne jamais
+  bloquer l'UI.
+- fetchWithTimeout() reintroduit pour Nominatim (reverse + search)
+  avec 6s de timeout.
+
+Fix init : premiere visite charge Paris immediatement, la geoloc
+est tentee en best-effort 1.5s plus tard pour ne pas bloquer.
+
+Fix switchCity : disableSkeleton() ajoute dans le catch du lite
+fetch pour combler le trou ou le spinner pouvait rester affiche.
+
+Co-Authored-By: Letta Code <noreply@letta.com>

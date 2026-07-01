@@ -100,6 +100,25 @@ const LS_KEY = "meteo_v5";
 const $ = id => document.getElementById(id);
 const app = $("app");
 
+// Timeout par defaut pour les appels reseau externes (8s)
+// Empeche l'UI de rester bloquee si Nominatim hang.
+const FETCH_TIMEOUT_MS = 8000;
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const externalSignal = options.signal;
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ============================================================
 //  DRAG SCROLL : permet le scroll horizontal à la souris (PC)
 // ============================================================
@@ -594,6 +613,181 @@ function findTempEvolution(hourly, nowMs) {
     max: maxVal,
     maxHour: hourly.time && hourly.time[0] ? new Date(hourly.time[0]) : null
   };
+}
+
+// ============================================================
+//  IA LLM : Génération de descriptions météo en langage naturel
+//  Backend : Pollinations.ai (gratuit, sans clé API)
+//  Cache  : localStorage par (ville + tranche horaire de 30 min)
+// ============================================================
+const AI_CACHE_KEY = "meteo_ai_desc_v1";
+const AI_CACHE_TTL_MS = 30 * 60 * 1000; // 30 min
+
+// Construit un résumé compact des données météo pour le prompt LLM.
+// Objectif : donner à l'IA juste assez de contexte pour écrire
+// un bulletin naturel, sans inonder le prompt.
+function buildWeatherSummary(w) {
+  if (!w || !w.current) return null;
+  const cur = w.current;
+  const daily = w.daily || {};
+  const hourly = w.hourly || {};
+  const code = cur.weather_code;
+  const wmo = WMO[code] || { label: "Conditions variables" };
+  const t = Math.round(cur.temperature_2m);
+  const feels = Math.round(cur.apparent_temperature);
+  const wind = Math.round(cur.wind_speed_10m);
+  const hum = Math.round(cur.relative_humidity_2m);
+  const isDay = cur.is_day === 1;
+  const sunrise = (daily.sunrise && daily.sunrise[0]) || "";
+  const sunset = (daily.sunset && daily.sunset[0]) || "";
+  const tMax = daily.temperature_2m_max && daily.temperature_2m_max[0];
+  const tMin = daily.temperature_2m_min && daily.temperature_2m_min[0];
+  const popMax = daily.precipitation_probability_max && daily.precipitation_probability_max[0];
+  const totalPrecip = daily.precipitation_sum && daily.precipitation_sum[0];
+
+  // Prochain épisode de pluie (prochaines 6h)
+  let nextRain = null;
+  if (hourly.time && hourly.weather_code) {
+    const nowMs = Date.now();
+    for (let i = 0; i < Math.min(6, hourly.time.length); i++) {
+      const tMs = new Date(hourly.time[i]).getTime();
+      if (tMs < nowMs - 30 * 60000) continue;
+      const c = hourly.weather_code[i];
+      if ([51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99].includes(c)) {
+        const inMin = Math.max(0, Math.round((tMs - nowMs) / 60000));
+        nextRain = { inMin, code: c, type: getPrecipLabel(c) };
+        break;
+      }
+    }
+  }
+
+  return {
+    condition: wmo.label,
+    temperature: t,
+    feelsLike: feels,
+    wind,
+    humidity: hum,
+    isDay,
+    sunrise, sunset,
+    tMax, tMin,
+    popMax, totalPrecip,
+    nextRain
+  };
+}
+
+// Construit le prompt envoyé à l'IA. On lui demande un bulletin court,
+// naturel, en français, sans emojis ni markdown.
+function buildAIPrompt(city, summary) {
+  const timeOfDay = (() => {
+    const h = new Date().getHours();
+    if (h < 6) return "nuit";
+    if (h < 12) return "matinée";
+    if (h < 14) return "midi";
+    if (h < 18) return "après-midi";
+    if (h < 21) return "soirée";
+    return "nuit";
+  })();
+  const parts = [
+    `Ville : ${city.name}`,
+    `Moment : ${timeOfDay}`,
+    `Condition actuelle : ${summary.condition}`,
+    `Température : ${summary.temperature}°C (ressenti ${summary.feelsLike}°C)`,
+    `Vent : ${summary.wind} km/h`,
+    `Humidité : ${summary.humidity}%`
+  ];
+  if (summary.tMax != null && summary.tMin != null) {
+    parts.push(`Aujourd'hui : ${Math.round(summary.tMin)}°C → ${Math.round(summary.tMax)}°C`);
+  }
+  if (summary.popMax != null && summary.totalPrecip != null) {
+    parts.push(`Précipitations : risque ${summary.popMax}%, cumul ${summary.totalPrecip.toFixed(1)} mm`);
+  }
+  if (summary.nextRain) {
+    if (summary.nextRain.inMin < 60) {
+      parts.push(`Prochaine pluie attendue dans ${summary.nextRain.inMin} minutes (${summary.nextRain.type})`);
+    } else {
+      parts.push(`Prochaine pluie attendue dans ${Math.round(summary.nextRain.inMin / 60)}h (${summary.nextRain.type})`);
+    }
+  }
+  parts.push(
+    "",
+    "Écris UN SEUL paragraphe de 2-3 phrases en français naturel, à la première personne, comme un bulletin météo Apple Weather. Pas d'emojis, pas de markdown, pas de listes. Reste factuel et précis sur les chiffres."
+  );
+  return parts.join("\n");
+}
+
+// Lit le cache de descriptions depuis localStorage.
+function readAICache() {
+  try {
+    const raw = localStorage.getItem(AI_CACHE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) || {};
+  } catch (e) { return {}; }
+}
+
+function writeAICache(cache) {
+  try {
+    // Nettoie les entrées expirées avant d'écrire
+    const now = Date.now();
+    const cleaned = {};
+    for (const k in cache) {
+      if (cache[k] && cache[k].ts && (now - cache[k].ts) < AI_CACHE_TTL_MS * 4) {
+        cleaned[k] = cache[k];
+      }
+    }
+    localStorage.setItem(AI_CACHE_KEY, JSON.stringify(cleaned));
+  } catch (e) {}
+}
+
+// Clé de cache : nom de ville arrondi à la demi-heure
+function aiCacheKey(city) {
+  const slot = Math.floor(Date.now() / (30 * 60 * 1000));
+  const name = (city.name || "ville").toLowerCase().replace(/\s+/g, "-");
+  return `${name}#${slot}`;
+}
+
+// Appelle Pollinations.ai pour générer la description.
+// Retourne { ok, text, source } ou { ok:false }.
+async function callLLM(prompt) {
+  const url = "https://text.pollinations.ai/" + encodeURIComponent(prompt);
+  const res = await fetchWithTimeout(url, {}, 15000); // 15s max pour le LLM
+  if (!res.ok) return { ok: false };
+  const text = (await res.text()).trim();
+  if (!text || text.length < 10) return { ok: false };
+  // Nettoie les artefacts (markdown, préfixes parasites)
+  const cleaned = text
+    .replace(/^["'`\s]+|["'`\s]+$/g, "")
+    .replace(/\n+/g, " ")
+    .replace(/\s+/g, " ")
+    .slice(0, 400);
+  return { ok: true, text: cleaned };
+}
+
+// Pipeline principal : tente LLM, fallback sur template.
+// Met à jour le DOM dès qu'une réponse est dispo.
+async function generateAIDescription(city, w) {
+  if (!city || !w || !w.current) return null;
+  const summary = buildWeatherSummary(w);
+  if (!summary) return null;
+
+  // 1) Cache hit ?
+  const cache = readAICache();
+  const key = aiCacheKey(city);
+  if (cache[key] && (Date.now() - cache[key].ts) < AI_CACHE_TTL_MS) {
+    return { text: cache[key].text, source: "cache" };
+  }
+
+  // 2) LLM call (avec timeout via fetchWithTimeout)
+  const prompt = buildAIPrompt(city, summary);
+  const result = await callLLM(prompt);
+
+  if (result.ok) {
+    cache[key] = { text: result.text, ts: Date.now() };
+    writeAICache(cache);
+    return { text: result.text, source: "llm" };
+  }
+
+  // 3) Fallback : on retourne null → caller utilise generateDescription
+  return null;
 }
 
 function generateDescription(w) {
@@ -1830,10 +2024,12 @@ function startInterpolate() {
 // ============================================================
 async function reverseGeocode(lat, lon) {
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=fr&zoom=12`,
-      { headers: { "Accept": "application/json" } }
+      { headers: { "Accept": "application/json" } },
+      6000
     );
+    if (!res.ok) return "Position actuelle";
     const data = await res.json();
     if (data && data.address) {
       const a = data.address;
@@ -1847,10 +2043,12 @@ async function reverseGeocode(lat, lon) {
 
 async function searchCities(q) {
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=8&accept-language=fr&addressdetails=1`,
-      { headers: { "Accept": "application/json" } }
+      { headers: { "Accept": "application/json" } },
+      6000
     );
+    if (!res.ok) return [];
     const data = await res.json();
     return data.map(r => ({
       name: (r.address && (r.address.city || r.address.town || r.address.village)) || r.display_name.split(",")[0],
@@ -1906,8 +2104,14 @@ function renderCity(city, w) {
   $("condition").textContent = info.label;
   $("hilo").textContent = `H:${fmtTemp(daily.temperature_2m_max[0])}  L:${fmtTemp(daily.temperature_2m_min[0])}`;
 
-  // Description IA
-  $("descText").textContent = generateDescription(w);
+  // Description IA (vraie IA LLM via Pollinations.ai, fallback template)
+  $("descText").textContent = generateDescription(w); // affichage immediat (template)
+  // Lance la requete LLM en arriere-plan pour remplacer par une vraie description
+  generateAIDescription(city, w).then(result => {
+    if (result && result.text && $("descText")) {
+      $("descText").textContent = result.text;
+    }
+  }).catch(() => { /* silencieux, le template reste affiche */ });
 
   // ===== Hourly =====
   const $hourly = $("hourly");
@@ -2243,6 +2447,8 @@ async function switchCity(city) {
       clearTimeout(skeletonTimeout);
       return;
     }
+    // SECURITE : on retire le skeleton pour ne pas rester bloque visuellement
+    disableSkeleton();
     // Continue quand meme vers le full fetch en fallback
   }
 
@@ -2540,12 +2746,23 @@ unitToggle.addEventListener("click", (e) => {
   if (ok && state.city) {
     await loadWeather(state.city);
   } else {
-    $("cityName").textContent = "Localisation…";
-    const geoOk = await tryGeolocate();
-    if (!geoOk) {
-      state.city = { name: "Paris", lat: 48.8566, lon: 2.3522 };
-      await loadWeather(state.city);
-    }
+    // Premiere visite : on charge Paris immediatement pour eviter
+    // que l'app reste bloquee sur le prompt de geoloc.
+    state.city = { name: "Paris", lat: 48.8566, lon: 2.3522 };
+    saveState();
+    await loadWeather(state.city);
+
+    // Geoloc en best-effort : si elle reussit, on bascule vers la vraie ville.
+    setTimeout(() => {
+      if (state.city && state.city.name === "Paris") {
+        tryGeolocate().then(geoOk => {
+          if (geoOk && state.city && state.city.name !== "Paris") {
+            saveState();
+            loadWeather(state.city);
+          }
+        }).catch(() => {});
+      }
+    }, 1500);
   }
 
   // Auto-refresh "live" toutes les 60s (lite fetch : current seulement)
