@@ -629,36 +629,148 @@ function generateDescription(w) {
   const dirTxt = cur.wind_direction_10m != null ? ` ${degToCompass(cur.wind_direction_10m)}` : "";
 
   // ============== Construction des phrases ==============
+  // La description se concentre UNIQUEMENT sur les conditions meteo (actuelles
+  // + a venir). Pas de mention UV, lunettes, creme solaire, etc.
   const sentences = [];
 
-  // ---- Phrase 1 : condition + moment de la journée ----
+  // ---- Phrase 1 : condition actuelle (courte) ----
   sentences.push(buildConditionSentence(code, period, h));
 
-  // ---- Phrase 2 : température actuelle + ressenti si notable ----
-  sentences.push(buildTempCurrentSentence(curT, feels, feelsDiff));
+  // ---- Phrase 2 : precipitations observees MAINTENANT (priorite) ----
+  const liveObs = classifyLiveCondition(cur);
+  if (liveObs) {
+    sentences.push(buildLivePrecipSentence(liveObs, cur));
+  } else if (hourly && hourly.precipitation_probability) {
+    // ---- Phrase 3 : precipitations a venir (prochaines heures) ----
+    const forecastSentence = buildPrecipForecastSentence(hourly, nowMs);
+    if (forecastSentence) sentences.push(forecastSentence);
+  }
 
-  // ---- Phrase 3 : évolution des températures (si différente) ----
+  // ---- Phrase 4 : evolution temperatures (optionnelle) ----
   const evoSentence = buildEvolutionSentence(curT, tempEvo, period, tempTrend);
   if (evoSentence) sentences.push(evoSentence);
 
-  // ---- Phrase 4 : vent si significatif ----
+  // ---- Phrase 5 : vent significatif ----
   const windSentence = buildWindSentence(wind, dirTxt, period);
   if (windSentence) sentences.push(windSentence);
 
-  // ---- Phrase 5 : UV si élevé en journée ----
-  if (period.key !== "nuit" && period.key !== "fin_nuit" && daily.uv_index_max) {
-    const uv = daily.uv_index_max[0];
-    if (uv >= 7) {
-      sentences.push(`Indice UV ${uv >= 8 ? "très" : ""} élevé, ${uv >= 8 ? "protégez-vous" : "lunettes recommandées"}.`);
-    }
-  }
-
-  // ---- Phrase 6 : visibilité pour brouillard ----
+  // ---- Phrase 6 : visibilite pour brouillard ----
   if ([45, 48].includes(code)) {
-    sentences.push("Visibilité très réduite, prudence sur la route.");
+    sentences.push("Visibilite tres reduite, prudence sur la route.");
   }
 
   return sentences.join(" ");
+}
+
+// Phrase dediee aux precipitations observees en temps reel
+function buildLivePrecipSentence(liveObs, cur) {
+  const mm = cur.precipitation || 0;
+  const label = liveObs.label.toLowerCase();
+  if (label.includes("bruine") || label.includes("crachin")) {
+    return `Bruine en cours (${mm.toFixed(1)} mm/h).`;
+  }
+  if (label.includes("averse")) {
+    return `Averses en cours (${mm.toFixed(1)} mm/h).`;
+  }
+  if (label.includes("forte")) {
+    return `Fortes precipitations en cours (${mm.toFixed(1)} mm/h), prudence.`;
+  }
+  if (label.includes("orage")) {
+    return `Orages en cours, restez a l'abri.`;
+  }
+  if (label.includes("neige")) {
+    return `Chutes de neige en cours.`;
+  }
+  if (label.includes("grele")) {
+    return `Grele en cours, protegez-vous.`;
+  }
+  if (label.includes("verglas")) {
+    return `Verglas en cours, attention aux routes.`;
+  }
+  return `${liveObs.label} en cours (${mm.toFixed(1)} mm/h).`;
+}
+
+// Phrase dediee aux precipitations a venir (prochaines 6h)
+function buildPrecipForecastSentence(hourly, nowMs) {
+  if (!hourly || !hourly.precipitation_probability || !hourly.time) return null;
+  // Trouve la prochaine heure avec PoP >= 30% ou mm >= 0.3
+  let nextEvent = null;
+  for (let i = 0; i < Math.min(12, hourly.time.length); i++) {
+    const tMs = new Date(hourly.time[i]).getTime();
+    if (tMs <= nowMs) continue;
+    const pop = hourly.precipitation_probability[i] || 0;
+    const mm = (hourly.precipitation && hourly.precipitation[i]) || 0;
+    const code = hourly.weather_code ? hourly.weather_code[i] : null;
+    const isPrecipCode = code != null && [51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99].includes(code);
+    if (pop >= 30 || mm >= 0.3 || isPrecipCode) {
+      nextEvent = { i, tMs, pop, mm, code };
+      break;
+    }
+  }
+  if (!nextEvent) return null;
+
+  // Trouve la fin de l'episode precipitant
+  let endEvent = null;
+  for (let j = nextEvent.i; j < Math.min(12, hourly.time.length); j++) {
+    const popJ = hourly.precipitation_probability[j] || 0;
+    const mmJ = (hourly.precipitation && hourly.precipitation[j]) || 0;
+    const codeJ = hourly.weather_code ? hourly.weather_code[j] : null;
+    const isPrecipCodeJ = codeJ != null && [51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99].includes(codeJ);
+    if (popJ < 20 && mmJ < 0.2 && !isPrecipCodeJ) {
+      endEvent = { i: j, tMs: new Date(hourly.time[j]).getTime() };
+      break;
+    }
+  }
+  // Si pas de fin trouvee, fin = prochaine+6h
+  if (!endEvent) {
+    const endIdx = Math.min(nextEvent.i + 6, hourly.time.length - 1);
+    endEvent = { i: endIdx, tMs: new Date(hourly.time[endIdx]).getTime() };
+  }
+
+  // Calcul timing
+  const inMin = Math.round((nextEvent.tMs - nowMs) / 60000);
+  const endMin = Math.round((endEvent.tMs - nowMs) / 60000);
+  const peakPop = Math.max(nextEvent.pop, (hourly.precipitation_probability[endEvent.i] || 0));
+  const peakMm = Math.max(nextEvent.mm, (hourly.precipitation && hourly.precipitation[endEvent.i]) || 0);
+
+  // Determine le type
+  let typeLabel = "pluie";
+  const codes = [nextEvent.code, ...(hourly.weather_code ? hourly.weather_code.slice(nextEvent.i, endEvent.i + 1) : [])];
+  if (codes.some(c => [95, 96, 99].includes(c))) typeLabel = "orage";
+  else if (codes.some(c => [71, 73, 75, 85, 86].includes(c))) typeLabel = "neige";
+  else if (codes.some(c => [77].includes(c))) typeLabel = "grele";
+  else if (codes.some(c => [51, 53, 55, 56, 57].includes(c))) typeLabel = "bruine";
+  else if (codes.some(c => [65, 82].includes(c))) typeLabel = "fortes pluies";
+
+  // Construit la phrase
+  const popText = Math.round(peakPop) + "%";
+  let timingText;
+  if (inMin <= 5) timingText = "imminent";
+  else if (inMin < 60) timingText = `dans ${inMin} min`;
+  else timingText = `dans ${Math.round(inMin / 60)}h${inMin % 60 > 0 ? ` ${inMin % 60}` : ""}`;
+
+  let durationText = "";
+  const dur = endMin - inMin;
+  if (dur >= 60) {
+    durationText = ` (duree ~${Math.round(dur / 60)}h${dur % 60 > 0 ? ` ${dur % 60}` : ""})`;
+  }
+
+  if (typeLabel === "orage") {
+    return `Orages ${timingText}, ${popText} de probabilite${durationText}, prudence.`;
+  }
+  if (typeLabel === "neige") {
+    return `Chutes de neige ${timingText}, ${popText} de probabilite${durationText}.`;
+  }
+  if (typeLabel === "grele") {
+    return `Risque de grele ${timingText}, ${popText} de probabilite${durationText}.`;
+  }
+  if (typeLabel === "fortes pluies") {
+    return `Fortes pluies ${timingText}, ${popText} de probabilite${durationText}.`;
+  }
+  if (typeLabel === "bruine") {
+    return `Bruine ${timingText}, ${popText} de probabilite${durationText}.`;
+  }
+  return `Pluie ${timingText}, ${popText} de probabilite${durationText}.`;
 }
 
 function buildConditionSentence(code, period, hour) {
@@ -1324,10 +1436,14 @@ function applyLiveTick() {
     app.className = "app " + themeFor(cur.weather_code, dayCycle, cur.wind_speed_10m);
   }
 
-  // Maj description generee si pluie observee ou changements majeurs
-  if (state.lastWeather && (liveInfo || Math.abs((cur.precipitation || 0) - (prevLiveData?.current?.precipitation || 0)) > 0.5)) {
-    const desc = generateDescription(state.lastWeather);
-    setText('descText', desc);
+  // Maj description generee : throttled intelligent
+  // Evite de regenerer chaque seconde : ne regenere que si le contenu change
+  if (state.lastWeather) {
+    const newDesc = generateDescription(state.lastWeather);
+    const curDesc = $('descText').textContent;
+    if (newDesc && newDesc !== curDesc) {
+      setText('descText', newDesc);
+    }
   }
 
   // ===== UV live (mise a jour depuis forecast si dispo) =====
@@ -1831,7 +1947,7 @@ async function switchCity(city) {
         $("condition").textContent = "Réseau lent";
       }
     }
-  }, 8000);
+  }, 4000);
 
   // 2) Incremente le requestId pour invalider toute operation async en cours
   const myRequestId = ++state.requestId;
