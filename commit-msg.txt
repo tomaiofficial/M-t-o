@@ -1,0 +1,10 @@
+improve: prompt LLM plus naturel (style Apple Weather)
+
+Le prompt precedent etait trop litteral : l'IA se contentait de lister
+les faits. Le nouveau prompt joue un role ("Tu es la meteo pour..."),
+fixe un format court (2 phrases, 200 car max) et un ton precis
+(Apple Weather). Resultat : descriptions qui commencent direct par
+la condition, avec un conseil pratique contextuel (parapluie, veste,
+prudence route) uniquement quand c'est pertinent.
+
+Co-Authored-By: Letta Code <noreply@letta.com>

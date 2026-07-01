@@ -688,29 +688,26 @@ function buildAIPrompt(city, summary) {
     return "nuit";
   })();
   const parts = [
-    `Ville : ${city.name}`,
-    `Moment : ${timeOfDay}`,
-    `Condition actuelle : ${summary.condition}`,
-    `Température : ${summary.temperature}°C (ressenti ${summary.feelsLike}°C)`,
-    `Vent : ${summary.wind} km/h`,
-    `Humidité : ${summary.humidity}%`
+    `Tu es la météo pour ${city.name}, ${timeOfDay}.`,
+    `Conditions actuelles : ${summary.condition}, ${summary.temperature}°C (ressenti ${summary.feelsLike}°C).`,
+    `Vent : ${summary.wind} km/h. Humidité : ${summary.humidity}%.`
   ];
   if (summary.tMax != null && summary.tMin != null) {
-    parts.push(`Aujourd'hui : ${Math.round(summary.tMin)}°C → ${Math.round(summary.tMax)}°C`);
+    parts.push(`Amplitude du jour : ${Math.round(summary.tMin)}°C à ${Math.round(summary.tMax)}°C.`);
   }
   if (summary.popMax != null && summary.totalPrecip != null) {
-    parts.push(`Précipitations : risque ${summary.popMax}%, cumul ${summary.totalPrecip.toFixed(1)} mm`);
+    parts.push(`Risque de pluie : ${summary.popMax}% avec cumul attendu de ${summary.totalPrecip.toFixed(1)} mm.`);
   }
   if (summary.nextRain) {
     if (summary.nextRain.inMin < 60) {
-      parts.push(`Prochaine pluie attendue dans ${summary.nextRain.inMin} minutes (${summary.nextRain.type})`);
+      parts.push(`Pluie attendue dans ${summary.nextRain.inMin} min (${summary.nextRain.type}).`);
     } else {
-      parts.push(`Prochaine pluie attendue dans ${Math.round(summary.nextRain.inMin / 60)}h (${summary.nextRain.type})`);
+      parts.push(`Pluie attendue dans ${Math.round(summary.nextRain.inMin / 60)}h (${summary.nextRain.type}).`);
     }
   }
   parts.push(
     "",
-    "Écris UN SEUL paragraphe de 2-3 phrases en français naturel, à la première personne, comme un bulletin météo Apple Weather. Pas d'emojis, pas de markdown, pas de listes. Reste factuel et précis sur les chiffres."
+    "Rédige UN bulletin météo de 2 phrases courtes en français naturel, style Apple Weather. Pas d'introduction, pas d'emojis, pas de markdown. Commence directement par décrire la situation. Donne un conseil pratique uniquement si pertinent (parapluie, veste, prudence route). Maximum 200 caractères au total."
   );
   return parts.join("\n");
 }
