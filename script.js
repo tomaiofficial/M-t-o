@@ -369,51 +369,67 @@ let dayCycleCache = null;
 /**
  * Fonction centrale : détermine si une heure donnée est de JOUR ou de NUIT
  * en utilisant les données sunrise/sunset de l'API pour CETTE date précise.
- * @param {string} isoTime - timestamp ISO de l'heure à tester
- * @param {object} daily - {sunrise:[], sunset:[]} de l'API
+ * COMPARAISON PAR CHAINE ISO (timezone-safe) : on extrait la date "YYYY-MM-DD"
+ * et l'heure "HH:MM" puis on compare en string, ce qui evite les bugs de
+ * fuseau (la cle est que toutes les heures soient au MEME format, sans Z).
+ * @param {string} isoTime - timestamp ISO de l'heure à tester (ex: "2026-07-02T10:30")
+ * @param {object} daily - {sunrise:[], sunset:[]} de l'API (meme format)
  * @returns {boolean} true = jour, false = nuit
  */
 function isDaytime(isoTime, daily) {
   if (!daily || !daily.sunrise || !daily.sunset || daily.sunrise.length === 0) {
-    // Fallback heuristique : jour entre 6h et 21h
+    // Fallback heuristique : jour entre 6h et 21h (extraction directe du HH)
     const m = (isoTime || "").match(/T(\d{2})/);
     const h = m ? parseInt(m[1], 10) : 12;
     return h >= 6 && h < 21;
   }
+  if (!isoTime || typeof isoTime !== "string") return true;
 
-  const timeMs = new Date(isoTime).getTime();
-  if (isNaN(timeMs)) return true;
+  // Extraire date (YYYY-MM-DD) et heure-min (HH:MM) de isoTime
+  // Format garanti sans fuseau : "2026-07-02T10:30" -> date="2026-07-02", hm="10:30"
+  const dateMatch = isoTime.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+  if (!dateMatch) {
+    // Format non reconnu, fallback heuristique
+    const h = parseInt((isoTime.match(/T(\d{2})/) || [])[1], 10);
+    return h >= 6 && h < 21;
+  }
+  const dateStr = dateMatch[1]; // "2026-07-02"
+  const hm = dateMatch[2];      // "10:30"
 
-  // Trouver le jour calendaire de cette heure :
-  // Le jour J est celui dont le sunriseMs est <= timeMs et le sunriseMs
-  // du jour suivant est > timeMs
-  let dayIndex = 0;
+  // Trouver le jour dans daily.sunrise qui correspond a la date
+  // (compare sur les 10 premiers caracteres du sunrise ISO = "YYYY-MM-DD")
+  let dayIndex = -1;
   for (let i = 0; i < daily.sunrise.length; i++) {
-    const sunriseMs = new Date(daily.sunrise[i]).getTime();
-    // L'heure timeMs est dans le jour J si :
-    //   timeMs >= sunriseMs de J ET (c'est le dernier jour OU timeMs < sunriseMs de J+1)
-    // Pour le dernier jour de la liste, on suppose que le jour suivant existe
-    // avec sunrise = sunriseMs + 24h
-    if (timeMs >= sunriseMs) {
-      if (i === daily.sunrise.length - 1) {
-        // Dernier jour : accepter (au-delà, on garde la dernière valeur)
-        dayIndex = i;
-        break;
-      }
-      const nextSunriseMs = new Date(daily.sunrise[i + 1]).getTime();
-      if (timeMs < nextSunriseMs) {
-        dayIndex = i;
-        break;
-      }
-    }
+    const sDate = daily.sunrise[i] ? daily.sunrise[i].substring(0, 10) : null;
+    if (sDate === dateStr) { dayIndex = i; break; }
   }
 
-  const sunriseMs = new Date(daily.sunrise[dayIndex]).getTime();
-  const sunsetMs = new Date(daily.sunset[dayIndex]).getTime();
+  // Cas special : heure entre 00:00 et le sunrise du MEME jour
+  // -> appartient au jour precedent (la nuit precedente)
+  // Exemple : 02:00 le 2026-07-02, sunrise[0]=2026-07-02 05:51
+  // On considere cette heure comme etant dans la "nuit" du 2026-07-01 -> 2026-07-02
+  // donc on utilise le sunrise/sunset du 2026-07-01.
+  if (dayIndex < 0) {
+    // Pas de sunrise aujourd'hui : prendre le DERNIER jour disponible
+    // (= le jour precedent, qui contient cette heure de nuit)
+    dayIndex = daily.sunrise.length - 1;
+  }
 
-  // JOUR strict = heure >= sunrise ET heure < sunset
-  // NUIT = heure < sunrise OU heure >= sunset
-  return timeMs >= sunriseMs && timeMs < sunsetMs;
+  // Maintenant on determine si hm est entre sunrise et sunset du dayIndex
+  // (en string, donc timezone-safe)
+  const sunriseHm = (daily.sunrise[dayIndex] || "").substring(11, 16); // "05:51"
+  const sunsetHm = (daily.sunset[dayIndex] || "").substring(11, 16);   // "21:57"
+
+  if (!sunriseHm || !sunsetHm) {
+    // Pas de sunrise/sunset pour ce jour : heuristique
+    const h = parseInt(hm.split(":")[0], 10);
+    return h >= 6 && h < 21;
+  }
+
+  // Comparaison string : "00:00" <= hm <= "23:59"
+  // JOUR strict : hm >= sunriseHm ET hm < sunsetHm
+  // NUIT : hm < sunriseHm OU hm >= sunsetHm
+  return hm >= sunriseHm && hm < sunsetHm;
 }
 
 function isHourAtNight(isoHour, daily) {

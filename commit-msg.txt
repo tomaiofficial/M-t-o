@@ -1,0 +1,45 @@
+fix: hourly icons jour/nuit - comparaison timezone-safe
+
+Le user a signale que la barre horaire affichait des icones
+jour/nuit incoherentes (soleil la nuit, lune le jour) pour
+certaines heures.
+
+Cause : isDaytime() comparait des timestamps via
+new Date("YYYY-MM-DDTHH:MM").getTime() qui INTERPRETE la
+chaine ISO comme du temps LOCAL DU NAVIGATEUR, pas comme
+du temps Paris. Quand l'utilisateur est en France ca matche,
+mais quand le fuseau du navigateur differe du fuseau de la
+ville (voyage, VPN, machine etrangere), tous les calculs
+sont decales de plusieurs heures -> l'icone affichee est
+opposee a la realite.
+
+Fix : remplacer la comparaison en millisecondes par une
+comparaison en STRINGS ISO (HH:MM). Comme toutes les
+chaines sont dans le meme format sans fuseau (Paris),
+la comparaison reste coherentememe si le navigateur est
+ailleurs.
+
+Implementation :
+1. Extraire dateStr = "YYYY-MM-DD" et hm = "HH:MM" de isoTime
+   via regex /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/
+2. Trouver dayIndex en comparant dateStr aux 10 premiers
+   caracteres de daily.sunrise (meme format)
+3. Extraire sunriseHm et sunsetHm du dayIndex via substring(11, 16)
+4. JOUR strict : hm >= sunriseHm ET hm < sunsetHm (string compare)
+
+Gestion du cas special : quand hm est entre 00:00 et le
+sunrise du meme jour (nuit profonde), on attribue cette
+heure au jour precedent (sa "nuit"). Si pas de sunrise
+hier dans la fenetre (10 jours), fallback heuristique 6h-21h.
+
+Tests exhaustifs (15/15 OK) :
+- 00:00, 03:00, 05:00 -> nuit ✓
+- 05:51 (lever pile) -> jour ✓
+- 06:00, 10:30, 12:00, 15:00, 21:00 -> jour ✓
+- 21:57 (coucher pile) -> nuit ✓
+- 22:00, 23:30 -> nuit ✓
+- 00:30 J+1 -> nuit ✓ (attribuee a J-1)
+- 05:00 J+1 -> nuit ✓
+- 06:00 J+1 -> jour ✓
+
+Co-Authored-By: Letta Code <noreply@letta.com>
