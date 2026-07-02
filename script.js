@@ -1593,12 +1593,19 @@ function openMeteoToInternal(json) {
   const d = json.daily || {};
 
   // Trouver l'index de l'heure la plus proche de maintenant dans hourly.
-  // On garde 48h (2 jours) pour eviter les trous quand on traverse minuit.
+  // IMPORTANT : utiliser un buffer de 2h en arriere pour garantir que
+  // l'heure COURANTE est toujours incluse. Open-Meteo a des entrees
+  // horaires sur l'heure pile (10:00, 11:00). Si on est a 10h59, le
+  // buffer doit depasser 1h59 sinon l'array commence a 10:00 et la
+  // cellule "Maint." affiche 11:00 (heure suivante) au lieu de 10:00.
+  // Avec 2h de buffer, on a toujours au moins 2h d'historique en memoire,
+  // et le code de rendu utilise une comparaison de timestamps pour
+  // positionner la cellule "Maint." exactement sur l'heure courante.
   const nowMs = Date.now();
   let startIdx = 0;
   if (h.time && h.time.length) {
     for (let i = 0; i < h.time.length; i++) {
-      if (new Date(h.time[i]).getTime() >= nowMs - 30 * 60000) {
+      if (new Date(h.time[i]).getTime() >= nowMs - 120 * 60000) {
         startIdx = i;
         break;
       }
