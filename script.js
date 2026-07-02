@@ -1191,6 +1191,236 @@ async function callOpenMeteo(lat, lon, signal = null) {
   return openMeteoToInternal(json);
 }
 
+// ============================================================
+// Met.no (Institut Meteorologique Norvegien) : DONNEES TRES FIABLES
+// Gratuit, sans cle, modele numerique de haute qualite (Arome-MetCoCo + ECMWF)
+// Endpoint: https://api.met.no/weatherapi/locationforecast/2.0/complete
+// IMPORTANT : requiert un User-Agent (le bloque sinon avec 403)
+// IMPORTANT : ne pas appeler plus de 1 fois / 10 secondes / IP (rate limit)
+// ============================================================
+const MET_NO_CACHE_TTL_MS = 10 * 60 * 1000; // 10 min cache anti rate-limit
+const metNoCache = new Map();
+
+async function callMetNo(lat, lon, signal = null) {
+  const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+  const now = Date.now();
+  if (metNoCache.has(key)) {
+    const cached = metNoCache.get(key);
+    if (now - cached.ts < MET_NO_CACHE_TTL_MS) {
+      return cached.data;
+    }
+  }
+  const url = `https://api.met.no/weatherapi/locationforecast/2.0/complete` +
+              `?lat=${lat}&lon=${lon}&altitude=0`;
+  const res = await fetchWithTimeout(url, {
+    signal,
+    headers: {
+      // Met.no exige un User-Agent (sinon 403). Format recommande :
+      // "NomApp/version contact-email"
+      "User-Agent": "MeteoApp/1.0 tomtechclair.github.io"
+    }
+  }, 10000);
+  if (!res.ok) throw new Error(`Met.no HTTP ${res.status}`);
+  const json = await res.json();
+  const data = metNoToInternal(json);
+  metNoCache.set(key, { ts: now, data });
+  return data;
+}
+
+// Convertit les codes Met.no en codes WMO standard (compatible app)
+// Reference : https://api.met.no/weatherapi/weathericon/1.1/documentation
+function metNoToWmo(symbolCode) {
+  const m = {
+    "clearsky": 0,
+    "fair": 1, // peu nuageux
+    "partlycloudy": 2,
+    "cloudy": 3,
+    "fog": 45,
+    "lightrain": 61,
+    "rain": 63,
+    "heavyrain": 65,
+    "lightsleet": 67,
+    "sleet": 67,
+    "heavysleet": 67,
+    "lightsnow": 71,
+    "snow": 73,
+    "heavysnow": 75,
+    "lightrainandthunder": 95,
+    "rainandthunder": 95,
+    "heavyrainandthunder": 96,
+    "lightsnowandthunder": 95,
+    "snowandthunder": 95,
+    "heavysnowandthunder": 96,
+    "lightrainshowers": 80,
+    "rainshowers": 81,
+    "heavyrainshowers": 82,
+    "lightsleetshowers": 67,
+    "sleetshowers": 67,
+    "heavysleetshowers": 67,
+    "lightsnowshowers": 85,
+    "snowshowers": 86,
+    "heavysnowshowers": 86
+  };
+  return m[symbolCode] != null ? m[symbolCode] : 3;
+}
+
+// Convertit la reponse Met.no vers le format interne.
+// Endpoint "complete" retourne series temporelles tres precises.
+function metNoToInternal(json) {
+  const series = json && json.properties && json.properties.timeseries;
+  if (!series || !series.length) throw new Error("Met.no: timeseries vide");
+  const latest = series[0];
+  const cur = latest.data.instant.details || {};
+  const next1h = latest.data.next_1_hours;
+  const next6h = latest.data.next_6_hours;
+
+  // ---- CURRENT ----
+  const symbolCode = (next1h && next1h.summary && next1h.summary.symbol_code) ||
+                     (next6h && next6h.summary && next6h.summary.symbol_code) ||
+                     "clearsky";
+  const curCode = metNoToWmo(symbolCode);
+  // L'API Met.no n'a pas is_day direct mais on peut l'inferer du sunrise/sunset
+  const sunRiseRaw = cur.sunrise || (latest.data.instant.details && latest.data.instant.details.sunrise);
+  const sunSetRaw = cur.sunset || (latest.data.instant.details && latest.data.instant.details.sunset);
+  const isDay = cur.shortwave_radiation != null ? cur.shortwave_radiation > 0 : true;
+
+  const current = {
+    time: latest.time,
+    temperature_2m: cur.air_temperature,
+    apparent_temperature: cur.apparent_temperature || cur.air_temperature,
+    relative_humidity_2m: cur.relative_humidity,
+    dew_point_2m: cur.dew_point_temperature,
+    pressure_msl: cur.air_pressure_at_sea_level,
+    surface_pressure: cur.air_pressure_at_sea_level,
+    wind_speed_10m: cur.wind_speed,
+    wind_direction_10m: cur.wind_from_direction,
+    wind_gusts_10m: cur.wind_speed_of_gust || cur.wind_speed,
+    weather_code: curCode,
+    is_day: isDay ? 1 : 0,
+    precipitation: cur.precipitation_amount || 0,
+    rain: cur.precipitation_amount || 0,
+    snowfall: cur.snowfall_amount || 0,
+    showers: 0,
+    cloud_cover: cur.cloud_area_fraction != null ? cur.cloud_area_fraction : 50,
+    visibility: cur.visibility != null ? cur.visibility / 1000 : 10 // Met.no donne en m
+  };
+
+  // ---- HOURLY (prochaines 24h) ----
+  const hOut = {
+    time: [], temperature_2m: [], apparent_temperature: [], weather_code: [],
+    precipitation_probability: [], precipitation: [], wind_speed_10m: [],
+    wind_gusts_10m: [], cloud_cover: [], relative_humidity_2m: [],
+    wind_direction_10m: [], dew_point_2m: [], visibility: []
+  };
+  // L'API complete a des donnees horaires precises (interval ~ 1h)
+  for (const entry of series.slice(0, 24)) {
+    if (entry.data.instant && entry.data.instant.details) {
+      const d = entry.data.instant.details;
+      const n1 = entry.data.next_1_hours;
+      const sym = (n1 && n1.summary && n1.summary.symbol_code) || "clearsky";
+      hOut.time.push(entry.time);
+      hOut.temperature_2m.push(d.air_temperature);
+      hOut.apparent_temperature.push(d.apparent_temperature || d.air_temperature);
+      hOut.weather_code.push(metNoToWmo(sym));
+      hOut.precipitation_probability.push(n1 ? Math.round((n1.details && n1.details.precipitation_amount || 0) * 10) : 0);
+      hOut.precipitation.push((n1 && n1.details && n1.details.precipitation_amount) || 0);
+      hOut.wind_speed_10m.push(d.wind_speed);
+      hOut.wind_gusts_10m.push(d.wind_speed_of_gust || d.wind_speed);
+      hOut.cloud_cover.push(d.cloud_area_fraction != null ? d.cloud_area_fraction : 50);
+      hOut.relative_humidity_2m.push(d.relative_humidity);
+      hOut.wind_direction_10m.push(d.wind_from_direction);
+      hOut.dew_point_2m.push(d.dew_point_temperature);
+      hOut.visibility.push((d.visibility != null ? d.visibility / 1000 : 10));
+    }
+  }
+
+  // ---- DAILY (10 jours) ----
+  // Pas de donnees daily directes : on agrege depuis hourly.
+  // (Met.no a un endpoint forecast qui le fait, mais complete n'agrège pas)
+  const dayMap = new Map();
+  for (const entry of series) {
+    if (entry.data.instant && entry.data.instant.details) {
+      const dateKey = entry.time.split("T")[0];
+      const d = entry.data.instant.details;
+      const n1 = entry.data.next_1_hours;
+      const sym = (n1 && n1.summary && n1.summary.symbol_code) || "clearsky";
+      if (!dayMap.has(dateKey)) {
+        dayMap.set(dateKey, {
+          time: dateKey,
+          temps: [],
+          syms: [],
+          sunRise: null,
+          sunSet: null,
+          precipitation: 0,
+          precipitation_prob: 0,
+          uv: 0,
+          windMax: 0,
+          windGustMax: 0
+        });
+      }
+      const bucket = dayMap.get(dateKey);
+      if (d.air_temperature != null) bucket.temps.push(d.air_temperature);
+      if (sym) bucket.syms.push(sym);
+      if (d.precipitation_amount) bucket.precipitation += d.precipitation_amount;
+      if (n1) bucket.precipitation_prob = Math.max(bucket.precipitation_prob,
+        n1.details && n1.details.precipitation_amount ? Math.round(n1.details.precipitation_amount * 10) : 0);
+      if (d.wind_speed != null) bucket.windMax = Math.max(bucket.windMax, d.wind_speed);
+      if (d.wind_speed_of_gust != null) bucket.windGustMax = Math.max(bucket.windGustMax, d.wind_speed_of_gust);
+    }
+  }
+  const dOut = {
+    time: [], weather_code: [], temperature_2m_max: [], temperature_2m_min: [],
+    sunrise: [], sunset: [], uv_index_max: [], precipitation_probability_max: [],
+    precipitation_sum: [], wind_speed_10m_max: [], wind_gusts_10m_max: [],
+    wind_direction_10m_dominant: []
+  };
+  for (const [dateKey, bucket] of Array.from(dayMap.entries()).slice(0, 10)) {
+    dOut.time.push(bucket.time);
+    // Symbole dominant du jour (le plus frequent ou le plus severe)
+    const symCounts = {};
+    bucket.syms.forEach(s => { symCounts[s] = (symCounts[s] || 0) + 1; });
+    const dominantSym = Object.entries(symCounts).sort((a, b) => b[1] - a[1])[0][0];
+    dOut.weather_code.push(metNoToWmo(dominantSym));
+    const tmax = Math.max(...bucket.temps);
+    const tmin = Math.min(...bucket.temps);
+    dOut.temperature_2m_max.push(tmax);
+    dOut.temperature_2m_min.push(tmin);
+    dOut.sunrise.push(bucket.sunRise || `${dateKey}T06:00:00Z`);
+    dOut.sunset.push(bucket.sunSet || `${dateKey}T18:00:00Z`);
+    dOut.uv_index_max.push(bucket.uv);
+    dOut.precipitation_probability_max.push(bucket.precipitation_prob);
+    dOut.precipitation_sum.push(bucket.precipitation);
+    dOut.wind_speed_10m_max.push(bucket.windMax);
+    dOut.wind_gusts_10m_max.push(bucket.windGustMax);
+    dOut.wind_direction_10m_dominant.push(180); // approx, pas dispo precis en hourly
+  }
+
+  return { current, hourly: hOut, daily: dOut };
+}
+
+// ============================================================
+// Resolution multi-sources : on essaie les sources fiables dans l'ordre
+// - Open-Meteo (1er essai, sans cle, jusqu'a 16 jours)
+// - Met.no (fallback, sans cle, jusqu'a 10 jours, taux de rafraîchissement 10min)
+// Si les 2 echouent, fallback procedural.
+// ============================================================
+async function fetchWeatherReliable(lat, lon, signal = null) {
+  // Essai 1 : Open-Meteo
+  try {
+    return await callOpenMeteo(lat, lon, signal);
+  } catch (e1) {
+    console.warn("[Meteo] Open-Meteo echec, essai Met.no :", e1.message);
+  }
+  // Essai 2 : Met.no
+  try {
+    return await callMetNo(lat, lon, signal);
+  } catch (e2) {
+    console.warn("[Meteo] Met.no echec aussi :", e2.message);
+  }
+  // Echec total : le caller tombera sur procedural
+  throw new Error("Toutes les sources meteo ont echoue");
+}
+
 // Convertit la reponse Open-Meteo vers le format interne de l'app.
 // Renvoie directement { current, hourly, daily } avec les memes champs
 // que ceux consommes par le reste du code.
@@ -1492,13 +1722,13 @@ function genDayWeather(band, lat, lon, dayOfYear, daySeed, isToday) {
   };
 }
 
-// ---------- Point d'entrée : récupère la météo REELLE via Open-Meteo ----------
-// Fallback sur le générateur procédural si Open-Meteo échoue (réseau coupé, etc.)
+// ---------- Point d'entrée : récupère la météo REELLE via sources multiples ----------
+// Ordre : Open-Meteo -> Met.no -> fallback procedural
 async function fetchWeather(lat, lon, lite = false, signal = null) {
   try {
-    return await callOpenMeteo(lat, lon, signal);
+    return await fetchWeatherReliable(lat, lon, signal);
   } catch (e) {
-    console.warn("[Open-Meteo] fallback procédural :", e.message);
+    console.warn("[Meteo] toutes les sources ont echoue, fallback procedural :", e.message);
     return await fetchWeatherProcedural(lat, lon, lite, signal);
   }
 }
@@ -2205,14 +2435,10 @@ function renderCity(city, w) {
   $("condition").textContent = info.label;
   $("hilo").textContent = `H:${fmtTemp(daily.temperature_2m_max[0])}  L:${fmtTemp(daily.temperature_2m_min[0])}`;
 
-  // Description IA (vraie IA LLM via Pollinations.ai, fallback template)
-  $("descText").textContent = generateDescription(w); // affichage immediat (template)
-  // Lance la requete LLM en arriere-plan pour remplacer par une vraie description
-  generateAIDescription(city, w).then(result => {
-    if (result && result.text && $("descText")) {
-      $("descText").textContent = result.text;
-    }
-  }).catch(() => { /* silencieux, le template reste affiche */ });
+  // Description : UNIQUEMENT le template statique (deterministe, pas de LLM).
+  // Avant, on affichait le template PUIS le LLM le remplacait en arriere-plan,
+  // ce qui donnait un effet "paf une autre" genant pour l'utilisateur.
+  $("descText").textContent = generateDescription(w);
 
   // ===== Hourly =====
   const $hourly = $("hourly");
