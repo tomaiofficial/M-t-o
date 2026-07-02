@@ -819,6 +819,23 @@ function generateDescription(w) {
     sentences.push("Visibilite tres reduite, prudence sur la route.");
   }
 
+  // ---- Phrase 7 : orage avec fiabilite issue de la double validation ----
+  // Si fiabilite 'high' (Open-Meteo + Met.no d'accord), mention explicite
+  // Si fiabilite 'medium' (une seule source), mention prudente
+  // Sinon pas de mention
+  const thunderRel = w._thunderReliability;
+  if (thunderRel && thunderRel.confidence === 'high') {
+    const intensityLabel = thunderRel.maxIntensity === 2
+      ? "avec risque de grele forte"
+      : thunderRel.maxIntensity === 1
+        ? "eventuellement avec grele"
+        : "";
+    sentences.push(`Orages confirmes par double validation meteorologique${intensityLabel ? ", " + intensityLabel : ""}. Restez a l'abri.`);
+  } else if (thunderRel && thunderRel.confidence === 'medium' && isThunderHour(code)) {
+    // Orage actuellement observe (code 95/96/99) mais cross-check a echoue
+    sentences.push("Orages en cours, restez a l'abri (verification en cours).");
+  }
+
   return sentences.join(" ");
 }
 
@@ -1399,25 +1416,155 @@ function metNoToInternal(json) {
 }
 
 // ============================================================
-// Resolution multi-sources : on essaie les sources fiables dans l'ordre
-// - Open-Meteo (1er essai, sans cle, jusqu'a 16 jours)
-// - Met.no (fallback, sans cle, jusqu'a 10 jours, taux de rafraîchissement 10min)
-// Si les 2 echouent, fallback procedural.
+// Detection d'orage : helper partage entre Open-Meteo et Met.no
+// Les codes WMO 95/96/99 et les variantes Met.no "andthunder"
+// indiquent tous un orage (avec ou sans grele, intense ou pas).
 // ============================================================
+const THUNDER_WMO_CODES = new Set([95, 96, 99]);
+
+function isThunderHour(weatherCode) {
+  return THUNDER_WMO_CODES.has(weatherCode);
+}
+
+// Analyse une serie horaire pour determiner si elle contient des orages
+// et quand. Retourne { thunderHours: [indices], maxIntensity: 0..2 }
+function analyzeThunder(weatherCodes, hourly = null) {
+  const thunderHours = [];
+  let maxIntensity = 0;
+  for (let i = 0; i < weatherCodes.length; i++) {
+    const c = weatherCodes[i];
+    if (isThunderHour(c)) {
+      thunderHours.push(i);
+      // 95 = orage, 96 = orage + grele legere, 99 = orage + grele forte
+      maxIntensity = Math.max(maxIntensity, c === 99 ? 2 : (c === 96 ? 1 : 1));
+    }
+  }
+  // Renforce via proba precip + taux : heuristique convective
+  if (hourly && hourly.precipitation_probability && hourly.precipitation) {
+    for (let i = 0; i < weatherCodes.length; i++) {
+      if (thunderHours.includes(i)) continue;
+      const pop = hourly.precipitation_probability[i] || 0;
+      const mm = hourly.precipitation[i] || 0;
+      const code = weatherCodes[i];
+      const looksConvective = (mm > 2 && pop > 60) || (pop > 80 && mm > 0.5);
+      const isHeavy = code === 65 || code === 82;
+      if (looksConvective && isHeavy) {
+        thunderHours.push(i);
+        maxIntensity = Math.max(maxIntensity, 1);
+      }
+    }
+  }
+  return { thunderHours, maxIntensity };
+}
+
+// ============================================================
+// Resolution multi-sources avec CROSS-VALIDATION des orages
+// Strategie :
+//  1) Open-Meteo en premier (complet, 10j, sans cle)
+//  2) Si Open-Meteo predit des orages (prochaines 24h), on appelle
+//     AUSSI Met.no pour confirmation croisee. Si Met.no confirme
+//     -> fiabilite HAUTE. Sinon MEDIUM.
+//  3) Si Open-Meteo a reussi mais ne predit PAS d'orage, on
+//     n'appelle pas Met.no (economie). On note fiabilite NORMAL.
+//  4) Si Open-Meteo a echoue, Met.no prend le relais (fallback)
+//     avec fiabilite MEDIUM (pas de confirmation croisee).
+//  5) Si tout echoue, procedural en dernier recours.
+// ============================================================
+
+function attachThunderReliability(w, sourceName) {
+  if (!w || !w.hourly || !w.hourly.weather_code) {
+    w._thunderReliability = { confidence: 'unknown', sources: [sourceName], thunderHours: [], maxIntensity: 0 };
+    return w;
+  }
+  const codes = w.hourly.weather_code;
+  const analysis = analyzeThunder(codes, w.hourly);
+  // Determine le timestamp du premier orage (pour affichage)
+  let firstThunderTime = null;
+  if (analysis.thunderHours.length > 0 && w.hourly.time) {
+    firstThunderTime = w.hourly.time[analysis.thunderHours[0]];
+  }
+  w._thunderReliability = {
+    confidence: analysis.thunderHours.length > 0 ? 'medium' : 'none',
+    sources: [sourceName],
+    thunderHours: analysis.thunderHours.slice(0, 6), // max 6 prochaines heures
+    maxIntensity: analysis.maxIntensity,
+    firstThunderTime
+  };
+  return w;
+}
+
+function mergeThunderReliability(wOpenMeteo, wMetNo) {
+  if (!wOpenMeteo) return wMetNo;
+  if (!wMetNo) {
+    // Pas de cross-check : fiabilite MEDIUM si OM predit des orages, NONE sinon
+    if (wOpenMeteo._thunderReliability && wOpenMeteo._thunderReliability.confidence === 'medium') {
+      wOpenMeteo._thunderReliability.confidence = 'medium';
+    }
+    return wOpenMeteo;
+  }
+  // Cross-validation reussie : Open-Meteo + Met.no
+  const aOpen = wOpenMeteo._thunderReliability || {};
+  const aMetNo = wMetNo._thunderReliability || {};
+  const bothHaveThunder = aOpen.thunderHours.length > 0 && aMetNo.thunderHours.length > 0;
+  const oneHasThunder = aOpen.thunderHours.length > 0 || aMetNo.thunderHours.length > 0;
+
+  let confidence = 'none';
+  if (bothHaveThunder) confidence = 'high';
+  else if (oneHasThunder) confidence = 'medium';
+
+  wOpenMeteo._thunderReliability = {
+    confidence,
+    sources: ['open-meteo', 'met.no'],
+    thunderHours: aOpen.thunderHours.length >= aMetNo.thunderHours.length ? aOpen.thunderHours : aMetNo.thunderHours,
+    thunderHoursAlt: aMetNo.thunderHours,
+    maxIntensity: Math.max(aOpen.maxIntensity || 0, aMetNo.maxIntensity || 0),
+    firstThunderTime: aOpen.firstThunderTime || aMetNo.firstThunderTime
+  };
+  return wOpenMeteo;
+}
+
 async function fetchWeatherReliable(lat, lon, signal = null) {
   // Essai 1 : Open-Meteo
+  let openMeteoData = null;
+  let metNoData = null;
   try {
-    return await callOpenMeteo(lat, lon, signal);
+    openMeteoData = await callOpenMeteo(lat, lon, signal);
+    openMeteoData = attachThunderReliability(openMeteoData, 'open-meteo');
   } catch (e1) {
     console.warn("[Meteo] Open-Meteo echec, essai Met.no :", e1.message);
   }
-  // Essai 2 : Met.no
+
+  // Detection orage par Open-Meteo : predire pour decider si on appelle Met.no
+  const omPredictsThunder = openMeteoData &&
+    openMeteoData._thunderReliability &&
+    openMeteoData._thunderReliability.thunderHours.length > 0;
+
+  if (openMeteoData) {
+    if (omPredictsThunder) {
+      // Open-Meteo predit un orage -> on appelle Met.no pour cross-validation
+      try {
+        metNoData = await callMetNo(lat, lon, signal);
+        metNoData = attachThunderReliability(metNoData, 'met.no');
+        return mergeThunderReliability(openMeteoData, metNoData);
+      } catch (eMet) {
+        console.warn("[Meteo] Met.no cross-check a echoue (orage non confirme par 2e source) :", eMet.message);
+        // On garde Open-Meteo seul -> fiabilite MEDIUM
+        return openMeteoData;
+      }
+    }
+    // Pas d'orage predit : Open-Meteo seul suffit, pas de 2e appel
+    return openMeteoData;
+  }
+
+  // Open-Meteo a totalement echoue -> fallback Met.no
   try {
-    return await callMetNo(lat, lon, signal);
+    metNoData = await callMetNo(lat, lon, signal);
+    metNoData = attachThunderReliability(metNoData, 'met.no');
+    return metNoData;
   } catch (e2) {
     console.warn("[Meteo] Met.no echec aussi :", e2.message);
   }
-  // Echec total : le caller tombera sur procedural
+  // Echec total
   throw new Error("Toutes les sources meteo ont echoue");
 }
 
@@ -2314,6 +2461,40 @@ function updateRainAlert() {
   } else {
     banner.classList.remove('visible');
   }
+
+  // Bandeau orage : uniquement si fiabilite 'high' (double validation OK)
+  updateThunderBanner();
+}
+
+// Bandeau d'alerte orage (cross-validation Open-Meteo + Met.no)
+function updateThunderBanner() {
+  const banner = $('thunderBanner');
+  if (!banner) return;
+  const w = state.lastWeather;
+  if (!w) { banner.classList.remove('visible'); return; }
+  const rel = w._thunderReliability;
+  if (!rel || rel.confidence !== 'high') {
+    banner.classList.remove('visible');
+    return;
+  }
+  // Confiance haute : afficher le bandeau
+  const intensityLabel = rel.maxIntensity === 2 ? " avec risque de grele forte"
+                       : rel.maxIntensity === 1 ? " avec grele possible"
+                       : "";
+  // Calcul timing du premier orage
+  let timing = "imminent";
+  if (rel.firstThunderTime && w.hourly && w.hourly.time) {
+    const now = Date.now();
+    const tMs = new Date(rel.firstThunderTime).getTime();
+    const inMin = Math.round((tMs - now) / 60000);
+    if (inMin > 5 && inMin < 60) timing = `dans ${inMin} min`;
+    else if (inMin >= 60 && inMin < 180) timing = `dans ${Math.round(inMin / 60)}h`;
+    else if (inMin >= 180) timing = `dans ${Math.round(inMin / 60)}h`;
+    else if (inMin <= 5) timing = "imminent";
+  }
+  const msg = `<span class="thunder-icon">&#9889;</span>Orages ${timing}${intensityLabel}<span class="thunder-confidence">CONFIRME 2 sources</span>`;
+  if (banner.innerHTML !== msg) banner.innerHTML = msg;
+  banner.classList.add('visible');
 }
 
 // Re-render complet du forecast (hourly + daily + description)
