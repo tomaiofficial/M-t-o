@@ -1,0 +1,38 @@
+fix: hourly bar stops "bugging" at 9:30, 10:30, etc.
+
+Le user a signale que les donnees de la barre de previsions
+horaires semblaient "buguées" aux heures pile et demi (9H30,
+10H30, etc.). Cause identifiee : le code rafraichissait la
+barre hourly UNIQUEMENT lors du "full render" toutes les 5
+minutes (REFRESH_FORECAST_MS). Entre deux refresh, hourly
+utilisait state.lastWeather.hourly avec des donnees jusqu'a
+5 min d'ecart. Quand le full refresh arrivait, toutes les
+cellules de la barre sautaient en bloc vers les nouvelles
+valeurs -> ressemblait a un bug.
+
+Trois correctifs :
+
+1. openMeteoToInternal : on garde maintenant 48h de hourly
+   (au lieu de 24h) pour eviter les trous autour de minuit
+   quand on traverse un changement de journee pendant la
+   fenetre d'affichage.
+
+2. Rendu de la barre hourly : recherche de l'heure courante
+   par comparaison de timestamps REELS (Date.getTime()) au
+   lieu d'un simple match "getHourFromISO === currentHour".
+   Le match par heure etait ambigu dans les cas ou :
+   - currentHour = 10 matche plusieurs heures (10:00 ET 10:30
+     si le slicing les inclut toutes les deux)
+   - les heures tapees a la demi (10:30, 23:30) tombent
+     parfois entre deux hourly slots et tombent sur le
+     fallback hasardeux
+   Maintenant on prend l'index horaire dont le timestamp
+   est le plus proche ET <= currentTime.
+
+3. tickLive met a jour state.lastWeather.hourly (et daily)
+   a CHAQUE appel (60s) avec les donnees lite, au lieu
+   d'attendre le full render 5 min. La barre de previsions
+   reflete maintenant les dernieres donnees avec un delai
+   max de 60s au lieu de 5 min. Pas de saut brusque.
+
+Co-Authored-By: Letta Code <noreply@letta.com>

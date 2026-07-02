@@ -1199,7 +1199,8 @@ function openMeteoToInternal(json) {
   const h = json.hourly || {};
   const d = json.daily || {};
 
-  // Trouver l'index de l'heure la plus proche de maintenant dans hourly
+  // Trouver l'index de l'heure la plus proche de maintenant dans hourly.
+  // On garde 48h (2 jours) pour eviter les trous quand on traverse minuit.
   const nowMs = Date.now();
   let startIdx = 0;
   if (h.time && h.time.length) {
@@ -1210,8 +1211,8 @@ function openMeteoToInternal(json) {
       }
     }
   }
-  // Garde 24h a partir de maintenant
-  const sliceEnd = Math.min(startIdx + 24, h.time ? h.time.length : 0);
+  // Garde 48h a partir de maintenant (2 jours) pour eviter les trous
+  const sliceEnd = Math.min(startIdx + 48, h.time ? h.time.length : 0);
 
   const hourly = {
     time: h.time ? h.time.slice(startIdx, sliceEnd) : [],
@@ -1869,6 +1870,15 @@ async function tickLive() {
       state.lastWeather.current = lite.current;
     }
 
+    // Met a jour aussi hourly + daily avec les donnees live pour eviter
+    // que la barre de previsions reste figee entre deux full refresh (5 min)
+    if (state.lastWeather && lite.hourly && lite.hourly.time && lite.hourly.time.length > 0) {
+      state.lastWeather.hourly = lite.hourly;
+    }
+    if (state.lastWeather && lite.daily && lite.daily.time && lite.daily.time.length > 0) {
+      state.lastWeather.daily = lite.daily;
+    }
+
     // Stocke le hourly precip pour la detection pluie temps reel
     if (lite.hourly && lite.hourly.time && lite.hourly.precipitation_probability) {
       livePrecipHourly = lite.hourly;
@@ -2211,13 +2221,32 @@ function renderCity(city, w) {
 
   // Determiner l'heure actuelle
   const currentHour = getHourFromISO(cur.time);
-  // Trouver l'index de l'heure courante dans hourly.time
+  // Trouver l'index de l'heure courante dans hourly.time.
+  // On cherche par comparaison de timestamps REELS (pas juste l'heure) pour
+  // eviter les bugs a 9H30, 10H30 ou les changements d'heure sont ambigus.
   let nowIdx = -1;
   if (hourly && hourly.time && hourly.time.length > 0) {
-    if (currentHour != null) {
+    const curMs = cur.time ? new Date(cur.time).getTime() : Date.now();
+    if (!isNaN(curMs)) {
+      // Trouve l'heure la plus proche de curMs (precedente ou egale)
+      let bestDiff = Infinity;
+      for (let i = 0; i < hourly.time.length; i++) {
+        const tMs = new Date(hourly.time[i]).getTime();
+        if (isNaN(tMs)) continue;
+        if (tMs <= curMs) {
+          const diff = curMs - tMs;
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            nowIdx = i;
+          }
+        }
+      }
+    }
+    if (nowIdx < 0) {
+      // Fallback : match par heure uniquement
       nowIdx = hourly.time.findIndex(t => getHourFromISO(t) === currentHour);
     }
-    if (nowIdx < 0) nowIdx = 0; // fallback
+    if (nowIdx < 0) nowIdx = 0; // dernier fallback
   }
   // Forcer 24 cellules meme si hourly est vide (lite phase)
   const TOTAL_HOURS = 24;
