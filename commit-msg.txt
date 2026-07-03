@@ -1,0 +1,37 @@
+feat: mode demo auto-test + vigilance precoce 2-3h
+
+Deux nouvelles fonctionnalites demandees par le user :
+
+1. MODE DEMO / AUTO-TEST
+   - Permet de verifier que toutes les conditions meteo,
+     animations, icones, descriptions et bandeaux marchent
+   - Active via ?demo=1 dans l'URL ou en tapant "demo" au
+     clavier
+   - Cycle de 16 conditions meteo differentes (ciel clair,
+     nuageux, brouillard, bruine, pluie, forte pluie, neige,
+     orage, orage violent, etc.) toutes les 60 secondes
+   - Applique la condition simulee sur state.lastWeather.current
+     et re-render la description + bandeaux
+   - Badge violet "MODE DEMO" visible pendant le test
+   - Apres un cycle complet, revient automatiquement aux
+     donnees reelles
+
+2. VIGILANCE PRECOCE 2-3H
+   - Nouveau bandeau #vigilanceBanner qui scanne les 3
+     prochaines heures de previsions
+   - 3 niveaux de vigilance :
+     * JAUNE : risque pluie/orage dans 2-3h
+     * ORANGE : risque dans 1-2h
+     * ROUGE : risque imminent (< 1h)
+   - Detecte pluie (codes WMO 51-86) ET orage (95-99)
+   - Affiche la probabilite de precipitation
+   - Affiche le timing approximatif
+   - Animation pulse pour le niveau rouge
+   - CSS : vigilance-banner avec 3 niveaux de couleur,
+     icone, badge timing
+
+HTML : ajout de #vigilanceBanner et #demoBadge dans desc-card
+CSS : styles pour vigilance-banner (3 niveaux) + demo-badge
+JS : checkDemoMode(), applyDemoMode(), updateVigilanceBanner()
+
+Co-Authored-By: Letta Code <noreply@letta.com>

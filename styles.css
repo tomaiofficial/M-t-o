@@ -947,6 +947,81 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   0%, 100% { box-shadow: 0 4px 18px rgba(220, 100, 30, 0.35); }
   50% { box-shadow: 0 4px 24px rgba(220, 100, 30, 0.6); }
 }
+
+/* ===== Vigilance banner (early warning 2-3h) ===== */
+.vigilance-banner {
+  display: none;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  animation: vigilance-in 0.4s ease-out;
+}
+.vigilance-banner.visible { display: block; }
+.vigilance-banner.level-yellow {
+  background: linear-gradient(135deg, rgba(230, 180, 30, 0.88), rgba(200, 150, 20, 0.88));
+  box-shadow: 0 3px 14px rgba(230, 180, 30, 0.3);
+}
+.vigilance-banner.level-orange {
+  background: linear-gradient(135deg, rgba(240, 130, 30, 0.9), rgba(210, 90, 20, 0.9));
+  box-shadow: 0 3px 16px rgba(240, 130, 30, 0.4);
+}
+.vigilance-banner.level-red {
+  background: linear-gradient(135deg, rgba(220, 60, 50, 0.92), rgba(180, 30, 20, 0.92));
+  box-shadow: 0 3px 18px rgba(220, 60, 50, 0.5);
+  animation: vigilance-pulse 1.8s ease-in-out infinite;
+}
+.vigilance-banner .vigilance-icon {
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 16px;
+  vertical-align: middle;
+}
+.vigilance-banner .vigilance-timing {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  vertical-align: middle;
+}
+@keyframes vigilance-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes vigilance-pulse {
+  0%, 100% { box-shadow: 0 3px 18px rgba(220, 60, 50, 0.5); }
+  50% { box-shadow: 0 3px 26px rgba(220, 60, 50, 0.75); }
+}
+
+/* ===== Demo badge ===== */
+.demo-badge {
+  display: none;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  background: linear-gradient(135deg, rgba(120, 80, 200, 0.9), rgba(90, 50, 170, 0.9));
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  text-align: center;
+  animation: demo-pulse 1.5s ease-in-out infinite;
+}
+.demo-badge.visible { display: block; }
+@keyframes demo-pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }

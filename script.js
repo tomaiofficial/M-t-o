@@ -2406,8 +2406,246 @@ function applyLiveTick() {
   // Detection pluie pour le bandeau d'alerte
   updateRainAlert();
 
+  // Detection vigilance precoce (2-3h avant)
+  updateVigilanceBanner();
+
+  // Mode demo : cycle de conditions pour tester l'UI
+  applyDemoMode();
+
   // Mettre a jour uniquement les % du hourly sans re-render complet
   applyHourlyInterpolation();
+}
+
+// ============================================================
+// MODE DEMO / AUTO-TEST
+// Active via ?demo=1 dans l'URL ou en tapant "demo" sur le clavier.
+// Cycle de conditions meteo toutes les 60s pour verifier que
+// toutes les animations, icones, descriptions et bandeaux marchent.
+// Apres un cycle complet, revient aux donnees reelles.
+// ============================================================
+const DEMO_CODES = [
+  { code: 0,  label: "Ciel clair" },
+  { code: 1,  label: "Plutot ensoleille" },
+  { code: 2,  label: "Partiellement nuageux" },
+  { code: 3,  label: "Nuageux" },
+  { code: 45, label: "Brouillard" },
+  { code: 48, label: "Brouillard givrant" },
+  { code: 51, label: "Bruine legere" },
+  { code: 61, label: "Pluie faible" },
+  { code: 63, label: "Pluie moderee" },
+  { code: 65, label: "Forte pluie" },
+  { code: 71, label: "Neige faible" },
+  { code: 75, label: "Forte neige" },
+  { code: 80, label: "Averses" },
+  { code: 95, label: "Orage" },
+  { code: 96, label: "Orage + grele" },
+  { code: 99, label: "Orage violent" }
+];
+let demoActive = false;
+let demoIndex = 0;
+let demoLastSwitchMs = 0;
+const DEMO_INTERVAL_MS = 60 * 1000; // 60s par condition
+
+function checkDemoMode() {
+  // Detection via URL : ?demo=1
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('demo') === '1') {
+    demoActive = true;
+  }
+  // Detection via touche "demo" tapee au clavier
+  let keyBuffer = '';
+  document.addEventListener('keydown', (e) => {
+    if (e.key && e.key.length === 1) {
+      keyBuffer += e.key.toLowerCase();
+      if (keyBuffer.length > 10) keyBuffer = keyBuffer.slice(-10);
+      if (keyBuffer.endsWith('demo')) {
+        demoActive = !demoActive;
+        keyBuffer = '';
+        if (demoActive) {
+          demoIndex = 0;
+          demoLastSwitchMs = 0;
+          console.log('[DEMO] Mode demo active');
+        } else {
+          console.log('[DEMO] Mode demo desactive');
+          // Force un re-render avec les vraies donnees
+          if (state.lastWeather && state.city) {
+            renderCity(state.city, state.lastWeather);
+          }
+        }
+      }
+    }
+  });
+}
+
+function applyDemoMode() {
+  const badge = $('demoBadge');
+  if (!demoActive) {
+    if (badge) badge.classList.remove('visible');
+    return;
+  }
+  if (!state.lastWeather) return;
+  const now = Date.now();
+
+  // Premier passage
+  if (demoLastSwitchMs === 0) {
+    demoLastSwitchMs = now;
+  }
+
+  // Toutes les 60s, on passe a la condition suivante
+  if (now - demoLastSwitchMs >= DEMO_INTERVAL_MS) {
+    demoLastSwitchMs = now;
+    demoIndex = (demoIndex + 1) % DEMO_CODES.length;
+
+    // Si on a fait un cycle complet, on desactive le mode demo
+    if (demoIndex === 0) {
+      // Apres un cycle complet, on refait un render avec les vraies donnees
+      console.log('[DEMO] Cycle complet, retour aux donnees reelles');
+      demoActive = false;
+      if (badge) badge.classList.remove('visible');
+      if (state.lastWeather && state.city) {
+        renderCity(state.city, state.lastWeather);
+      }
+      return;
+    }
+  }
+
+  // Applique la condition demo sur les donnees courantes
+  const demo = DEMO_CODES[demoIndex];
+  if (demo && state.lastWeather.current) {
+    state.lastWeather.current.weather_code = demo.code;
+    // Simule des precipitations pour les codes pluvieux
+    if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99].includes(demo.code)) {
+      state.lastWeather.current.precipitation = demo.code >= 65 ? 2.5 : (demo.code >= 61 ? 1.0 : 0.3);
+      state.lastWeather.current.rain = state.lastWeather.current.precipitation;
+    } else {
+      state.lastWeather.current.precipitation = 0;
+      state.lastWeather.current.rain = 0;
+    }
+    // Simule l'orage pour les codes 95+
+    if ([95, 96, 99].includes(demo.code)) {
+      state.lastWeather._thunderReliability = {
+        confidence: 'high',
+        sources: ['demo'],
+        thunderHours: [0],
+        maxIntensity: demo.code === 99 ? 2 : 1,
+        firstThunderTime: new Date().toISOString()
+      };
+    } else {
+      state.lastWeather._thunderReliability = { confidence: 'none', sources: [], thunderHours: [], maxIntensity: 0 };
+    }
+  }
+
+  // Affiche le badge demo
+  if (badge) {
+    badge.textContent = `MODE DEMO - ${demo.label} (${demoIndex + 1}/${DEMO_CODES.length})`;
+    badge.classList.add('visible');
+  }
+
+  // Re-render la description et les bandeaux avec la condition simulee
+  if (state.lastWeather) {
+    const newDesc = generateDescription(state.lastWeather);
+    if (newDesc) setText('descText', newDesc);
+    updateRainAlert();
+    updateThunderBanner();
+    updateVigilanceBanner();
+  }
+}
+
+// ============================================================
+// VIGILANCE PRECOCE : detecte pluie/orage 2-3h avant l'arrivee
+// Niveau de vigilance :
+//   - VERT : aucun risque dans les 3 prochaines heures
+//   - JAUNE : risque (PoP >= 30%) dans 2-3h
+//   - ORANGE : risque dans 1-2h
+//   - ROUGE : risque dans < 1h (imminent)
+// ============================================================
+function updateVigilanceBanner() {
+  const banner = $('vigilanceBanner');
+  if (!banner) return;
+  if (!state.lastWeather || !state.lastWeather.hourly) {
+    banner.classList.remove('visible');
+    return;
+  }
+  const hourly = state.lastWeather.hourly;
+  if (!hourly.time || !hourly.weather_code) {
+    banner.classList.remove('visible');
+    return;
+  }
+
+  const now = Date.now();
+  const PRECIP_CODES = [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99];
+  const THUNDER_CODES = [95, 96, 99];
+
+  // Scanne les 3 prochaines heures
+  let firstPrecip = null;  // { tMs, code, pop, mm }
+  let firstThunder = null; // { tMs, code }
+
+  for (let i = 0; i < Math.min(3, hourly.time.length); i++) {
+    const tMs = new Date(hourly.time[i]).getTime();
+    if (isNaN(tMs)) continue;
+    const inMin = Math.round((tMs - now) / 60000);
+    if (inMin < 0) continue; // skip past hours
+
+    const code = hourly.weather_code[i];
+    const pop = (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0;
+    const mm = (hourly.precipitation && hourly.precipitation[i]) || 0;
+
+    const isPrecip = PRECIP_CODES.includes(code) || (pop >= 40 && mm >= 0.1);
+    const isThunder = THUNDER_CODES.includes(code);
+
+    if (!firstPrecip && isPrecip) {
+      firstPrecip = { tMs, code, pop, mm, inMin };
+    }
+    if (!firstThunder && isThunder) {
+      firstThunder = { tMs, code, inMin };
+    }
+    if (firstPrecip && firstThunder) break;
+  }
+
+  // Si rien dans les 3h, on cache
+  if (!firstPrecip && !firstThunder) {
+    banner.classList.remove('visible');
+    return;
+  }
+
+  // Determiner le niveau et le message
+  const event = firstThunder || firstPrecip;
+  const inMin = event.inMin;
+  const isThunder = !!firstThunder;
+
+  let level, icon, msg;
+
+  if (inMin <= 60) {
+    // ROUGE : < 1h
+    level = 'level-red';
+    icon = isThunder ? '&#9889;' : '&#127783;&#65039;';
+    msg = isThunder ? 'Orage imminent' : 'Pluie imminente';
+  } else if (inMin <= 120) {
+    // ORANGE : 1-2h
+    level = 'level-orange';
+    icon = isThunder ? '&#9889;' : '&#127783;&#65039;';
+    msg = isThunder ? 'Orage dans 1-2h' : 'Pluie dans 1-2h';
+  } else {
+    // JAUNE : 2-3h
+    level = 'level-yellow';
+    icon = isThunder ? '&#9889;' : '&#128167;';
+    msg = isThunder ? 'Vigilance orage 2-3h' : 'Vigilance pluie 2-3h';
+  }
+
+  // Ajoute le detail de probabilite
+  let detail = '';
+  if (firstPrecip && firstPrecip.pop > 0) {
+    detail = ` (${Math.round(firstPrecip.pop)}% de probabilite)`;
+  }
+
+  const timingLabel = inMin <= 60 ? `~${inMin} min` : `~${Math.round(inMin / 60)}h`;
+  const html = `<span class="vigilance-icon">${icon}</span>${msg}${detail}<span class="vigilance-timing">${timingLabel}</span>`;
+
+  if (banner.innerHTML !== html) {
+    banner.innerHTML = html;
+    banner.className = 'vigilance-banner ' + level;
+  }
+  banner.classList.add('visible');
 }
 
 // Met a jour les % hourly avec interpolation
@@ -3282,6 +3520,9 @@ unitToggle.addEventListener("click", (e) => {
 //  Init : Démarrage de l'application
 // ============================================================
 (async function init() {
+  // Activer le mode demo si ?demo=1 dans l'URL
+  checkDemoMode();
+
   // Charger l'état sauvegardé
   const ok = loadState();
 
