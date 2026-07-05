@@ -1993,11 +1993,11 @@ async function fetchWeatherProcedural(lat, lon, lite = false, signal = null) {
 }
 
 // ============================================================
-//  REFRESH ENGINE v2 - 60s live + interpolation + smart diffing
+//  REFRESH ENGINE v3 - full refresh 60s + interpolation + smart diffing
 // ============================================================
 const REFRESH_LIVE_MS = 60 * 1000;     // fetch live chaque 60s
 const INTERPOLATE_MS = 1000;           // tick d'interpolation chaque seconde
-const REFRESH_FORECAST_MS = 5 * 60 * 1000; // re-render forecast complet chaque 5 min
+const REFRESH_FORECAST_MS = 60 * 1000; // re-render forecast complet chaque 60s (etait 5 min)
 
 let prevLiveData = null;
 let currLiveData = null;
@@ -2259,6 +2259,9 @@ async function tickLive() {
     if (myRequestId !== state.requestId) return;
     if (!lite || !lite.current) return;
 
+    // Lissage des temperatures lite pour stabilite visuelle
+    smoothTemperature(lite);
+
     prevLiveData = currLiveData;
     currLiveData = lite;
     lastFetchMs = Date.now();
@@ -2290,6 +2293,9 @@ async function tickLive() {
         const full = await fetchWeather(city.lat, city.lon, false);
         if (myRequestId !== state.requestId) return;
         if (full && full.current) {
+          // Reset du lisseur lors d'un premier fetch (pas d'historique)
+          resetTempSmoother();
+          smoothTemperature(full);
           state.lastWeather = full;
           renderCity(city, full);
           lastFullRenderMs = Date.now();
@@ -2758,6 +2764,73 @@ function updateThunderBanner() {
   banner.classList.add('visible');
 }
 
+// ============================================================
+// LISSEUR DE TEMPERATURES : elimine les micro-variations entre
+// les sources et lisse temporellement entre deux fetch.
+// Objectif : stabilite visuelle sans perte de reactivite.
+// ============================================================
+const tempSmoother = {
+  history: [],          // [{tMs, t, feels, humidity, wind, pop}, ...]
+  maxLen: 5,            // 5 dernieres observations
+  maxJump: 2.5          // saut max tolere entre 2 obs (degC) sinon rejet
+};
+
+function smoothTemperature(newData) {
+  if (!newData || !newData.current) return newData;
+  const cur = newData.current;
+  const t = cur.temperature_2m;
+  const feels = cur.apparent_temperature;
+  const hum = cur.relative_humidity_2m;
+  const wind = cur.wind_speed_10m;
+  const pop = newData.hourly && newData.hourly.precipitation_probability
+    ? (newData.hourly.precipitation_probability[0] || 0) : 0;
+  if (typeof t !== 'number') return newData;
+
+  const now = Date.now();
+  const last = tempSmoother.history[tempSmoother.history.length - 1];
+  // Rejette les outliers absurdes (ex: capteur qui renvoie 50 deg d'un coup)
+  if (last && Math.abs(t - last.t) > tempSmoother.maxJump &&
+      tempSmoother.history.length >= 2) {
+    // Saut trop grand : on prend la mediane des 3 derniers
+    const recent = tempSmoother.history.slice(-3).map(h => h.t).sort((a, b) => a - b);
+    cur.temperature_2m = recent[1];
+    if (typeof feels === 'number') {
+      const recentFeels = tempSmoother.history.slice(-3).map(h => h.feels).sort((a, b) => a - b);
+      cur.apparent_temperature = recentFeels[1];
+    }
+  }
+
+  // Moyenne ponderee avec la derniere observation (75% nouveau, 25% ancien)
+  // pour stabiliser sans etre trop inertiel
+  if (last && tempSmoother.history.length > 0) {
+    const alpha = 0.75; // poids du nouveau
+    cur.temperature_2m = alpha * cur.temperature_2m + (1 - alpha) * last.t;
+    if (typeof feels === 'number' && typeof last.feels === 'number') {
+      cur.apparent_temperature = alpha * cur.apparent_temperature + (1 - alpha) * last.feels;
+    }
+    if (typeof hum === 'number' && typeof last.humidity === 'number') {
+      cur.relative_humidity_2m = alpha * cur.relative_humidity_2m + (1 - alpha) * last.humidity;
+    }
+  }
+
+  // Push dans l'historique
+  tempSmoother.history.push({
+    tMs: now,
+    t: cur.temperature_2m,
+    feels: cur.apparent_temperature,
+    humidity: cur.relative_humidity_2m,
+    wind, pop
+  });
+  if (tempSmoother.history.length > tempSmoother.maxLen) {
+    tempSmoother.history.shift();
+  }
+  return newData;
+}
+
+function resetTempSmoother() {
+  tempSmoother.history.length = 0;
+}
+
 // Re-render complet du forecast (hourly + daily + description)
 // Appele apres chaque fetch live pour les donnees de forecast
 async function refreshForecastIfNeeded() {
@@ -2770,6 +2843,8 @@ async function refreshForecastIfNeeded() {
     const full = await fetchWeather(state.city.lat, state.city.lon, false);
     if (myRequestId !== state.requestId) return;
     if (full && full.current) {
+      // Lissage des temperatures pour stabilite visuelle
+      smoothTemperature(full);
       state.lastWeather = full;
       lastFullRenderMs = Date.now();
       renderCity(state.city, full);
@@ -3187,6 +3262,9 @@ async function switchCity(city) {
 
   // 4) Mets a jour la ville courante tout de suite
   state.city = city;
+
+  // Reset du lisseur de temperature (changement de ville)
+  resetTempSmoother();
 
   // 5) PHASE 1 : LITE FETCH (~1s) - affiche rapidement temperature, condition,
   //              humidite, vent + 12h de precipitations pour la detection live
