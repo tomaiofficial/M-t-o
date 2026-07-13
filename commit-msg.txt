@@ -1,0 +1,24 @@
+fix: texte des paramètres affichait encore "2 min"
+
+Le user a remarqué que dans le panneau Paramètres,
+les libellés "Actualisation auto" et "Description IA"
+affichaient "Toutes les 2 min", alors que le code
+fait maintenant du 60s pour le refresh et 30 min
+pour la description IA.
+
+Cause : libellés hardcodés dans index.html (lignes
+~705-709) depuis une ancienne version. Ils
+n'avaient jamais été mis à jour.
+
+Fix :
+- "Actualisation auto" : "Toutes les 2 min" → "Toutes les minutes"
+  (le code fait du refresh complet toutes les 60s)
+- "Description IA" : "Toutes les 2 min" → "Toutes les 30 min"
+  (cache AI_CACHE_TTL_MS = 30 min dans script.js)
+
+Bump du cache-busting v=20260713 → v=20260713b pour
+forcer le navigateur à recharger le HTML.
+
+Hard refresh requis : Ctrl+Shift+R
+
+Co-Authored-By: Letta Code <noreply@letta.com>
