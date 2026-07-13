@@ -1,0 +1,47 @@
+fix: cache-busting pour forcer rechargement apres update
+
+PROBLEME: Le user voit le refresh toutes les 2 min au lieu
+de 60s, et ce depuis le debut.
+
+DIAGNOSTIC: Le code deploye sur GitHub Pages est CORRECT
+(setInterval 60s, REFRESH_FORECAST_MS = 60000). Mais le
+navigateur de l'utilisateur met en cache script.js et
+styles.css de maniere tres agressive (cache disque).
+
+Quand on fait F5 (refresh normal), le navigateur sert
+la version en cache au lieu de recharger la nouvelle.
+Conséquence : le user voit l'ANCIEN code (avec refresh
+5 min, sans le lisseur, etc.) meme apres qu'on a push
+des corrections.
+
+GitHub Pages envoie bien des headers Cache-Control, mais
+beaucoup de navigateurs les ignorent et utilisent le cache
+disque de toute façon.
+
+FIX : 3 mecanismes anti-cache
+
+1. CACHE-BUSTING SUR LES URLs
+   script.js → script.js?v=20260713
+   styles.css → styles.css?v=20260713
+   Le query string change a chaque release, donc le navigateur
+   considere que c'est une nouvelle ressource a charger.
+
+2. META CACHE-CONTROL DANS LE HEAD
+   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+   <meta http-equiv="Pragma" content="no-cache">
+   <meta http-equiv="Expires" content="0">
+   Indique au navigateur de toujours revalider.
+
+3. VERSION BUMP SUR LES FICHIERS
+   La date 20260713 est dans l'URL. Au prochain commit,
+   je changerai en 20260713b ou autre pour re-forcer.
+
+INSTRUCTIONS POUR LE USER :
+- Hard refresh : Ctrl+Shift+R (Win/Linux) ou Cmd+Shift+R (Mac)
+- Ou DevTools ouvert > onglet Network > cocher "Disable cache"
+- OU juste vider le cache du navigateur (parametres > effacer)
+
+Apres le hard refresh, le nouveau code se charge et le
+refresh toutes les 60s + flash vert + logs console marchent.
+
+Co-Authored-By: Letta Code <noreply@letta.com>
