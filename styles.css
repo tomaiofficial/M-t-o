@@ -894,6 +894,11 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   text-shadow: 0 1px 4px rgba(0,0,0,0.1);
   margin: 0;
   letter-spacing: 0.01em;
+  transition: opacity 0.2s ease;
+}
+.desc-card p.desc-fade {
+  opacity: 0;
+}
 }
 .rain-banner {
   display: none;

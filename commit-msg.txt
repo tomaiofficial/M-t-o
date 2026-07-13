@@ -1,0 +1,55 @@
+feat: description IA reellement rafraichie toutes les 60s
+
+Le user a remarque que "Description IA" etait affiche a
+30 min alors qu'il veut 60s comme le refresh meteo.
+
+Deux problemes separes :
+
+PROBLEME 1 : generateAIDescription etait mort
+La fonction generateAIDescription (LLM via Pollinations.ai)
+etait DEFINIE mais JAMAIS APPELEE dans le code.
+La description affichee venait 100% de generateDescription
+(template local deterministe).
+Cause : un commentaire disait "avant, on affichait le
+template PUIS le LLM le remplacait en arriere-plan, ce
+qui donnait un effet paf une autre genant". Donc le LLM
+avait ete desactive pour eviter le flicker.
+
+PROBLEME 2 : cache LLM etait 30 min
+AI_CACHE_TTL_MS = 30 * 60 * 1000 (30 min)
+aiCacheKey utilisait des slots de 30 min.
+
+FIX :
+1. Reactivation du LLM avec anti-flicker
+   - Nouvelle fonction refreshAIDescriptionAsync(city, w)
+     qui appelle l'IA en arriere-plan
+   - Affiche le template INSTANTANEMENT (pas de flash vide)
+   - L'IA remplace le texte des que dispo, SANS clignotement :
+     grace au cache 60s, meme conditions = meme texte
+   - Petite transition CSS opacity 0.2s si le texte change
+     vraiment (rare car meme conditions = meme reponse)
+
+2. Cache LLM regenere chaque minute
+   - AI_CACHE_TTL_MS : 30 min → 60 sec
+   - aiCacheKey slot : 30 min → 60 sec
+   - La description est regeneree a chaque tickLive (60s)
+
+3. Appel depuis renderCity
+   - renderCity appelle refreshAIDescriptionAsync
+   - renderCity est appele toutes les 60s par
+     refreshForecastIfNeeded
+   - Donc IA = refresh toutes les minutes
+
+4. UI
+   - HTML : "Description IA" → "Toutes les minutes"
+   - CSS : animation opacity pour transition douce
+
+5. Cache-busting
+   - v=20260713b → v=20260713c pour forcer reload
+
+INSTRUCTIONS :
+- Hard refresh : Ctrl+Shift+R
+- Apres 60s, la description IA devrait se regenerer
+- Console (F12) : voir les appels LLM toutes les 60s
+
+Co-Authored-By: Letta Code <noreply@letta.com>

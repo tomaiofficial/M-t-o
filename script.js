@@ -637,7 +637,7 @@ function findTempEvolution(hourly, nowMs) {
 //  Cache  : localStorage par (ville + tranche horaire de 30 min)
 // ============================================================
 const AI_CACHE_KEY = "meteo_ai_desc_v1";
-const AI_CACHE_TTL_MS = 30 * 60 * 1000; // 30 min
+const AI_CACHE_TTL_MS = 60 * 1000; // 60 sec - regeneration a chaque minute
 
 // Construit un résumé compact des données météo ACTUELLES pour le prompt LLM.
 // Objectif : donner à l'IA UNIQUEMENT les conditions du moment présent,
@@ -716,9 +716,10 @@ function writeAICache(cache) {
   } catch (e) {}
 }
 
-// Clé de cache : nom de ville arrondi à la demi-heure
+// Clé de cache : nom de ville arrondi à la minute
+// Slot de 60s pour que la description soit regeneree toutes les minutes
 function aiCacheKey(city) {
-  const slot = Math.floor(Date.now() / (30 * 60 * 1000));
+  const slot = Math.floor(Date.now() / (60 * 1000));
   const name = (city.name || "ville").toLowerCase().replace(/\s+/g, "-");
   return `${name}#${slot}`;
 }
@@ -766,6 +767,29 @@ async function generateAIDescription(city, w) {
 
   // 3) Fallback : on retourne null → caller utilise generateDescription
   return null;
+}
+
+// Pipeline async qui appelle l'IA et met a jour le DOM si une meilleure
+// description est disponible. Appele en arriere-plan toutes les 60s
+// (grace au cache AI_CACHE_TTL_MS = 60s).
+async function refreshAIDescriptionAsync(city, w) {
+  if (!city || !w) return;
+  try {
+    const result = await generateAIDescription(city, w);
+    if (!result || !result.text) return;
+    // Remplace UNIQUEMENT si different (evite de re-render pour rien)
+    const cur = $('descText');
+    if (cur && cur.textContent !== result.text) {
+      // Petite animation de transition pour signaler le changement
+      cur.classList.add('desc-fade');
+      setTimeout(() => {
+        cur.textContent = result.text;
+        cur.classList.remove('desc-fade');
+      }, 200);
+    }
+  } catch (e) {
+    // Silencieux : fallback template reste affiche
+  }
 }
 
 function generateDescription(w) {
@@ -2984,10 +3008,14 @@ function renderCity(city, w) {
   $("condition").textContent = info.label;
   $("hilo").textContent = `H:${fmtTemp(daily.temperature_2m_max[0])}  L:${fmtTemp(daily.temperature_2m_min[0])}`;
 
-  // Description : UNIQUEMENT le template statique (deterministe, pas de LLM).
-  // Avant, on affichait le template PUIS le LLM le remplacait en arriere-plan,
-  // ce qui donnait un effet "paf une autre" genant pour l'utilisateur.
-  $("descText").textContent = generateDescription(w);
+  // Description : template instantane + IA en arriere-plan (refresh 60s)
+  // Le template s'affiche tout de suite pour eviter un flash vide.
+  // L'IA est appelee en arriere-plan et remplace le texte des que dispo.
+  // Grace au cache 60s, pas de flicker : meme conditions = meme texte IA.
+  const templateDesc = generateDescription(w);
+  $("descText").textContent = templateDesc;
+  // Declenche la generation IA en arriere-plan (ne bloque pas le rendu)
+  refreshAIDescriptionAsync(city, w);
 
   // ===== Hourly =====
   const $hourly = $("hourly");
