@@ -3041,12 +3041,21 @@ function renderCity(city, w) {
   $("hilo").textContent = `H:${fmtTemp(daily.temperature_2m_max[0])}  L:${fmtTemp(daily.temperature_2m_min[0])}`;
 
   // Description : template instantane + IA en arriere-plan (refresh 60s)
-  // Le template s'affiche tout de suite pour eviter un flash vide.
-  // L'IA est appelee en arriere-plan et remplace le texte des que dispo.
-  // Grace au cache 60s, pas de flicker : meme conditions = meme texte IA.
-  const templateDesc = generateDescription(w);
-  $("descText").textContent = templateDesc;
+  // Description : template instantane + IA en arriere-plan (refresh 60s)
+  // Le template s'affiche tout de suite UNIQUEMENT au premier render
+  // (pour eviter un flash vide). Sur les refresh suivants (60s), on
+  // GARDE la description deja affichee pour eviter de voir 2 textes
+  // defiler (template puis IA).
+  // L'IA n'est appelee que si les conditions meteo ont change.
+  const descEl = $("descText");
+  const isFirstRender = !descEl.dataset.rendered;
+  if (isFirstRender) {
+    const templateDesc = generateDescription(w);
+    descEl.textContent = templateDesc;
+    descEl.dataset.rendered = "1";
+  }
   // Declenche la generation IA en arriere-plan (ne bloque pas le rendu)
+  // Mais ne touche PAS au DOM si les conditions sont stables
   refreshAIDescriptionAsync(city, w);
 
   // ===== Hourly =====
@@ -3329,6 +3338,11 @@ async function switchCity(city) {
   }
   const controller = new AbortController();
   state.currentFetchController = controller;
+
+  // Reset le flag "first render" pour que la nouvelle ville
+  // beneficie du template instantane + IA en arriere-plan
+  const descEl = $("descText");
+  if (descEl) delete descEl.dataset.rendered;
 
   // SECURITE : timeout 8s pour forcer la suppression du skeleton
   const skeletonTimeout = setTimeout(() => {
