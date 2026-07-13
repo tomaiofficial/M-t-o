@@ -2254,10 +2254,14 @@ async function tickLive() {
   // switchCity qui fera le render avec les donnees completes.
   if (document.body.classList.contains("loading")) return;
   try {
+    const fetchStartMs = Date.now();
     const lite = await fetchWeather(city.lat, city.lon, true);
+    const fetchMs = Date.now() - fetchStartMs;
     // Verifie que la requete est toujours pertinente
     if (myRequestId !== state.requestId) return;
     if (!lite || !lite.current) return;
+
+    console.log(`[Refresh] tickLive fetch OK en ${fetchMs}ms (prochain dans 60s)`);
 
     // Lissage des temperatures lite pour stabilite visuelle
     smoothTemperature(lite);
@@ -2309,7 +2313,10 @@ async function tickLive() {
     }
 
     // Si pas de difference majeure, juste tick d'interpolation
-    if (myRequestId === state.requestId) applyLiveTick();
+    if (myRequestId === state.requestId) {
+      applyLiveTick();
+      flashRefreshIndicator();
+    }
   } catch (e) {
     if (e.name === 'AbortError') return;
     if (myRequestId !== state.requestId) return;
@@ -2848,6 +2855,7 @@ async function refreshForecastIfNeeded() {
   // Ne pas resync si un changement de ville est en cours (skeleton actif)
   if (document.body.classList.contains("loading")) return;
   const myRequestId = state.requestId;
+  const refreshStartMs = Date.now();
   try {
     const full = await fetchWeather(state.city.lat, state.city.lon, false);
     if (myRequestId !== state.requestId) return;
@@ -2856,13 +2864,28 @@ async function refreshForecastIfNeeded() {
       smoothTemperature(full);
       state.lastWeather = full;
       lastFullRenderMs = Date.now();
+      state.lastRefreshMs = Date.now();  // MAJ horodatage refresh pour UI
       renderCity(state.city, full);
+      updateUpdatedAt();
+      // Log console pour verification
+      const fetchMs = Date.now() - refreshStartMs;
+      console.log(`[Refresh] Forecast complet OK en ${fetchMs}ms (next dans ${REFRESH_FORECAST_MS/1000}s)`);
+      // Flash visuel sur le hourly pour feedback utilisateur
+      flashRefreshIndicator();
     }
   } catch (e) {
     if (e.name === 'AbortError') return;
     if (myRequestId !== state.requestId) return;
-    console.warn('Forecast refresh failed:', e);
+    console.warn('[Refresh] Forecast refresh failed:', e);
   }
+}
+
+// Flash visuel bref quand le forecast se met a jour (sinon invisible si donnees identiques)
+function flashRefreshIndicator() {
+  const hourly = $('hourly');
+  if (!hourly) return;
+  hourly.classList.add('refresh-flash');
+  setTimeout(() => hourly.classList.remove('refresh-flash'), 600);
 }
 
 // Demarre la boucle d'interpolation
