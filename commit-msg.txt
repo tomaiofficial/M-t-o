@@ -1,0 +1,28 @@
+fix: lisseur de temperature ne cumule plus l'inertie
+
+Le lisseur tempSmoother avait un bug subtil : il stockait
+les valeurs DEJA LISSEES dans l'historique, donc a chaque
+appel, la moyenne ponderee etait faite avec une valeur
+elle-meme deja moyennee -> double lissage cumulatif.
+
+Consequence : sur le long terme, la temperature affichait
+une inertie croissante, reagissait de moins en moins aux
+vrais changements (5C reel pouvait apparaitre comme 1C
+apres plusieurs refresh).
+
+Fix : stocker separement les valeurs BRUTES (rawT, rawFeels,
+rawHum) et LISSEES (smoothedT, smoothedFeels, smoothedHum)
+dans chaque entree d'historique :
+- Detection d'outlier : compare avec rawT (dernier brut)
+- Moyenne ponderee : utilise smoothedT (dernier lisse)
+Comme ca la moyenne se fait toujours entre une observation
+FRAICHE (raw) et le dernier smoothing, sans accumulation.
+
+Tests simules :
+- Stable a 20C -> reste 20C (parfait)
+- Saut a 25C -> convergence en 3 obs (20 -> 23.5 -> 24.55)
+- Retour a 20C -> convergence rapide (24.87 -> 21.46 -> 20.44)
+- Outlier 80C (capteur glitch) -> rejete, reste 20C
+- Reprise a 22C -> suit normalement
+
+Co-Authored-By: Letta Code <noreply@letta.com>

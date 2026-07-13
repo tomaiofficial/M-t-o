@@ -2778,48 +2778,57 @@ const tempSmoother = {
 function smoothTemperature(newData) {
   if (!newData || !newData.current) return newData;
   const cur = newData.current;
-  const t = cur.temperature_2m;
-  const feels = cur.apparent_temperature;
-  const hum = cur.relative_humidity_2m;
-  const wind = cur.wind_speed_10m;
-  const pop = newData.hourly && newData.hourly.precipitation_probability
-    ? (newData.hourly.precipitation_probability[0] || 0) : 0;
-  if (typeof t !== 'number') return newData;
+  const rawT = cur.temperature_2m;
+  const rawFeels = cur.apparent_temperature;
+  const rawHum = cur.relative_humidity_2m;
+  if (typeof rawT !== 'number') return newData;
 
-  const now = Date.now();
-  const last = tempSmoother.history[tempSmoother.history.length - 1];
-  // Rejette les outliers absurdes (ex: capteur qui renvoie 50 deg d'un coup)
-  if (last && Math.abs(t - last.t) > tempSmoother.maxJump &&
-      tempSmoother.history.length >= 2) {
-    // Saut trop grand : on prend la mediane des 3 derniers
-    const recent = tempSmoother.history.slice(-3).map(h => h.t).sort((a, b) => a - b);
-    cur.temperature_2m = recent[1];
-    if (typeof feels === 'number') {
-      const recentFeels = tempSmoother.history.slice(-3).map(h => h.feels).sort((a, b) => a - b);
-      cur.apparent_temperature = recentFeels[1];
+  // IMPORTANT : on stocke les valeurs BRUTES dans l'historique, pas les
+  // valeurs lissees, sinon le lissage se cumule a chaque appel et la
+  // temperature devient de plus en plus inertielle (bug precedent).
+
+  // Etape 1 : rejet des outliers (saut > 2.5 degC vs derniere obs brute)
+  let t = rawT, feels = rawFeels, hum = rawHum;
+  const lastRaw = tempSmoother.history[tempSmoother.history.length - 1];
+  if (lastRaw && tempSmoother.history.length >= 2 &&
+      Math.abs(rawT - lastRaw.rawT) > tempSmoother.maxJump) {
+    // Saut absurde : remplace par la mediane des 3 dernieres observations BRUTES
+    const recent = tempSmoother.history.slice(-3).map(h => h.rawT).sort((a, b) => a - b);
+    t = recent[1];
+    if (typeof rawFeels === 'number') {
+      const recentF = tempSmoother.history.slice(-3).map(h => h.rawFeels).sort((a, b) => a - b);
+      feels = recentF[1];
     }
   }
 
-  // Moyenne ponderee avec la derniere observation (75% nouveau, 25% ancien)
-  // pour stabiliser sans etre trop inertiel
-  if (last && tempSmoother.history.length > 0) {
-    const alpha = 0.75; // poids du nouveau
-    cur.temperature_2m = alpha * cur.temperature_2m + (1 - alpha) * last.t;
-    if (typeof feels === 'number' && typeof last.feels === 'number') {
-      cur.apparent_temperature = alpha * cur.apparent_temperature + (1 - alpha) * last.feels;
+  // Etape 2 : moyenne ponderee avec la derniere observation LISSEE
+  // (pour stabilite visuelle sans accumuler l'inertie)
+  let smoothedT = t;
+  let smoothedFeels = feels;
+  let smoothedHum = hum;
+  const lastSmoothed = tempSmoother.history.length > 0
+    ? tempSmoother.history[tempSmoother.history.length - 1] : null;
+  if (lastSmoothed && typeof lastSmoothed.smoothedT === 'number') {
+    const alpha = 0.7; // 70% nouvelle obs brute, 30% ancien lissE
+    smoothedT = alpha * t + (1 - alpha) * lastSmoothed.smoothedT;
+    if (typeof feels === 'number' && typeof lastSmoothed.smoothedFeels === 'number') {
+      smoothedFeels = alpha * feels + (1 - alpha) * lastSmoothed.smoothedFeels;
     }
-    if (typeof hum === 'number' && typeof last.humidity === 'number') {
-      cur.relative_humidity_2m = alpha * cur.relative_humidity_2m + (1 - alpha) * last.humidity;
+    if (typeof hum === 'number' && typeof lastSmoothed.smoothedHum === 'number') {
+      smoothedHum = alpha * hum + (1 - alpha) * lastSmoothed.smoothedHum;
     }
   }
 
-  // Push dans l'historique
+  // Etape 3 : ecriture des valeurs lissees dans current
+  cur.temperature_2m = smoothedT;
+  if (typeof smoothedFeels === 'number') cur.apparent_temperature = smoothedFeels;
+  if (typeof smoothedHum === 'number') cur.relative_humidity_2m = smoothedHum;
+
+  // Etape 4 : push en memoire (BRUT + LISSE pour les deux usages)
   tempSmoother.history.push({
-    tMs: now,
-    t: cur.temperature_2m,
-    feels: cur.apparent_temperature,
-    humidity: cur.relative_humidity_2m,
-    wind, pop
+    tMs: Date.now(),
+    rawT, rawFeels, rawHum,         // pour detection outlier et mediane
+    smoothedT, smoothedFeels, smoothedHum  // pour moyenne ponderee
   });
   if (tempSmoother.history.length > tempSmoother.maxLen) {
     tempSmoother.history.shift();
