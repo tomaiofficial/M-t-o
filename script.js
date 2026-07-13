@@ -637,7 +637,30 @@ function findTempEvolution(hourly, nowMs) {
 //  Cache  : localStorage par (ville + tranche horaire de 30 min)
 // ============================================================
 const AI_CACHE_KEY = "meteo_ai_desc_v1";
-const AI_CACHE_TTL_MS = 60 * 1000; // 60 sec - regeneration a chaque minute
+// TTL eleve : la description IA est generee UNE FOIS et gardee 1h.
+// Evite que le user voie plusieurs descriptions differentes se suivre.
+// Si la meteo change significativement (voir shouldRefreshAIDescription),
+// on regenere quand meme.
+const AI_CACHE_TTL_MS = 60 * 60 * 1000; // 1 heure
+
+// Conditions qui declenchent une regeneration de la description IA.
+// Le but : detecter un changement meteo MAJEUR (pas un simple drift de
+// temperature ou de vent). Si les conditions sont stables, on garde
+// la description precedente.
+function shouldRefreshAIDescription(prev, cur) {
+  if (!prev) return true;
+  // 1. Changement de condition (ensoleille -> pluie, etc.)
+  if (prev.weather_code !== cur.weather_code) return true;
+  // 2. Changement jour/nuit (leve/couche le soleil)
+  if ((prev.is_day || 0) !== (cur.is_day || 0)) return true;
+  // 3. Pluie qui debute ou s'arrete
+  const prevRain = (prev.precipitation || 0) > 0.1;
+  const curRain = (cur.precipitation || 0) > 0.1;
+  if (prevRain !== curRain) return true;
+  // 4. Saut de temperature majeur (>3C par rapport a la description)
+  if (Math.abs((prev.temperature_2m || 0) - (cur.temperature_2m || 0)) > 3) return true;
+  return false; // conditions stables, on garde la description
+}
 
 // Construit un résumé compact des données météo ACTUELLES pour le prompt LLM.
 // Objectif : donner à l'IA UNIQUEMENT les conditions du moment présent,
@@ -716,10 +739,10 @@ function writeAICache(cache) {
   } catch (e) {}
 }
 
-// Clé de cache : nom de ville arrondi à la minute
-// Slot de 60s pour que la description soit regeneree toutes les minutes
+// Clé de cache : nom de ville arrondi à l'heure
+// Slot 1h pour que la description NE CHANGE PAS en boucle.
 function aiCacheKey(city) {
-  const slot = Math.floor(Date.now() / (60 * 1000));
+  const slot = Math.floor(Date.now() / (60 * 60 * 1000));
   const name = (city.name || "ville").toLowerCase().replace(/\s+/g, "-");
   return `${name}#${slot}`;
 }
@@ -770,10 +793,17 @@ async function generateAIDescription(city, w) {
 }
 
 // Pipeline async qui appelle l'IA et met a jour le DOM si une meilleure
-// description est disponible. Appele en arriere-plan toutes les 60s
-// (grace au cache AI_CACHE_TTL_MS = 60s).
+// description est disponible. NE S'APPLIQUE PAS si les conditions meteo
+// n'ont pas change (grace a shouldRefreshAIDescription).
+// La description est donc stable : une seule par "episode" meteo.
+let lastAIDescriptionWeather = null; // pour detection de changement
 async function refreshAIDescriptionAsync(city, w) {
-  if (!city || !w) return;
+  if (!city || !w || !w.current) return;
+  // Anti-flicker : si les conditions sont stables, on garde la description
+  // precedente et on ne rappelle PAS le LLM.
+  if (lastAIDescriptionWeather && !shouldRefreshAIDescription(lastAIDescriptionWeather, w.current)) {
+    return; // Conditions stables -> on garde la description existante
+  }
   try {
     const result = await generateAIDescription(city, w);
     if (!result || !result.text) return;
@@ -787,6 +817,8 @@ async function refreshAIDescriptionAsync(city, w) {
         cur.classList.remove('desc-fade');
       }, 200);
     }
+    // Memoise les conditions pour les prochains checks
+    lastAIDescriptionWeather = { ...w.current };
   } catch (e) {
     // Silencieux : fallback template reste affiche
   }
