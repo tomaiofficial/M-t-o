@@ -1380,6 +1380,62 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   0% { background-position: -200px 0; }
   100% { background-position: 200px 0; }
 }
+
+/* Banniere de switch de ville (geolocalisation) */
+.geo-switch-banner {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: rgba(20, 30, 50, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  color: #fff;
+  padding: 14px 18px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  z-index: 1000;
+  font-size: 14px;
+  opacity: 0;
+  transition: transform 0.35s cubic-bezier(.2,.9,.3,1.2), opacity 0.35s ease;
+  max-width: 90vw;
+  flex-wrap: wrap;
+}
+.geo-switch-banner.visible {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+.geo-switch-banner .geo-icon {
+  font-size: 18px;
+}
+.geo-switch-banner .geo-text {
+  flex: 1;
+  min-width: 180px;
+}
+.geo-switch-banner button {
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.geo-switch-banner button:hover {
+  background: rgba(255,255,255,0.25);
+}
+.geo-switch-banner .geo-accept {
+  background: #0a84ff;
+  border-color: #0a84ff;
+}
+.geo-switch-banner .geo-accept:hover {
+  background: #0974e0;
+}
 body.loading .temp,
 body.loading .condition,
 body.loading .hilo,

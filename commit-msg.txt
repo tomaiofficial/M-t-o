@@ -1,0 +1,50 @@
+feat: suivi auto de position + banniere de switch de ville
+
+Le user signale : "la geoloc reste sur ma ville principale
+meme quand je change/je bouge de ville ou commune".
+
+Cause : tryGeolocate utilisait getCurrentPosition en
+one-shot au demarrage uniquement. Aucune verification
+periodique, l'app restait figee sur la premiere position.
+
+Nouveau systeme :
+
+1. startGeolocationWatcher()
+   - Verifie la position toutes les 5 minutes
+   - Premier check rapide 30s apres lancement
+   - Seuil de 5km pour declencher (evite les
+     micro-deplacements, marche dans la rue etc.)
+
+2. Distance Haversine
+   - Fonction haversineKm(lat1, lon1, lat2, lon2)
+   - Compare avec lastKnownLocation
+   - Si <5km : ignore
+   - Si >=5km : declenche
+
+3. showGeoSwitchBanner(name, lat, lon)
+   - Banniere animee en bas de l'ecran
+   - "Nouvelle position : NomDeVille"
+   - 2 boutons : "Aller a cette ville" / "Ignorer"
+   - Ne s'affiche PAS automatiquement : demande
+     confirmation (evite les switches surprises)
+   - Position absolue, blur, ombre, animation slide-up
+
+4. Bouton manuel dans les parametres
+   - "Mettre a jour ma position" : force un getCurrentPosition
+     immediat (utile en voyage, train, etc.)
+   - Toggle "Suivi auto de position" (Active/Desactive)
+   - Preferences sauvegardees dans localStorage
+
+5. Respect du consentement
+   - localStorage['meteo_geoloc_enabled']
+   - Si 'false' : watcher ne fait rien
+   - Toggle dans parametres permet de desactiver
+
+CSS : .geo-switch-banner avec backdrop-filter blur,
+slide-up animation, opacite 0->1, design iOS-like.
+
+Cache bump : v=20260716b -> v=20260716c
+
+Hard refresh : Ctrl+Shift+R
+
+Co-Authored-By: Letta Code <noreply@letta.com>
