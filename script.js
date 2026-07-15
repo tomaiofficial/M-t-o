@@ -2297,10 +2297,25 @@ function classifyLiveCondition(cur) {
   }
   if (code === 77) return { code: 77, label: 'Grêle', icon: 'hail', override: true };
 
-  // Orage observe
-  if (code >= 95 && code <= 99) {
+  // Orage observe : UNIQUEMENT si on observe aussi de la pluie/precipitation
+  // Sinon le code 95/96/99 (prevu par modele) est affiche alors qu'aucun orage
+  // n'est reellement visible -> flash desagreable "Orages" puis mise a jour.
+  if (code >= 95 && code <= 99 && (mm > 0.05 || rainMm > 0.05 || showerMm > 0.05)) {
     if (code === 99 || (mm >= 8)) return { code: 99, label: 'Orages violents', icon: 'thunder-storm', override: true };
     return { code: 95, label: 'Orages', icon: 'thunder', override: true };
+  }
+  // Garde anti-faux-orage : si code 95/96/99 mais AUCUNE precip observee
+  // et que le code horaire suivant n'est PAS un orage -> on demod l'affichage
+  // vers un label plus realiste (couvert) pour eviter le flash "Orages".
+  if (code >= 95 && code <= 99) {
+    const cloudCover = (cur && (cur.cloud_cover !== undefined ? cur.cloud_cover : null));
+    if (cloudCover === null || cloudCover >= 70) {
+      // Couverture nuageuse elevee SANS pluie : orage "prevu" mais pas observe
+      // On affiche "Couvert" au lieu de "Orages" pour eviter le flash faux.
+      return { code: 3, label: 'Couvert', icon: 'cloudy', override: true, realCode: code };
+    }
+    // Sinon ciel partiellement nuageux : "Risque d'orages" (info mais moins alarmiste)
+    return { code: code, label: code === 99 ? 'Risque d\'orages violents' : 'Risque d\'orages', icon: code === 99 ? 'thunder-storm' : 'thunder', override: true, realCode: code };
   }
 
   // Pluie observee
@@ -3083,19 +3098,24 @@ function renderCity(city, w) {
   const dayCycle = getDayCycleInfo(cur, daily);
   const isNight = dayCycle.isNight;
   const code = cur.weather_code;
-  const info = wmoInfo(code, isNight);
+  // IMPORTANT : utiliser classifyLiveCondition EN PREMIER pour que le rendu
+  // initial soit coherent avec ce que applyLiveTick affichera juste apres.
+  // Sinon on voit 1 flash "Orages" puis 1 sec apres la vraie condition.
+  const liveInfo = classifyLiveCondition(cur);
+  const info = liveInfo || wmoInfo(code, isNight);
+  const finalCode = liveInfo ? liveInfo.code : code;
 
   // Theme
-  app.className = "app " + themeFor(code, dayCycle, cur.wind_speed_10m);
+  app.className = "app " + themeFor(finalCode, dayCycle, cur.wind_speed_10m);
 
-  // Canvas particles based on weather
-  if ([95,96,99].includes(code)) {
+  // Canvas particles based on weather (basé sur code override inclus)
+  if ([95,96,99].includes(finalCode)) {
     setParticleType("rain"); // Storm = heavy rain particles
-  } else if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code)) {
+  } else if ([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(finalCode)) {
     setParticleType("rain");
-  } else if ([71,73,75,77,85,86].includes(code)) {
+  } else if ([71,73,75,77,85,86].includes(finalCode)) {
     setParticleType("snow");
-  } else if (isNight && [0,1,2].includes(code)) {
+  } else if (isNight && [0,1,2].includes(finalCode)) {
     setParticleType("stars");
   } else {
     setParticleType("none");
