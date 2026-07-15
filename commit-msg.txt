@@ -1,0 +1,58 @@
+fix: plus de "hop" template->IA + detection pluie/orage amelioree
+
+DEUX CHANGEMENTS:
+
+1. Plus de description qui change au lancement
+
+Le user signalait : "au lancement il y a une description
+puis hop ca change, je veux une seule".
+
+Cause : meme apres mes corrections precedentes
+(shouldRefreshAIDescription + dataset.rendered),
+le PREMIER render faisait quand meme template ->
+remplacement par IA (parce que lastAIDescriptionWeather
+est null donc shouldRefreshAIDescription renvoie true).
+
+Fix : SUPPRESSION de l'appel IA dans renderCity.
+La description est MAINTENANT 100% template local.
+
+Le template local est deja tres intelligent : il analyse
+- weather_code
+- heure actuelle + sunrise/sunset
+- evolution temperature (max/min 24h)
+- prochain episode de pluie (timing + pop + intensite)
+- force/direction du vent
+- ressenti vs temperature reelle
+
+Donc une seule description stable et pertinente.
+
+Le label HTML est renomme "Description IA" ->
+"Description intelligente, stable".
+
+2. Detection orage/pluie/neige amelioree
+
+a) Bandeau orage : seuil 'high' -> accepte 'medium'
+   Avant : orage affiche UNIQUEMENT si 2 sources confirment.
+   Maintenant : affiche AUSSI si 1 seule source, ou si
+   l'orage est EN COURS (current code 95/96/99), ou si
+   pluie intense imminente (POP >= 70%).
+   Label dynamique : "Confirme 2 sources" / "Prevu par
+   1 source" / "En cours" / "Risque eleve".
+
+b) Rain banner : ajout "Risque de pluie (POP%)"
+   Avant : bandeau vide si WMO dit pas de pluie mais POP >= 70%.
+   Maintenant : affiche "Risque de pluie (85%) dans 20 min".
+
+c) Rain banner : ajout "Risque de neige"
+   Declenche si temperature <= 1.5C + POP >= 30% + code neige.
+   Specialement adapte aux villes d'altitude / pays froids.
+
+d) detectPrecipDetailed : isRaining accepte POP >= 70
+   sans condition sur mm. Les micro-precips ne sont pas
+   ratees juste parce que le cumul est sous le seuil.
+
+Bump cache : v=20260713e -> v=20260716
+
+Hard refresh : Ctrl+Shift+R
+
+Co-Authored-By: Letta Code <noreply@letta.com>

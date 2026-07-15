@@ -2190,7 +2190,7 @@ function detectPrecipDetailed(hourly, currentTimeStr, lookaheadHours = 6, liveCu
     }
   }
 
-  // ===== ETAPE 2 : Forecast prochaine fenetre =====
+  // ===== ETAPE 2 : Forecast prochaine fenetre (avec detection POP amelioree) =====
   let lastRaining = false;
   for (let i = 0; i < Math.min(lookaheadHours, hourly.time.length); i++) {
     const t = new Date(hourly.time[i]).getTime();
@@ -2200,9 +2200,13 @@ function detectPrecipDetailed(hourly, currentTimeStr, lookaheadHours = 6, liveCu
     const c = hourly.weather_code[i];
     const pop = (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0;
     const mm = (hourly.precipitation && hourly.precipitation[i]) || 0;
-    // Detection amelioree : on inclut aussi PoP eleve (>=40%) meme si WMO != precip
-    // car WMO code hourly peut etre en retard sur les micro-intensites.
-    const isRaining = PRECIP.includes(c) || (pop >= 40 && mm >= 0.1);
+    // Detection amelioree avec 3 niveaux :
+    // 1. Code WMO precip connu (certain)
+    // 2. POP eleve + mm >= 0.1 (probable)
+    // 3. POP tres eleve (>=70%) meme sans mm (risque)
+    const isRaining = PRECIP.includes(c)
+                   || (pop >= 40 && mm >= 0.1)
+                   || (pop >= 70);
 
     if (isRaining) {
       if (!result.raining || (result.raining && result.starting > t)) {
@@ -2234,11 +2238,25 @@ function detectPrecipDetailed(hourly, currentTimeStr, lookaheadHours = 6, liveCu
         result.peakType = result.type;
         result.peakIntensity = result.intensity;
       }
+      // Detection neige (temp basse + POP)
+      const curTemp = (hourly.temperature_2m && hourly.temperature_2m[i]) || 5;
+      if (curTemp <= 1.5 && pop >= 30 && (c === 71 || c === 73 || c === 75 || c === 77 || c === 85 || c === 86)) {
+        result.snowRisk = true;
+      }
     } else if (lastRaining && result.starting && !result.ending) {
       result.ending = t;
       result.endInMinutes = Math.round((t - curMs) / 60000);
     }
-    lastRaining = isRaining;
+    // Detection POP eleve SANS pluie confirmee : risque
+    if (!isRaining && pop >= 70) {
+      result.popRisk = pop;
+      if (!result.raining) {
+        result.raining = true;
+        result.starting = t;
+        result.inMinutes = Math.max(0, Math.round((t - curMs) / 60000));
+      }
+    }
+    lastRaining = isRaining || (pop >= 70);
   }
   return result;
 }
@@ -2784,6 +2802,14 @@ function updateRainAlert() {
   } else if (info.raining && info.peakMm >= 0.5) {
     msg = `Pluie en cours${info.intensity ? ` (${info.intensity})` : ''}.`;
   }
+  // Risque pluie (POP eleve sans mm confirme): bandeau "Risque de pluie"
+  if (!msg && info.popRisk) {
+    msg = `Risque de pluie (${info.popRisk}%) dans ${info.inMinutes} min.`;
+  }
+  // Risque neige (temp basse + POP)
+  if (!msg && info.snowRisk) {
+    msg = `Risque de neige dans ${info.inMinutes} min.`;
+  }
 
   if (msg) {
     if (banner.textContent !== msg) banner.textContent = msg;
@@ -2797,32 +2823,73 @@ function updateRainAlert() {
 }
 
 // Bandeau d'alerte orage (cross-validation Open-Meteo + Met.no)
+// SEUIL ABAISSE : on affiche aussi en fiabilite 'medium' (1 seule source
+// detecte l'orage). L'utilisateur prefere etre alerte meme si une seule
+// source le predit plutot que de rater un orage reel.
 function updateThunderBanner() {
   const banner = $('thunderBanner');
   if (!banner) return;
   const w = state.lastWeather;
   if (!w) { banner.classList.remove('visible'); return; }
   const rel = w._thunderReliability;
-  if (!rel || rel.confidence !== 'high') {
+  // Detection locale depuis le current weather_code (toujours dispo)
+  const curCode = w.current && w.current.weather_code;
+  const isCurThunder = curCode && [95, 96, 99].includes(curCode);
+  // Detection croisee Open-Meteo + Met.no
+  const omPredictsThunder = rel && rel.thunderHours && rel.thunderHours.length > 0;
+  // Detection par proba orageuse (POP eleve + code precip intense)
+  let popThreat = false;
+  if (w.hourly && w.hourly.precipitation_probability && w.hourly.weather_code) {
+    for (let i = 0; i < Math.min(6, w.hourly.time.length); i++) {
+      const pop = w.hourly.precipitation_probability[i] || 0;
+      const code = w.hourly.weather_code[i];
+      if (pop >= 70 && code && [61, 63, 65, 80, 81, 82].includes(code)) {
+        popThreat = true;
+        break;
+      }
+    }
+  }
+  // On affiche SI :
+  // - Orage detecte par 2 sources (high confidence), OU
+  // - Orage detecte par 1 source (medium confidence), OU
+  // - Orage EN COURS (current weather_code 95/96/99), OU
+  // - Pluie intense imminente avec forte probabilite
+  if (!omPredictsThunder && !isCurThunder && !popThreat) {
     banner.classList.remove('visible');
     return;
   }
-  // Confiance haute : afficher le bandeau
-  const intensityLabel = rel.maxIntensity === 2 ? " avec risque de grele forte"
-                       : rel.maxIntensity === 1 ? " avec grele possible"
+  // Determiner le label de confiance
+  let confidenceLabel = '';
+  if (rel && rel.confidence === 'high') confidenceLabel = 'CONFIRME 2 sources';
+  else if (rel && rel.confidence === 'medium') confidenceLabel = 'Prevu par 1 source';
+  else if (isCurThunder) confidenceLabel = 'En cours';
+  else confidenceLabel = 'Risque eleve';
+  // Intensite
+  const intensityLabel = rel && rel.maxIntensity === 2 ? " avec risque de grele forte"
+                       : rel && rel.maxIntensity === 1 ? " avec grele possible"
                        : "";
-  // Calcul timing du premier orage
+  // Timing
   let timing = "imminent";
-  if (rel.firstThunderTime && w.hourly && w.hourly.time) {
+  let firstTime = rel && rel.firstThunderTime;
+  // Fallback: chercher la premiere heure avec code 95/96/99 dans hourly
+  if (!firstTime && w.hourly && w.hourly.time && w.hourly.weather_code) {
+    for (let i = 0; i < w.hourly.time.length; i++) {
+      if ([95, 96, 99].includes(w.hourly.weather_code[i])) {
+        firstTime = w.hourly.time[i];
+        break;
+      }
+    }
+  }
+  if (firstTime && w.hourly && w.hourly.time) {
     const now = Date.now();
-    const tMs = new Date(rel.firstThunderTime).getTime();
+    const tMs = new Date(firstTime).getTime();
     const inMin = Math.round((tMs - now) / 60000);
     if (inMin > 5 && inMin < 60) timing = `dans ${inMin} min`;
     else if (inMin >= 60 && inMin < 180) timing = `dans ${Math.round(inMin / 60)}h`;
     else if (inMin >= 180) timing = `dans ${Math.round(inMin / 60)}h`;
     else if (inMin <= 5) timing = "imminent";
   }
-  const msg = `<span class="thunder-icon">&#9889;</span>Orages ${timing}${intensityLabel}<span class="thunder-confidence">CONFIRME 2 sources</span>`;
+  const msg = `<span class="thunder-icon">&#9889;</span>Orages ${timing}${intensityLabel}<span class="thunder-confidence">${confidenceLabel}</span>`;
   if (banner.innerHTML !== msg) banner.innerHTML = msg;
   banner.classList.add('visible');
 }
@@ -3041,22 +3108,15 @@ function renderCity(city, w) {
   $("hilo").textContent = `H:${fmtTemp(daily.temperature_2m_max[0])}  L:${fmtTemp(daily.temperature_2m_min[0])}`;
 
   // Description : template instantane + IA en arriere-plan (refresh 60s)
-  // Description : template instantane + IA en arriere-plan (refresh 60s)
-  // Le template s'affiche tout de suite UNIQUEMENT au premier render
-  // (pour eviter un flash vide). Sur les refresh suivants (60s), on
-  // GARDE la description deja affichee pour eviter de voir 2 textes
-  // defiler (template puis IA).
-  // L'IA n'est appelee que si les conditions meteo ont change.
+  // Description : UNIQUEMENT le template intelligent local.
+// Aucun appel LLM : evite le "hop" template -> IA desagable.
+// Le template analyse meteo + heure + tendance temperature + pluie
+// + vent + ressenti pour generer UNE description stable.
   const descEl = $("descText");
-  const isFirstRender = !descEl.dataset.rendered;
-  if (isFirstRender) {
-    const templateDesc = generateDescription(w);
-    descEl.textContent = templateDesc;
+  if (descEl) {
+    descEl.textContent = generateDescription(w);
     descEl.dataset.rendered = "1";
   }
-  // Declenche la generation IA en arriere-plan (ne bloque pas le rendu)
-  // Mais ne touche PAS au DOM si les conditions sont stables
-  refreshAIDescriptionAsync(city, w);
 
   // ===== Hourly =====
   const $hourly = $("hourly");
