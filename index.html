@@ -10,7 +10,7 @@
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
 <title>Météo</title>
-<link rel="stylesheet" href="styles.css?v=20260716c" />
+<link rel="stylesheet" href="styles.css?v=20260716d" />
 </head>
 <body>
   <!-- Bibliothèque d'icônes SVG premium : halos lumineux, dégradés multi-stops, reflets, ombres -->
@@ -689,41 +689,55 @@
     <div class="panel-overlay" id="settingsPanel">
       <div class="panel-content">
         <h2>Paramètres</h2>
-        <div class="setting-row">
-          <span class="setting-label">Unité de température</span>
-          <div class="seg-toggle" id="unitToggle">
-            <button class="seg active" data-unit="C">°C</button>
-            <button class="seg" data-unit="F">°F</button>
+
+        <div class="setting-group">
+          <h3>Affichage</h3>
+          <div class="setting-row">
+            <span class="setting-label">Unité</span>
+            <div class="seg-toggle" id="unitToggle">
+              <button class="seg active" data-unit="C">°C</button>
+              <button class="seg" data-unit="F">°F</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Description</span>
+            <span class="setting-value">Intelligente, stable</span>
           </div>
         </div>
-        <div class="setting-row clickable" id="refreshBtn">
-          <span class="setting-label">Actualiser maintenant</span>
-          <span class="chev">›</span>
-        </div>
-        <div class="setting-row clickable" id="geolocBtn">
-          <span class="setting-label">Mettre à jour ma position</span>
-          <span class="chev">›</span>
-        </div>
-        <div class="setting-row">
-          <span class="setting-label">Suivi auto de position</span>
-          <div class="seg-toggle" id="geolocToggle">
-            <button class="seg active" data-geoloc="true">Activé</button>
-            <button class="seg" data-geoloc="false">Désactivé</button>
+
+        <div class="setting-group">
+          <h3>Actualisation</h3>
+          <div class="setting-row clickable" id="refreshBtn">
+            <span class="setting-label">Actualiser maintenant</span>
+            <span class="chev">›</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Auto</span>
+            <span class="setting-value">Toutes les minutes</span>
           </div>
         </div>
-        <div class="setting-row">
-          <span class="setting-label">Actualisation auto</span>
-          <span class="setting-value">Toutes les minutes</span>
+
+        <div class="setting-group">
+          <h3>Position</h3>
+          <div class="setting-row clickable" id="geolocBtn">
+            <span class="setting-label">Mettre à jour ma position</span>
+            <span class="chev">›</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Suivi auto</span>
+            <div class="seg-toggle" id="geolocToggle">
+              <button class="seg active" data-geoloc="true">Activé</button>
+              <button class="seg" data-geoloc="false">Désactivé</button>
+            </div>
+          </div>
         </div>
-        <div class="setting-row">
-          <span class="setting-label">Description</span>
-          <span class="setting-value">Intelligente, stable</span>
-        </div>
-        <button class="close-panel-btn" id="closeSettings">Fermer</button>
-        <h2 style="margin-top: 28px;">Villes favorites</h2>
+
+        <h2 style="margin-top: 24px;">Villes favorites</h2>
         <div class="favorites-list" id="favoritesList">
           <p style="opacity: 0.6; font-size: 13px; text-align: center; padding: 20px 0;">Aucune ville favorite. Recherchez une ville et appuyez sur l'étoile pour l'ajouter.</p>
         </div>
+
+        <button class="close-panel-btn" id="closeSettings">Fermer</button>
       </div>
     </div>
 
@@ -808,6 +822,6 @@
     </main>
   </div>
 
-  <script src="script.js?v=20260716c"></script>
+  <script src="script.js?v=20260716d"></script>
 </body>
 </html>

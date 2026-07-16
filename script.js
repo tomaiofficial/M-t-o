@@ -2054,6 +2054,12 @@ async function fetchWeatherProcedural(lat, lon, lite = false, signal = null) {
 const REFRESH_LIVE_MS = 60 * 1000;     // fetch live chaque 60s
 const INTERPOLATE_MS = 1000;           // tick d'interpolation chaque seconde
 const REFRESH_FORECAST_MS = 60 * 1000; // re-render forecast complet chaque 60s (etait 5 min)
+// FAST POLL : micro-fetch toutes les 20s pour detecter la pluie/orage
+// le plus tot possible (sans attendre 60s). Cible uniquement les
+// parametres "current" (tres leger, pas de forecast).
+const FAST_POLL_MS = 20 * 1000;
+let fastPollTimerId = null;
+let lastObservedMm = 0; // pour detecter le debut/fin de pluie
 
 let prevLiveData = null;
 let currLiveData = null;
@@ -2412,6 +2418,84 @@ async function tickLive() {
     console.warn('tickLive failed:', e);
   }
   if (myRequestId === state.requestId) updateUpdatedAt();
+}
+
+// ============================================================
+//  FAST TICK (20s) : micro-poll des precipitations pour detecter
+//  pluie/orage le plus vite possible. Cible uniquement les
+//  parametres "current" (tres leger : ~1KB de reponse).
+//  Limite : Open-Meteo met a jour ses donnees toutes les ~5-15min,
+//  donc ce poll ne detecte que ce qui est deja observe par leur station.
+// ============================================================
+let fastPollInFlight = false;
+async function fastTick() {
+  if (!state.city) return;
+  if (fastPollInFlight) return; // anti-stacking
+  if (document.body.classList.contains("loading")) return;
+  fastPollInFlight = true;
+  const myRequestId = state.requestId;
+  try {
+    // Fetch ultra-leger : juste current (precipitation + weather_code + temperature)
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${state.city.lat}&longitude=${state.city.lon}&current=temperature_2m,precipitation,weather_code,wind_speed_10m,relative_humidity_2m&timezone=auto`;
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 7000);
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timeout);
+    if (myRequestId !== state.requestId) return;
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || !data.current) return;
+    const cur = data.current;
+    // Met a jour currLiveData.current avec les dernieres observations
+    if (currLiveData) {
+      currLiveData.current = { ...currLiveData.current, ...cur };
+    } else if (state.lastWeather && state.lastWeather.current) {
+      state.lastWeather.current = { ...state.lastWeather.current, ...cur };
+    }
+    // Detection "instantanee" : si precipitation passe de 0 a >0 (ou >2)
+    // et que le weather_code devient pluie/orage -> mise a jour immediate
+    const mm = (cur.precipitation || 0);
+    const code = cur.weather_code;
+    const wasRaining = lastObservedMm > 0.05;
+    const isRaining = mm > 0.05;
+    const rainStarted = isRaining && !wasRaining;
+    const rainStopped = !isRaining && wasRaining;
+    const isThunder = code >= 95 && code <= 99;
+    if (rainStarted || rainStopped || isThunder) {
+      console.log(`[FastTick] Pluie ${rainStarted ? 'demarree' : rainStopped ? 'arretée' : ''} ${isThunder ? '+ orage' : ''} (${mm.toFixed(2)}mm/h, code=${code})`);
+      // Force applyLiveTick pour mettre a jour la condition visuellement
+      applyLiveTick();
+      // Met a jour la banniere pluie / orage maintenant
+      updateRainAlert();
+      updateThunderBanner();
+      flashRefreshIndicator();
+    }
+    lastObservedMm = mm;
+    // Maj de lastRefreshMs pour le compteur "Mis a jour il y a"
+    lastFetchMs = Date.now();
+    state.lastRefreshMs = lastFetchMs;
+    updateUpdatedAt();
+  } catch (e) {
+    // Silencieux : c'est un fast poll, pas grave si echoue
+  } finally {
+    fastPollInFlight = false;
+  }
+}
+
+function startFastPoll() {
+  if (fastPollTimerId) return;
+  // Premier check rapide 5s apres lancement
+  setTimeout(fastTick, 5 * 1000);
+  // Puis toutes les 20s
+  fastPollTimerId = setInterval(fastTick, FAST_POLL_MS);
+  console.log(`[FastTick] Poll precip toutes les ${FAST_POLL_MS/1000}s`);
+}
+
+function stopFastPoll() {
+  if (fastPollTimerId) {
+    clearInterval(fastPollTimerId);
+    fastPollTimerId = null;
+  }
 }
 
 // Tick d'interpolation (1s) : met a jour progressivement les valeurs actuelles
@@ -3992,4 +4076,8 @@ unitToggle.addEventListener("click", (e) => {
   // (toutes les 5 min) si l'utilisateur a change de ville/commune.
   // Propose un switch via une banniere si deplace de >5km.
   startGeolocationWatcher();
+
+  // Demarre le fast poll : verifie les precipitations toutes les 20s
+  // pour detecter pluie/orage le plus rapidement possible.
+  startFastPoll();
 })();
