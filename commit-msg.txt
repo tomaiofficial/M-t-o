@@ -1,0 +1,32 @@
+style: % POP horaires en bleu Apple (discret mais visible)
+
+Le user veut que les pourcentages de precipitation
+sous les heures par heure ressemblent a Apple Weather :
+bleu iOS system, visibles mais pas trop voyants.
+
+Avant :
+- Jaune #FFD60A avec fond pill + bordure + glow + animation
+- Rouge pour POP eleve avec gradient + animation pulse
+- Visuellement tres voyant, fait "bijou"
+
+Apres (style Apple Weather) :
+- Bleu iOS system : #5AC8FA (clair) -> #4A9EFF (moyen) -> #0A84FF (eleve)
+- Pas de fond (plus de pill rgba)
+- Pas de bordure
+- Pas d'animation pulse (juste la couleur)
+- Text-shadow tres leger pour lisibilite sur fond clair
+- Font-weight 600 par defaut, 700 si POP eleve
+- Font-size 11px (legerement plus grand pour meilleure lecture)
+- opacity 0.92 par defaut, 0 si pas de pluie (vide)
+
+Suppression keyframes pop-pulse (plus utilise).
+
+Resultat : les % se voient nettement (couleur iOS
+system blue tres lisible) mais ne "crient" plus.
+Style coherent avec le reste du design Apple-like.
+
+Cache bump : v=20260716d -> v=20260716e
+
+Hard refresh : Ctrl+Shift+R
+
+Co-Authored-By: Letta Code <noreply@letta.com>
