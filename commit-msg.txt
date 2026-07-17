@@ -1,0 +1,49 @@
+fix: % POP horaires ne restent plus bloques
+
+Le user : "la meteo reste bloquee tout le temps sur
+le meme %, meme quand ca change".
+
+Cause : applyHourlyInterpolation() faisait une
+interpolation lineaire entre prevPop (fetch precedent)
+et targetPop (fetch actuel) sur 60 secondes :
+
+  interpPop = lerp(prevPop, targetPop, t)
+  ou t = (now - lastFetchMs) / 60s
+
+Le % affiche etait donc TOUJOURS entre les deux valeurs,
+degrade progressivement. Resultat :
+- Si prevPop=50 et targetPop=55, l'utilisateur voyait
+  50 puis 51 puis 52 puis 53 puis 54 puis 55 sur 60s
+- Mais avec Math.round : tout etait affiche 50 ou 51
+  jusqu'a la moitie de la fenetre, puis 54-55 a la fin
+- Si la meteo evolue peu entre 2 fetchs, le % parait
+  bloque pendant >30s
+
+Fix : SUPPRESSION de l'interpolation pour les % POP.
+
+Nouveau comportement :
+- targetPop affiche DIRECTEMENT (la valeur reelle des
+  donnees, pas une moyenne avec le passe)
+- Arrondi a 5% pres (Math.round(targetPop / 5) * 5)
+  pour eviter le clignotement quand la valeur oscille
+  entre 47-49 par exemple (toutes affichent 45)
+- Visibilite : POP >= 5% affiche, sinon cache
+
+Avantages :
+- Changements reels visibles immediatement (ex: 30% ->
+  65% affiche direct 65% des la prochaine maj, pas
+  d'interpolation lente)
+- Petites fluctuations cachees par le arrondi a 5%
+  (stable visuellement)
+- En cas d'urgence (orage soudain), le % saute de 20%
+  a 90% instantanement des l'arrivant des donnees
+
+Note : l'interpolation reste pour la TEMPERATURE (cell.temp)
+car elle beneficierait sinon de variations brusques
+toutes les 60s.
+
+Cache bump : v=20260717 -> v=20260717b
+
+Hard refresh : Ctrl+Shift+R
+
+Co-Authored-By: Letta Code <noreply@letta.com>

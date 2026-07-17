@@ -2879,7 +2879,6 @@ function applyHourlyInterpolation() {
   const hourly = livePrecipHourly || (state.lastWeather && state.lastWeather.hourly);
   if (!hourly || !hourly.time) return;
   const now = Date.now();
-  const REFR = REFRESH_LIVE_MS;
 
   hourlyCells.forEach(cell => {
     const i = cell.idx;
@@ -2888,14 +2887,17 @@ function applyHourlyInterpolation() {
     if (!hourly.precipitation_probability || hourly.precipitation_probability[i] == null) return;
     const targetPop = hourly.precipitation_probability[i];
     const targetMm = (hourly.precipitation && hourly.precipitation[i]) || 0;
-    const prevPop = prevLiveData && prevLiveData.hourly && prevLiveData.hourly.precipitation_probability
-      ? (prevLiveData.hourly.precipitation_probability[i] ?? targetPop) : targetPop;
-    const t = Math.min(1, (now - lastFetchMs) / REFR);
-    const interpPop = lerp(prevPop, targetPop, t);
-    const visible = interpPop >= 1;
-    const txt = visible ? Math.round(interpPop) + '%' : '';
-    const heavy = interpPop >= 70 || targetMm >= 4;
-    const medium = !heavy && (interpPop >= 30 || targetMm >= 1);
+    // IMPORTANT : affichage DIRECT (pas d'interpolation entre prev et target).
+    // L'interpolation lisse trop les % et cache les changements reels.
+    // On veut voir le % tel qu'il est MAINTENANT dans les donnees, pas une
+    // moyenne qui ne bouge presque pas.
+    // Arrondi a 5% pres pour eviter le clignotement si la valeur oscille
+    // entre 47 et 49 par exemple.
+    const rounded = Math.round(targetPop / 5) * 5;
+    const visible = rounded >= 5;
+    const txt = visible ? rounded + '%' : '';
+    const heavy = targetPop >= 70 || targetMm >= 4;
+    const medium = !heavy && (targetPop >= 30 || targetMm >= 1);
     const wantClass = visible ? (heavy ? ' heavy' : (medium ? ' medium' : '')) : ' empty';
     if (cell.elPop.textContent !== txt) cell.elPop.textContent = txt;
     if (wantClass !== cell.popClass) {
