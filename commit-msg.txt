@@ -1,0 +1,40 @@
+fix: flash "3%" -> "5%" au lancement des cellules horaires
+
+Le user : "des que je lance la meteo elle met les %
+mais d'abord elle met 3 et puis hop 5%".
+
+Cause : DEUX rendus differents pour les % POP !
+1. Render initial (renderCity, ligne 3342) :
+   utilise Math.round(pop) -> arrondi a l'UNITE
+   -> affiche 3% pour pop=3
+2. 1 seconde apres, applyHourlyInterpolation :
+   utilise Math.round(pop / 5) * 5 -> arrondi a 5%
+   -> affiche 5% pour pop=3
+
+Resultat : flash "3%" -> "5%" au lancement, tres
+desagreable.
+
+Fix : aligner les DEUX rendus sur le meme arrondi.
+
+Dans renderCity, remplace :
+  Math.round(pop) + "%"
+  popVisible = pop >= 1
+par :
+  Math.round(pop / 5) * 5
+  popVisible = popRounded >= 5
+
+Les deux endroits utilisent maintenant la meme
+logique d'arrondi et de visibilite :
+- pop=3 -> arrondi=5, affiche "5%"
+- pop=2 -> arrondi=0, cache
+- pop=7 -> arrondi=5, affiche "5%"
+- pop=8 -> arrondi=10, affiche "10%"
+
+Plus aucun saut au lancement, affichage coherent
+dès la premiere frame.
+
+Cache bump : v=20260717b -> v=20260717c
+
+Hard refresh : Ctrl+Shift+R
+
+Co-Authored-By: Letta Code <noreply@letta.com>

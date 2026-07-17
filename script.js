@@ -3336,10 +3336,16 @@ function renderCity(city, w) {
       // Pas de precip connue -> placeholder
     }
     const wi = wmoInfo(hourCode, hourIsNight);
+    // IMPORTANT : meme arrondi a 5% pres que applyHourlyInterpolation
+    // pour eviter le flash "3%" -> "5%" au lancement. Avant, le render
+    // initial utilisait Math.round(pop) (unite) puis l'interpolation
+    // passait a Math.round(pop/5)*5 (5% pres) -> saute de 3 a 5.
+    const popRounded = Math.round(pop / 5) * 5;
+    const popVisibleRounded = popRounded >= 5;
     h.innerHTML = `
       <div class="hour-time">${timeLabel}</div>
       <div class="hour-icon">${icon(wi.icon, 32)}</div>
-      <div class="hour-pop${popVisible ? popClass : " empty"}">${popVisible ? Math.round(pop) + "%" : ""}</div>
+      <div class="hour-pop${popVisibleRounded ? popClass : " empty"}">${popVisibleRounded ? popRounded + "%" : ""}</div>
       <div class="hour-temp${hasData ? "" : " pending"}">${hasData ? fmtTemp(hourTemp) : "—"}</div>
     `;
     $hourly.appendChild(h);
