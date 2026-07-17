@@ -1,0 +1,68 @@
+style+feat: % POP bien visibles + geoloc 100% auto + enrichir description
+
+Le user a 3 demandes :
+
+1. CORRIGER % POP SOUS LES HEURES (on voyait rien)
+
+Avant : bleu clair #5AC8FA opacity 0.92, font 11px
+        weight 600, sans fond -> se confondait avec
+        le fond de la barre horaire.
+
+Maintenant : bleu iOS system #0A84FF bien contraste
+  - font-size 12px (plus grand)
+  - font-weight 700 (gras)
+  - background rgba(255,255,255,0.18) + backdrop-filter blur
+    -> petite pill semi-transparente pour contraste
+  - Pour POP eleve : fond bleu plein #0A84FF + texte blanc
+  - border-radius 6px
+  - min-width 32px (avant 28px)
+
+Tres lisible, style Apple Weather mais adapte pour
+etre SUR de voir les %.
+
+2. RETIRER PARAMETRES GEOLOC (Suivi auto + bouton manuel)
+
+Le user veut : "des que je me deplace l'app me geolocalise
+toute seule" - sans aucun controle UI.
+
+Modifications :
+- index.html : supprime les 2 setting-row (geolocBtn +
+  geolocToggle) dans le groupe Position
+- index.html : remplace par simple label "Toujours active"
+- script.js : supprime les 2 event listeners (geolocBtn +
+  geolocToggle)
+- script.js : supprime le check localStorage
+  meteo_geoloc_enabled dans checkGeoLocation
+- script.js : nettoie le localStorage au loadState (clear
+  du vieux flag pour les anciens users qui avaient desactive)
+- Resultat : la geoloc auto TOUJOURS active, sans aucun
+  opt-out possible. Le user bouge -> check toutes les 5min
+  -> si >5km -> banniere de confirmation.
+
+3. ENRICHIR LA DESCRIPTION METEO
+
+Avant : 7 phrases max (condition, precip live/prevue,
+evolution T, vent, brouillard, orage valide)
+
+Maintenant : 10 phrases ajoutees :
+  - Indice UV : si >=8 "UV tres eleve, creme solaire",
+    si >=6 "UV eleve, protection conseillee" (jour
+    seulement, pas la nuit)
+  - Tendance barometrique : compare pression surface
+    actuelle vs il y a 3h
+    * -3hPa en 3h -> "Pression en forte baisse, temps
+      perturbe attendu" (signe d'orage approche)
+    * -1.5hPa -> "Pression en baisse"
+    * +3hPa -> "Pression en hausse, temps plus stable"
+  - Ressenti different : si |apparent - reelle| >= 5C
+    -> mention explicite "Ressenti X°C, plus frais/chaud"
+
+Resultat : descriptions beaucoup plus riches et precises,
+avec des infos meteo pro (UV, tendance baro = vrai indicateur
+de changement de temps).
+
+Cache bump : v=20260716e -> v=20260717
+
+Hard refresh : Ctrl+Shift+R
+
+Co-Authored-By: Letta Code <noreply@letta.com>

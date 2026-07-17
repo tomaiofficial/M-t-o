@@ -891,6 +891,44 @@ function generateDescription(w) {
     sentences.push("Visibilite tres reduite, prudence sur la route.");
   }
 
+  // ---- Phrase 7 : indice UV (en plein jour seulement) ----
+  if (!dayCycle.isNight && daily && daily.uv_index_max) {
+    const uvMax = daily.uv_index_max[0];
+    if (uvMax >= 8) {
+      sentences.push(`UV tres eleve (indice ${uvMax.toFixed(1)}), creme solaire recommandee.`);
+    } else if (uvMax >= 6) {
+      sentences.push(`UV eleve (indice ${uvMax.toFixed(1)}), protection conseilee.`);
+    }
+  }
+
+  // ---- Phrase 8 : tendance barometrique (indicateur d'orages) ----
+  if (hourly && hourly.surface_pressure && hourly.surface_pressure.length >= 4) {
+    // Compare pression actuelle vs il y a 3h
+    const idxNow = 0;
+    const idxPast = 3;
+    const pNow = hourly.surface_pressure[idxNow];
+    const pPast = hourly.surface_pressure[idxPast];
+    if (pNow != null && pPast != null) {
+      const drop = pPast - pNow; // hPa
+      if (drop >= 3) {
+        sentences.push(`Pression en forte baisse (-${drop.toFixed(1)} hPa en 3h), temps perturbé attendu.`);
+      } else if (drop >= 1.5) {
+        sentences.push(`Pression en baisse, dégradation possible.`);
+      } else if (drop <= -3) {
+        sentences.push(`Pression en hausse (+${Math.abs(drop).toFixed(1)} hPa), temps plus stable attendu.`);
+      }
+    }
+  }
+
+  // ---- Phrase 9 : ressenti très différent de la température réelle ----
+  if (feelsDiff >= 5) {
+    if (feels < curT) {
+      sentences.push(`Ressenti ${Math.round(feels)}°C, plus frais que la température réelle.`);
+    } else {
+      sentences.push(`Ressenti ${Math.round(feels)}°C, plus chaud que la température réelle.`);
+    }
+  }
+
   // ---- Phrase 7 : orage avec fiabilite issue de la double validation ----
   // Si fiabilite 'high' (Open-Meteo + Met.no d'accord), mention explicite
   // Si fiabilite 'medium' (une seule source), mention prudente
@@ -3693,11 +3731,7 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 // Vérifie la position actuelle et propose un switch si deplace de >5km
 async function checkGeoLocation() {
   if (!navigator.geolocation) return;
-  // Respecter le consentement utilisateur
-  try {
-    const geolocEnabled = localStorage.getItem('meteo_geoloc_enabled');
-    if (geolocEnabled === 'false') return; // utilisateur a desactive
-  } catch (e) {}
+  // Le suivi auto est TOUJOURS actif (plus de toggle dans l'UI)
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -3793,6 +3827,9 @@ function loadState() {
       state.city = s.city;
       state.unit = s.unit || "C";
       state.favorites = s.favorites || [];
+      // Nettoie l'ancien flag "geoloc desactive" des preferences :
+      // la geoloc auto est maintenant TOUJOURS active.
+      try { localStorage.removeItem('meteo_geoloc_enabled'); } catch (e) {}
       return true;
     }
   } catch (e) {}
@@ -3949,56 +3986,6 @@ $("refreshBtn").addEventListener("click", async () => {
   closeSettings();
   if (state.city) await loadWeather(state.city);
 });
-
-// Bouton manuel "Mettre a jour ma position" dans les parametres
-$("geolocBtn").addEventListener("click", async () => {
-  closeSettings();
-  // Verifie immediatement la position (force update)
-  if (!navigator.geolocation) {
-    alert("Geolocalisation non disponible sur cet appareil");
-    return;
-  }
-  navigator.geolocation.getCurrentPosition(
-    async (pos) => {
-      const { latitude, longitude } = pos.coords;
-      const placeName = await reverseGeocode(latitude, longitude);
-      state.city = { name: placeName, lat: latitude, lon: longitude };
-      lastKnownLocation = { lat: latitude, lon: longitude, ts: Date.now() };
-      saveState();
-      await loadWeather(state.city);
-    },
-    (err) => {
-      alert("Impossible d'obtenir la position : " + err.message);
-    },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-  );
-});
-
-// Toggle "Suivi auto de position" (active/desactive le watcher)
-const geolocToggle = $("geolocToggle");
-function updateGeolocToggleUI() {
-  const enabled = localStorage.getItem('meteo_geoloc_enabled') !== 'false';
-  geolocToggle.querySelectorAll(".seg").forEach(b => {
-    const isThisOn = (b.dataset.geoloc === 'true') === enabled;
-    b.classList.toggle("active", isThisOn);
-  });
-}
-geolocToggle.addEventListener("click", (e) => {
-  const btn = e.target.closest(".seg");
-  if (!btn) return;
-  const newVal = btn.dataset.geoloc;
-  try {
-    localStorage.setItem('meteo_geoloc_enabled', newVal);
-  } catch (e) {}
-  updateGeolocToggleUI();
-  if (newVal === 'true') {
-    startGeolocationWatcher();
-  } else {
-    stopGeolocationWatcher();
-  }
-});
-// Initialise l'UI du toggle au chargement
-updateGeolocToggleUI();
 
 // Toggle unité °C/°F
 const unitToggle = $("unitToggle");
