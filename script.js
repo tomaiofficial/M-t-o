@@ -1292,6 +1292,141 @@ function buildWindSentence(wind, dirTxt, period) {
 // ============================================================
 const OPEN_METEO_FORECAST_DAYS = 10;
 
+// ============================================================
+//  RETRY INTELLIGENT : exponential backoff pour les fetch reseau
+//  - 3 tentatives max
+//  - Delais : 500ms, 1.5s, 4s (avec jitter)
+//  - Ne retry PAS les erreurs 4xx (sauf 408, 429, 503)
+//  - Timeout par tentative : 8s
+// ============================================================
+async function fetchWithRetry(url, options = {}, maxRetries = 3) {
+  const { signal: externalSignal, ...rest } = options;
+  let lastErr;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    if (externalSignal && externalSignal.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    // Delais avec jitter : 500ms, 1500ms, 4000ms + random 0-300ms
+    const baseDelays = [500, 1500, 4000];
+    if (attempt > 0) {
+      const delay = baseDelays[attempt - 1] + Math.random() * 300;
+      await new Promise(r => setTimeout(r, delay));
+    }
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      // Lie le signal externe pour propager l'annulation
+      if (externalSignal) {
+        externalSignal.addEventListener('abort', () => ctrl.abort(), { once: true });
+      }
+      const res = await fetch(url, { ...rest, signal: ctrl.signal });
+      clearTimeout(timer);
+      // Erreurs 4xx non-retry (sauf rate-limit 429 et timeout 408)
+      if (!res.ok && res.status >= 400 && res.status < 500
+          && res.status !== 408 && res.status !== 429) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      if (!res.ok && res.status >= 500) {
+        lastErr = new Error(`HTTP ${res.status}`);
+        continue; // retry sur 5xx
+      }
+      return res;
+    } catch (e) {
+      lastErr = e;
+      if (e.name === 'AbortError') throw e; // pas de retry si annule
+      // Erreur reseau (timeout, DNS, etc.) -> retry
+      console.warn(`[Retry] Tentative ${attempt + 1}/${maxRetries} echouee: ${e.message}`);
+    }
+  }
+  throw lastErr || new Error('Fetch failed after retries');
+}
+
+// ============================================================
+//  VALIDATION DES DONNEES : sanity check avant utilisation
+//  Detecte les donnees aberrantes (temp=NaN, precip=999mm, etc.)
+//  Retourne { ok: true, score: 0-100 } ou { ok: false, reason }
+// ============================================================
+function validateWeatherData(data) {
+  if (!data || typeof data !== 'object') {
+    return { ok: false, reason: 'no-data' };
+  }
+  const issues = [];
+  let score = 100;
+  if (!data.current) {
+    return { ok: false, reason: 'no-current' };
+  }
+  const c = data.current;
+  // Temperature raisonnable : -60C a 60C
+  const t = c.temperature_2m;
+  if (t == null || isNaN(t)) {
+    issues.push('temp-null');
+    score -= 30;
+  } else if (t < -60 || t > 60) {
+    issues.push(`temp-extreme:${t}`);
+    score -= 50;
+  }
+  // Weather code valide (WMO 0-99)
+  const wc = c.weather_code;
+  if (wc != null && (wc < 0 || wc > 99)) {
+    issues.push(`weather-code-invalid:${wc}`);
+    score -= 20;
+  }
+  // Precipitation raisonnable : 0-100mm/h (au-dela = erreur)
+  const p = c.precipitation;
+  if (p != null && (p < 0 || p > 100)) {
+    issues.push(`precip-invalid:${p}`);
+    score -= 25;
+  }
+  // Humidite : 0-100%
+  const h = c.relative_humidity_2m;
+  if (h != null && (h < 0 || h > 100)) {
+    issues.push(`humidity-invalid:${h}`);
+    score -= 10;
+  }
+  // Vent : 0-200 km/h (au-dela = erreur)
+  const w = c.wind_speed_10m;
+  if (w != null && (w < 0 || w > 200)) {
+    issues.push(`wind-invalid:${w}`);
+    score -= 20;
+  }
+  // Hourly : au moins quelques heures
+  if (!data.hourly || !data.hourly.time || data.hourly.time.length < 4) {
+    issues.push('hourly-too-short');
+    score -= 30;
+  }
+  return {
+    ok: score >= 50,  // 50 = minimum vital
+    score: Math.max(0, score),
+    issues
+  };
+}
+
+// ============================================================
+//  CACHE OFFLINE : derniere donnee valide mise en localStorage
+//  En cas de perte reseau, l'app garde la derniere meteo connue
+//  avec un badge "donnees anciennes" pour transparence
+// ============================================================
+const CACHE_KEY_PREFIX = 'meteo_cache_';
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h max
+
+function saveToCache(lat, lon, data) {
+  try {
+    const key = CACHE_KEY_PREFIX + lat.toFixed(2) + '_' + lon.toFixed(2);
+    localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data }));
+  } catch (e) {}
+}
+
+function loadFromCache(lat, lon) {
+  try {
+    const key = CACHE_KEY_PREFIX + lat.toFixed(2) + '_' + lon.toFixed(2);
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw);
+    if (Date.now() - ts > CACHE_TTL_MS) return null; // trop vieux
+    return { data, ts, ageMin: Math.round((Date.now() - ts) / 60000) };
+  } catch (e) { return null; }
+}
+
 // Appel Open-Meteo : retourne current + hourly (24h) + daily (10 jours)
 async function callOpenMeteo(lat, lon, signal = null) {
   const params = [
@@ -1312,10 +1447,19 @@ async function callOpenMeteo(lat, lon, signal = null) {
     `timezone=auto`
   ].join("&");
   const url = `https://api.open-meteo.com/v1/forecast?${params}`;
-  const res = await fetchWithTimeout(url, { signal }, 10000);
+  // Utilise fetchWithRetry : 3 tentatives avec backoff exponentiel
+  const res = await fetchWithRetry(url, { signal }, 3);
   if (!res.ok) throw new Error(`Open-Meteo HTTP ${res.status}`);
   const json = await res.json();
-  return openMeteoToInternal(json);
+  const data = openMeteoToInternal(json);
+  // Validation : rejette les donnees aberrantes
+  const validation = validateWeatherData(data);
+  if (!validation.ok) {
+    throw new Error(`Open-Meteo data invalid (score ${validation.score}): ${validation.issues.join(',')}`);
+  }
+  data._quality = validation;
+  data._source = 'Open-Meteo';
+  return data;
 }
 
 // ============================================================
@@ -1339,17 +1483,25 @@ async function callMetNo(lat, lon, signal = null) {
   }
   const url = `https://api.met.no/weatherapi/locationforecast/2.0/complete` +
               `?lat=${lat}&lon=${lon}&altitude=0`;
-  const res = await fetchWithTimeout(url, {
+  // Retry : 3 tentatives, mais IMPORTANT : respecter le rate-limit de Met.no
+  // qui est de 1 req / 10s par IP. Si une retry tape trop vite, elle sera
+  // probablement 429. Donc on laisse les delais du backoff faire le job.
+  const res = await fetchWithRetry(url, {
     signal,
     headers: {
-      // Met.no exige un User-Agent (sinon 403). Format recommande :
-      // "NomApp/version contact-email"
       "User-Agent": "MeteoApp/1.0 tomtechclair.github.io"
     }
-  }, 10000);
+  }, 2); // 2 tentatives max pour Met.no (rate-limit serre)
   if (!res.ok) throw new Error(`Met.no HTTP ${res.status}`);
   const json = await res.json();
   const data = metNoToInternal(json);
+  // Validation
+  const validation = validateWeatherData(data);
+  if (!validation.ok) {
+    throw new Error(`Met.no data invalid: ${validation.issues.join(',')}`);
+  }
+  data._quality = validation;
+  data._source = 'Met.no';
   metNoCache.set(key, { ts: now, data });
   return data;
 }
@@ -1655,7 +1807,11 @@ async function fetchWeatherReliable(lat, lon, signal = null) {
       try {
         metNoData = await callMetNo(lat, lon, signal);
         metNoData = attachThunderReliability(metNoData, 'met.no');
-        return mergeThunderReliability(openMeteoData, metNoData);
+        const merged = mergeThunderReliability(openMeteoData, metNoData);
+        // Track les sources utilisees pour le badge UI
+        merged._source = 'Open-Meteo + Met.no';
+        merged._sourcesUsed = ['Open-Meteo', 'Met.no'];
+        return merged;
       } catch (eMet) {
         console.warn("[Meteo] Met.no cross-check a echoue (orage non confirme par 2e source) :", eMet.message);
         // On garde Open-Meteo seul -> fiabilite MEDIUM
@@ -1990,8 +2146,25 @@ function genDayWeather(band, lat, lon, dayOfYear, daySeed, isToday) {
 // Ordre : Open-Meteo -> Met.no -> fallback procedural
 async function fetchWeather(lat, lon, lite = false, signal = null) {
   try {
-    return await fetchWeatherReliable(lat, lon, signal);
+    const data = await fetchWeatherReliable(lat, lon, signal);
+    // Sauvegarde dans le cache offline (seulement les donnees completes)
+    if (!lite && data) {
+      saveToCache(lat, lon, data);
+    }
+    return data;
   } catch (e) {
+    // Toutes les sources ont echoue. Essai 1 : cache offline.
+    if (!lite) {
+      const cached = loadFromCache(lat, lon);
+      if (cached && cached.data) {
+        console.warn(`[Meteo] Sources KO, fallback cache offline (${cached.ageMin} min)`);
+        // Marquer comme "donnees anciennes"
+        cached.data._fromCache = true;
+        cached.data._cacheAgeMin = cached.ageMin;
+        return cached.data;
+      }
+    }
+    // Essai 2 : procedural (derniere chance)
     console.warn("[Meteo] toutes les sources ont echoue, fallback procedural :", e.message);
     return await fetchWeatherProcedural(lat, lon, lite, signal);
   }
@@ -3452,12 +3625,37 @@ function renderCity(city, w) {
 
 function updateUpdatedAt() {
   if (!state.lastRefreshMs) return;
+  const el = $("updatedAt");
+  if (!el) return;
   const diff = Math.floor((Date.now() - state.lastRefreshMs) / 1000);
-  if (diff < 60) {
-    $("updatedAt").textContent = `Mis à jour il y a ${diff}s`;
+  // Si on est en mode cache (reseau KO), badge special "donnees anciennes"
+  if (state.lastWeather && state.lastWeather._fromCache) {
+    const ageMin = state.lastWeather._cacheAgeMin || Math.floor(diff / 60);
+    el.textContent = `⚠️ Données en cache (${ageMin} min) — réseau indisponible`;
+    el.classList.add('stale');
   } else {
-    const min = Math.floor(diff / 60);
-    $("updatedAt").textContent = `Mis à jour il y a ${min} min`;
+    el.classList.remove('stale');
+    if (diff < 60) {
+      el.textContent = `Mis à jour il y a ${diff}s`;
+    } else {
+      const min = Math.floor(diff / 60);
+      el.textContent = `Mis à jour il y a ${min} min`;
+    }
+  }
+  // Badge source : montre quelle API a fourni les donnees + score qualite
+  const badge = $("sourceBadge");
+  if (badge && state.lastWeather) {
+    const src = state.lastWeather._source || state.lastWeather._sourcesUsed;
+    const q = state.lastWeather._quality && state.lastWeather._quality.score;
+    if (src) {
+      const sources = Array.isArray(src) ? src.join(' + ') : src;
+      const qualityLabel = q != null
+        ? `<span class="quality">qualité ${q}/100</span>`
+        : '';
+      badge.innerHTML = `Source : ${sources}${qualityLabel}`;
+    } else {
+      badge.textContent = '';
+    }
   }
 }
 

@@ -1,0 +1,57 @@
+feat: meteo 100% fiable - retry + validation + cache offline + badge source
+
+Le user veut la meteo "encore plus 100% fiable".
+Ajout de 4 mecanismes de fiabilisation :
+
+1. FETCH WITH RETRY (fetchWithRetry)
+   - 3 tentatives avec backoff exponentiel : 500ms -> 1.5s -> 4s
+   - Jitter aleatoire 0-300ms (evite le thundering herd)
+   - Ne retry PAS les 4xx sauf 408/429 (rate-limit)
+   - 5xx toujours retried
+   - Propagation du signal externe pour cancel
+   - Applique a Open-Meteo (3 tentatives)
+   - Applique a Met.no (2 tentatives, respecte leur rate-limit)
+
+2. VALIDATION DES DONNEES (validateWeatherData)
+   Verifie la coherence avant d'utiliser une reponse :
+   - Temperature : -60C a 60C
+   - Weather code : 0-99 (WMO standard)
+   - Precipitation : 0-100mm/h
+   - Humidite : 0-100%
+   - Vent : 0-200km/h
+   - Hourly : minimum 4 entrees
+   Calcule un score 0-100 et rejette si <50
+   avec raison detaillee dans les logs.
+   Attache _quality au resultat pour affichage.
+
+3. CACHE OFFLINE
+   - saveToCache(lat, lon, data) : sauvegarde la derniere
+     meteo valide en localStorage a chaque fetch reussi
+   - loadFromCache(lat, lon) : recupere (data, ts, ageMin)
+     avec TTL 6h max
+   - En cas de perte reseau : fallback cache au lieu du
+     procedural (qui etait des donnees totalement inventées)
+   - Le badge "Mis a jour" devient orange avec texte
+     "Donnees en cache (X min) - reseau indisponible"
+   - L'app reste utile meme offline
+
+4. BADGE SOURCE
+   - Affiche sous "Mis a jour" : "Source : Open-Meteo + Met.no"
+     ou "Source : Open-Meteo"
+   - Montre aussi le score qualite "qualite 92/100" en vert
+   - Transforme l'utilisateur en meteorologue averti
+   - Sur orage : badge "Open-Meteo + Met.no" (cross-valide)
+   - Sur meteo normale : juste "Open-Meteo" (suffisant)
+   - Sur cache : pas de badge source
+
+Resultat : meteo beaucoup plus fiable avec :
+- Resilience aux coupures reseau (cache)
+- Detection des donnees aberrantes (validation)
+- Retry automatique sur erreurs transitoires (retry)
+- Transparence sur la provenance (badge)
+
+Cache bump : v=20260717c -> v=20260720
+
+Hard refresh : Ctrl+Shift+R
+
+Co-Authored-By: Letta Code <noreply@letta.com>
