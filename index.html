@@ -9,8 +9,12 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
+<meta name="theme-color" content="#1a1a2e" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Météo" />
 <title>Météo</title>
-<link rel="stylesheet" href="styles.css?v=20260720" />
+<link rel="stylesheet" href="styles.css?v=20260722" />
 </head>
 <body>
   <!-- Bibliothèque d'icônes SVG premium : halos lumineux, dégradés multi-stops, reflets, ombres -->
@@ -806,8 +810,17 @@
         </div>
         <div class="glass-card detail">
           <div class="detail-label">Pression</div>
-          <div class="detail-value" id="pressure">--</div>
+          <div class="detail-value">
+            <span id="pressureTrendArrow" class="trend-arrow"></span>
+            <span id="pressure">--</span>
+          </div>
           <div class="detail-sub" id="pressureSub">--</div>
+        </div>
+        <div class="glass-card detail">
+          <div class="detail-label">Qualité de l'air</div>
+          <div class="detail-value" id="aqi">--</div>
+          <div class="detail-sub" id="aqiSub">--</div>
+          <div class="aq-bar"><span id="aqiBar"></span></div>
         </div>
       </section>
 
@@ -816,6 +829,6 @@
     </main>
   </div>
 
-  <script src="script.js?v=20260720"></script>
+  <script src="script.js?v=20260722"></script>
 </body>
 </html>

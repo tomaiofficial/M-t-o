@@ -1,0 +1,62 @@
+fix+feat: retirer barre bleue iOS PWA + qualite air + tendance pression
+
+Le user a 2 demandes :
+
+1. RETIRER LA BARRE BLEUE EN HAUT (mobile/iOS PWA)
+   Symptome : barre horizontale bleue visible tout en haut
+   de l'app sur iPhone, probablement la barre de statut
+   iOS PWA qui herite de la couleur bleue du ciel.
+
+   Causes identifiees :
+   a) Pas de theme-color meta -> iOS utilise une couleur
+      par defaut (bleu)
+   b) Pas de apple-mobile-web-app-status-bar-style ->
+      la barre de statut n'est pas transparente/noire
+   c) Le ciel (bg-sky) commence par un bleu tres fonce
+      #0a5cc8 -> transition visible entre la barre
+      statut bleue et le ciel = bande bleue visible
+   d) Le .app n'a pas de background-color donc on voit
+      a travers
+
+   Fixes :
+   - Ajout meta theme-color="#1a1a2e" (couleur sombre
+     du body)
+   - Ajout apple-mobile-web-app-capable="yes"
+   - Ajout apple-mobile-web-app-status-bar-style=
+     "black-translucent" (barre noire transparente)
+   - .app a maintenant background:#1a1a2e + padding-top
+     env(safe-area-inset-top) -> la zone safe-area est
+     couverte par le fond sombre
+   - bg-sky gradient commence par #1a1a2e puis transition
+     douce vers le bleu ciel -> plus de "cassure" visible
+   - theme-day-clear adoucit le bleu du haut (commence
+     par #2a2a4e sombre, puis monte graduellement)
+
+2. ENRICHIR LES DONNEES METEO
+   a) Carte "Pression" : ajout fleche de tendance
+      (monte/stable/baisse) + delta en hPa/3h
+      - Pression actuelle vs il y a 3h
+      - ↑ vert "En hausse (+1.2 hPa/3h)"
+      - ↓ orange "En baisse (-2.5 hPa/3h)"
+      - → gris "Stable"
+      Indicateur meteo pro : baisse pression = orage
+      approche, hausse = temps stable
+
+   b) NOUVELLE carte "Qualite de l'air" :
+      - Open-Meteo Air Quality API (gratuit, sans cle)
+      - PM2.5, PM10, Ozone NO2
+      - Calcul AQI europeen (le plus defavorable)
+      - Label : Excellent / Bon / Moyen / Mediocre /
+        Mauvais / Tres mauvais
+      - Code couleur (vert->violet)
+      - Barre de progression coloree (0-200)
+      - Cache 30 min pour eviter de spammer
+      - Fetch async non-bloquant
+
+Cache bump : v=20260720 -> v=20260722
+
+Hard refresh : Ctrl+Shift+R (sur iOS : supprimer le
+PWA et le reinstaller pour que les nouveaux meta tags
+prennent effet)
+
+Co-Authored-By: Letta Code <noreply@letta.com>

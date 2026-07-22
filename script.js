@@ -1785,7 +1785,123 @@ function mergeThunderReliability(wOpenMeteo, wMetNo) {
   return wOpenMeteo;
 }
 
+// ============================================================
+//  AIR QUALITY : Open-Meteo Air Quality API (gratuit, sans cle)
+//  Endpoint: https://air-quality-api.open-meteo.com/v1/air-quality
+//  Retourne PM2.5, PM10, ozone, NO2, etc. Utilise pour calculer
+//  l'indice AQI europeen simplifie.
+// ============================================================
+const AQI_CACHE_MS = 30 * 60 * 1000; // 30 min
+const aqiCache = new Map();
+
+async function fetchAirQuality(cur, w) {
+  if (!state.city) return null;
+  const key = `${state.city.lat.toFixed(2)},${state.city.lon.toFixed(2)}`;
+  const now = Date.now();
+  // Cache hit
+  if (aqiCache.has(key)) {
+    const c = aqiCache.get(key);
+    if (now - c.ts < AQI_CACHE_MS) return c.data;
+  }
+  const url = `https://air-quality-api.open-meteo.com/v1/air-quality?` +
+    `latitude=${state.city.lat}&longitude=${state.city.lon}` +
+    `&current=pm10,pm2_5,ozone,uv_index,uv_index_clear_sky` +
+    `&timezone=auto`;
+  try {
+    const res = await fetchWithRetry(url, {}, 2);
+    if (!res.ok) throw new Error(`AQI HTTP ${res.status}`);
+    const json = await res.json();
+    const data = json.current || {};
+    const pm25 = data.pm2_5;
+    const pm10 = data.pm10;
+    const o3 = data.ozone;
+    // Calcul AQI europeen simplifie (le plus defavorable des 3)
+    const aqiPm25 = pm25 != null ? pm25ToAqi(pm25) : null;
+    const aqiPm10 = pm10 != null ? pm10ToAqi(pm10) : null;
+    const aqiO3 = o3 != null ? o3ToAqi(o3) : null;
+    const vals = [aqiPm25, aqiPm10, aqiO3].filter(v => v != null);
+    if (vals.length === 0) return null;
+    const aqi = Math.max(...vals);
+    const result = { aqi, pm25, pm10, o3, aqiPm25, aqiPm10, aqiO3 };
+    aqiCache.set(key, { ts: now, data: result });
+    return result;
+  } catch (e) {
+    console.warn('[AQI] Fetch failed:', e.message);
+    return null;
+  }
+}
+
+// Conversions AQI (European AQI simplifie, seuils EEA)
+// Source: https://www.airqualitynow.eu/about_indices_definition.php
+function pm25ToAqi(pm25) {
+  // Seuils EEA PM2.5 (ug/m3 -> AQI 0-100)
+  const b = [0, 10, 20, 25, 50, 75, 800]; // breaks
+  const i = [0, 25, 50, 75, 100, 150, 200];
+  for (let k = 0; k < b.length - 1; k++) {
+    if (pm25 <= b[k + 1]) {
+      const ratio = (pm25 - b[k]) / (b[k + 1] - b[k]);
+      return Math.round(i[k] + ratio * (i[k + 1] - i[k]));
+    }
+  }
+  return 200;
+}
+function pm10ToAqi(pm10) {
+  const b = [0, 20, 40, 50, 100, 150, 1200];
+  const i = [0, 25, 50, 75, 100, 150, 200];
+  for (let k = 0; k < b.length - 1; k++) {
+    if (pm10 <= b[k + 1]) {
+      const ratio = (pm10 - b[k]) / (b[k + 1] - b[k]);
+      return Math.round(i[k] + ratio * (i[k + 1] - i[k]));
+    }
+  }
+  return 200;
+}
+function o3ToAqi(o3) {
+  // O3 en ug/m3 (open-meteo)
+  const b = [0, 60, 120, 180, 240, 360, 800];
+  const i = [0, 25, 50, 75, 100, 150, 200];
+  for (let k = 0; k < b.length - 1; k++) {
+    if (o3 <= b[k + 1]) {
+      const ratio = (o3 - b[k]) / (b[k + 1] - b[k]);
+      return Math.round(i[k] + ratio * (i[k + 1] - i[k]));
+    }
+  }
+  return 200;
+}
+
+// Niveau + label pour l'AQI
+function aqiLevel(aqi) {
+  if (aqi <= 25) return { label: "Excellent", color: "#34c759", emoji: "🟢" };
+  if (aqi <= 50) return { label: "Bon", color: "#a3d977", emoji: "🟢" };
+  if (aqi <= 75) return { label: "Moyen", color: "#ffd60a", emoji: "🟡" };
+  if (aqi <= 100) return { label: "Médiocre", color: "#ff9500", emoji: "🟠" };
+  if (aqi <= 150) return { label: "Mauvais", color: "#ff3b30", emoji: "🔴" };
+  return { label: "Très mauvais", color: "#af52de", emoji: "🟣" };
+}
+
+function renderAqi(aqiData) {
+  const aqi = $("aqi");
+  const aqiSub = $("aqiSub");
+  const aqiBar = $("aqiBar");
+  if (!aqi || !aqiSub) return;
+  const lvl = aqiLevel(aqiData.aqi);
+  aqi.textContent = `${aqiData.aqi}`;
+  aqiSub.textContent = `${lvl.emoji} ${lvl.label}`;
+  if (aqiBar) {
+    // Bar de 0-200, on remplit selon aqi/200
+    const pct = Math.min(100, (aqiData.aqi / 200) * 100);
+    aqiBar.style.width = `${pct}%`;
+    aqiBar.style.background = lvl.color;
+  }
+}
+
 async function fetchWeatherReliable(lat, lon, signal = null) {
+  // ============================================================
+  // CROSS-VALIDATION OPEN-METEO + MET.NO :
+  // - Fetch Open-Meteo (principal, tres complet)
+  // - Si orage predit, fetch Met.no pour confirmer (gratuit, ultra-fiable)
+  // - Si Open-Meteo KO, fallback Met.no
+  // ============================================================
   // Essai 1 : Open-Meteo
   let openMeteoData = null;
   let metNoData = null;
@@ -3607,7 +3723,41 @@ function renderCity(city, w) {
     $("vis").textContent = "—";
   }
   $("pressure").textContent = `${Math.round(cur.surface_pressure || cur.pressure_msl)} hPa`;
-  $("pressureSub").textContent = (cur.surface_pressure || cur.pressure_msl) > 1013 ? "Au-dessus moyenne" : "En dessous moyenne";
+  // Tendance pression : compare avec il y a 3h (indicateur meteo)
+  const pressureArrow = $("pressureTrendArrow");
+  if (pressureArrow && w.hourly && w.hourly.surface_pressure) {
+    const pNow = w.hourly.surface_pressure[0];
+    const pPast = w.hourly.surface_pressure[3];
+    if (pNow != null && pPast != null) {
+      const delta = pNow - pPast;
+      if (delta > 0.5) {
+        pressureArrow.textContent = "↑";
+        pressureArrow.className = "trend-arrow rising";
+        $("pressureSub").textContent = `En hausse (+${delta.toFixed(1)} hPa/3h)`;
+      } else if (delta < -0.5) {
+        pressureArrow.textContent = "↓";
+        pressureArrow.className = "trend-arrow falling";
+        $("pressureSub").textContent = `En baisse (${delta.toFixed(1)} hPa/3h)`;
+      } else {
+        pressureArrow.textContent = "→";
+        pressureArrow.className = "trend-arrow stable";
+        $("pressureSub").textContent = "Stable";
+      }
+    } else {
+      pressureArrow.textContent = "";
+      $("pressureSub").textContent = (cur.surface_pressure || cur.pressure_msl) > 1013 ? "Au-dessus moyenne" : "En dessous moyenne";
+    }
+  }
+  // Declenche le fetch qualite de l'air (async, non-bloquant)
+  fetchAirQuality(cur, w).then(aqiData => {
+    if (aqiData) renderAqi(aqiData);
+  }).catch(() => {
+    // Silencieux : pas d'AQI si l'API echoue
+    const aqi = $("aqi");
+    const aqiSub = $("aqiSub");
+    if (aqi) aqi.textContent = "—";
+    if (aqiSub) aqiSub.textContent = "Indice indisponible";
+  });
 
   // Detection pluie pour le bandeau d'alerte
   updateRainAlert();

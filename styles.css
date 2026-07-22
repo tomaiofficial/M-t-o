@@ -86,7 +86,10 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   overflow-y: visible;
   overflow-x: hidden;
   scroll-behavior: smooth;
-  background: transparent;
+  background: #1a1a2e;
+  /* Bandeau sombre en haut pour couvrir la zone safe-area iOS
+     et eviter que la barre de statut soit bleue */
+  padding-top: env(safe-area-inset-top);
   /* Transition douce pour eviter les flickers jour/nuit lors des changements de ville */
   transition: opacity 0.4s ease;
 }
@@ -121,20 +124,23 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   inset: 0;
   z-index: 0;
   transition: background 1.5s cubic-bezier(0.4, 0, 0.2, 1);
-  background: linear-gradient(180deg, #4A90E2 0%, #67B8F0 50%, #A8D8F0 100%);
+  /* Commence par un fond sombre (match body) pour eviter une bande
+     bleue visible en haut sous la barre de statut iOS */
+  background: linear-gradient(180deg, #1a1a2e 0%, #2a2a4e 5%, #4A90E2 40%, #67B8F0 70%, #A8D8F0 100%);
 }
 
 /* ===== THEMES — Deep, rich, photorealistic gradients ===== */
 
-/* ☀ Day clear — deep blue sky */
+/* ☀ Day clear — deep blue sky (gradual, no harsh top band) */
 .theme-day-clear .bg-sky {
   background: linear-gradient(180deg,
-    #0a5cc8 0%,
-    #1a78e8 15%,
-    #3a9af0 35%,
-    #6cb8f8 55%,
-    #a8d8fa 75%,
-    #d4ecfc 100%);
+    #2a2a4e 0%,
+    #1a4480 8%,
+    #0a5cc8 25%,
+    #1a78e8 40%,
+    #3a9af0 60%,
+    #6cb8f8 80%,
+    #a8d8fa 100%);
 }
 
 /* 🌤 Partly cloudy — dynamic with sun breakthrough */
@@ -1297,6 +1303,17 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   background: linear-gradient(90deg, #4CAF50, #FFD60A, #FF9500, #FF3B30);
   transition: width 0.5s ease;
 }
+
+/* Flèche de tendance pression (montée/stable/baisse) */
+.trend-arrow {
+  display: inline-block;
+  margin-right: 4px;
+  font-weight: 700;
+  font-size: 0.9em;
+}
+.trend-arrow.rising { color: #34c759; }
+.trend-arrow.falling { color: #ff9500; }
+.trend-arrow.stable { color: #8e8e93; }
 
 /* ===== Updated at ===== */
 .updated-at {
