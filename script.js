@@ -3678,6 +3678,7 @@ function renderCity(city, w) {
   for (let i = 0; i < daily.time.length; i++) {
     const di = document.createElement("div");
     di.className = "day";
+    if (hasData = true) di.classList.add("clickable"); // toujours cliquable
     const lo = daily.temperature_2m_min[i];
     const hi = daily.temperature_2m_max[i];
     const hasData = lo != null && hi != null;
@@ -3687,6 +3688,9 @@ function renderCity(city, w) {
     const popDay = (daily.precipitation_probability_max && daily.precipitation_probability_max[i]) || 0;
     const popVisible = popDay >= 5;
     if (!hasData) di.classList.add("day-empty");
+    di.setAttribute("role", "button");
+    di.setAttribute("tabindex", "0");
+    di.setAttribute("data-day-idx", i);
     di.innerHTML = `
       <div class="day-name">${dayName(daily.time[i], i)}</div>
       <div class="day-icon-wrap">
@@ -3697,6 +3701,14 @@ function renderCity(city, w) {
       <div class="day-bar"><span class="fill" style="left:${hasData ? startPct : 50}%; right:${hasData ? 100 - endPct : 50}%"></span></div>
       <div class="day-high">${hasData ? fmtTemp(hi) : "—"}</div>
     `;
+    // Click handler : ouvre le panneau de detail du jour
+    di.addEventListener("click", () => openDayDetail(i, w));
+    di.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openDayDetail(i, w);
+      }
+    });
     $daily.appendChild(di);
   }
 
@@ -3812,6 +3824,125 @@ function updateUpdatedAt() {
 // ============================================================
 //  Load : Charger la météo pour une ville
 // ============================================================
+//  DAY DETAIL : panneau de details quand on clique sur un jour
+//  dans la liste des 10 jours. Affiche temp min/max, condition,
+//  precip, vent, UV, lever/coucher, et le detail heure par heure.
+// ============================================================
+function openDayDetail(dayIdx, w) {
+  if (!w || !w.daily || !w.daily.time || !w.daily.time[dayIdx]) return;
+  const d = w.daily;
+  const h = w.hourly || {};
+  const dayDate = d.time[dayIdx];
+  const code = d.weather_code[dayIdx];
+  const lo = d.temperature_2m_min[dayIdx];
+  const hi = d.temperature_2m_max[dayIdx];
+  const rainSum = (d.precipitation_sum && d.precipitation_sum[dayIdx]) || 0;
+  const rainHours = (d.precipitation_hours && d.precipitation_hours[dayIdx]) || 0;
+  const popMax = (d.precipitation_probability_max && d.precipitation_probability_max[dayIdx]) || 0;
+  const windMax = (d.wind_speed_10m_max && d.wind_speed_10m_max[dayIdx]) || 0;
+  const gustMax = (d.wind_gusts_10m_max && d.wind_gusts_10m_max[dayIdx]) || windMax * 1.4;
+  const uvMax = (d.uv_index_max && d.uv_index_max[dayIdx]) || 0;
+  const sunrise = d.sunrise && d.sunrise[dayIdx];
+  const sunset = d.sunset && d.sunset[dayIdx];
+
+  // Nom du jour (Auj. / Dem. / jour de la semaine)
+  const name = dayName(dayDate, dayIdx);
+  $("dayDetailName").textContent = name;
+  // Date formatee
+  try {
+    const dateObj = new Date(dayDate);
+    $("dayDetailDate").textContent = dateObj.toLocaleDateString("fr-FR", {
+      weekday: "long",
+      day: "numeric",
+      month: "long"
+    });
+  } catch (e) {
+    $("dayDetailDate").textContent = dayDate;
+  }
+
+  // Hero : icone + min/max + condition
+  const wi = wmoInfo(code, false);
+  $("dayDetailIcon").innerHTML = icon(wi.icon, 64);
+  $("dayDetailLow").textContent = lo != null ? fmtTemp(lo) : "—";
+  $("dayDetailHigh").textContent = hi != null ? fmtTemp(hi) : "—";
+  $("dayDetailCondition").textContent = wi.label;
+
+  // Stats : pluie / vent / UV / soleil
+  if (rainSum > 0) {
+    $("dayDetailRain").textContent = `${rainSum.toFixed(1)} mm`;
+    $("dayDetailRainSub").textContent = `${rainHours.toFixed(1)}h · ${Math.round(popMax)}%`;
+  } else {
+    $("dayDetailRain").textContent = "0 mm";
+    $("dayDetailRainSub").textContent = `${Math.round(popMax)}% proba.`;
+  }
+  $("dayDetailWind").textContent = `${Math.round(windMax)} km/h`;
+  $("dayDetailWindSub").textContent = `Rafales ${Math.round(gustMax)}`;
+  $("dayDetailUv").textContent = uvMax.toFixed(1);
+  $("dayDetailUvSub").textContent = uvLevel(uvMax).label;
+  $("dayDetailSun").textContent = sunrise ? fmtTime(sunrise) : "--";
+  $("dayDetailSunSub").textContent = sunset ? `↓ ${fmtTime(sunset)}` : "";
+
+  // Detail heure par heure pour ce jour
+  const hourlyEl = $("dayDetailHourly");
+  hourlyEl.innerHTML = "";
+  if (h.time && h.time.length) {
+    // Trouve toutes les heures qui correspondent a ce jour
+    const dayStr = dayDate.substring(0, 10); // "YYYY-MM-DD"
+    const dayHours = [];
+    for (let i = 0; i < h.time.length; i++) {
+      if (h.time[i] && h.time[i].startsWith(dayStr)) {
+        dayHours.push(i);
+      }
+      // Stop apres 24 entrees (max 1 jour)
+      if (dayHours.length >= 24) break;
+    }
+    if (dayHours.length === 0) {
+      // Fallback : prendre 24h a partir de minuit du jour
+      for (let i = 0; i < h.time.length && dayHours.length < 24; i++) {
+        dayHours.push(i);
+      }
+    }
+    dayHours.forEach((idx) => {
+      const t = h.time[idx];
+      const temp = h.temperature_2m ? h.temperature_2m[idx] : null;
+      const codeH = h.weather_code ? h.weather_code[idx] : 0;
+      const popH = h.precipitation_probability ? (h.precipitation_probability[idx] || 0) : 0;
+      const mmH = h.precipitation ? (h.precipitation[idx] || 0) : 0;
+      const wiH = wmoInfo(codeH, isHourAtNight(t, d));
+      const rounded = Math.round(popH / 5) * 5;
+      const popVis = rounded >= 5;
+      const row = document.createElement("div");
+      row.className = "day-detail-hour-row";
+      row.innerHTML = `
+        <div class="ddh-time">${fmtHourLabel(t)}</div>
+        <div class="ddh-icon">${icon(wiH.icon, 22)}</div>
+        <div class="ddh-temp">${temp != null ? fmtTemp(temp) : "—"}</div>
+        <div class="ddh-pop${popVis ? "" : " empty"}">${popVis ? rounded + "%" : ""}</div>
+      `;
+      hourlyEl.appendChild(row);
+    });
+  } else {
+    hourlyEl.innerHTML = "<p style='opacity:0.5; text-align:center; padding:20px'>Données horaires indisponibles</p>";
+  }
+
+  // Ouvre le panneau
+  $("dayDetailPanel").classList.add("open");
+}
+
+function closeDayDetail() {
+  $("dayDetailPanel").classList.remove("open");
+}
+
+// Niveau d'UV (label pour le detail du jour)
+function uvLevel(uv) {
+  if (uv < 3) return { label: "Faible" };
+  if (uv < 6) return { label: "Modéré" };
+  if (uv < 8) return { label: "Élevé" };
+  if (uv < 11) return { label: "Très élevé" };
+  return { label: "Extrême" };
+}
+
+// ============================================================
 // ============================================================
 //  CITY CHANGE : annulation des requetes + vidage complet + skeleton
 // ============================================================
@@ -3889,6 +4020,10 @@ function disableSkeleton() {
 // precedente, vide l'UI, affiche le skeleton, puis lance le fetch.
 async function switchCity(city) {
   if (!city || city.lat == null || city.lon == null) return;
+
+  // Ferme le panneau de detail d'un jour s'il est ouvert
+  const dayDetail = $("dayDetailPanel");
+  if (dayDetail) dayDetail.classList.remove("open");
 
   // 1) Annule toutes les requetes reseau en cours
   if (state.currentFetchController) {
@@ -4036,29 +4171,130 @@ async function loadWeather(city) {
 
 // ============================================================
 //  Géolocalisation : Détection automatique de la position
+//  Utilise watchPosition() pour tracking continu + indicateur UI
 // ============================================================
-async function tryGeolocate() {
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) { resolve(false); return; }
-    if (window.location.protocol === "file:") { resolve(false); return; }
+let geoIndicatorEl = null;
+let geoLabelEl = null;
+let watchId = null; // ID du watchPosition pour pouvoir l'arreter
 
-    navigator.geolocation.getCurrentPosition(
+function showGeoIndicator(label = "Localisation en cours...") {
+  geoIndicatorEl = $("geoIndicator");
+  geoLabelEl = geoIndicatorEl ? geoIndicatorEl.querySelector(".geo-label") : null;
+  if (geoIndicatorEl) {
+    geoIndicatorEl.classList.add("visible");
+    if (geoLabelEl) geoLabelEl.textContent = label;
+  }
+}
+
+function updateGeoLabel(label) {
+  if (geoLabelEl) geoLabelEl.textContent = label;
+}
+
+function hideGeoIndicator() {
+  geoIndicatorEl = $("geoIndicator");
+  if (geoIndicatorEl) {
+    geoIndicatorEl.classList.remove("visible");
+  }
+}
+
+// Helper : formate un message d'erreur selon le code GeolocationPositionError
+function geoErrorMessage(err) {
+  if (!err) return "Erreur géolocalisation inconnue";
+  switch (err.code) {
+    case 1: return "Géolocalisation refusée par l'utilisateur";
+    case 2: return "Position indisponible (GPS désactivé ?)";
+    case 3: return "Délai dépassé pour la géolocalisation";
+    default: return err.message || "Erreur géolocalisation";
+  }
+}
+
+// Demarre le tracking continu via watchPosition.
+// Retourne true si OK, false si KO.
+async function tryGeolocate() {
+  if (!navigator.geolocation) {
+    console.warn("[Geo] API non disponible");
+    return false;
+  }
+  // file:// = API geoloc non fonctionnelle
+  if (window.location.protocol === "file:") {
+    console.warn("[Geo] file:// protocol, pas de geoloc");
+    return false;
+  }
+
+  // Si deja en cours, ne relance pas
+  if (watchId !== null) {
+    console.log("[Geo] Deja en cours de tracking");
+    return true;
+  }
+
+  showGeoIndicator("Localisation en cours...");
+
+  return new Promise((resolve) => {
+    let firstFix = true;
+    let initialResolved = false;
+
+    // Demarre le tracking continu via watchPosition
+    watchId = navigator.geolocation.watchPosition(
       async (pos) => {
         const { latitude, longitude } = pos.coords;
-        const placeName = await reverseGeocode(latitude, longitude);
-        state.city = { name: placeName, lat: latitude, lon: longitude };
-        lastKnownLocation = { lat: latitude, lon: longitude, ts: Date.now() };
-        saveState();
-        await loadWeather(state.city);
-        resolve(true);
+        // Premier fix : on charge la meteo tout de suite
+        if (firstFix) {
+          firstFix = false;
+          try {
+            updateGeoLabel("Position trouvée...");
+            const placeName = await reverseGeocode(latitude, longitude);
+            state.city = { name: placeName, lat: latitude, lon: longitude };
+            lastKnownLocation = { lat: latitude, lon: longitude, ts: Date.now() };
+            saveState();
+            await loadWeather(state.city);
+            updateGeoLabel(`Suivi GPS actif (${pos.coords.accuracy.toFixed(0)}m)`);
+            // Cache l'indicateur apres 2s
+            setTimeout(() => hideGeoIndicator(), 2000);
+            if (!initialResolved) {
+              initialResolved = true;
+              resolve(true);
+            }
+          } catch (e) {
+            console.warn("[Geo] Erreur fix initial:", e);
+            hideGeoIndicator();
+            if (!initialResolved) {
+              initialResolved = true;
+              resolve(false);
+            }
+          }
+        } else {
+          // Mises a jour suivantes : watchPosition nous notifie.
+          // Le watcher periodique (5min/5km) gere le switch de ville.
+          lastKnownLocation = { lat: latitude, lon: longitude, ts: Date.now() };
+        }
       },
       (err) => {
-        console.warn("Geolocation failed:", err.message);
-        resolve(false);
+        const msg = geoErrorMessage(err);
+        console.warn("[Geo] Erreur:", msg);
+        updateGeoLabel(msg);
+        setTimeout(() => hideGeoIndicator(), 3000);
+        if (!initialResolved) {
+          initialResolved = true;
+          resolve(false);
+        }
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+      {
+        enableHighAccuracy: true,    // GPS precis (pas WiFi triangulation)
+        timeout: 15000,               // 15s max pour le 1er fix
+        maximumAge: 60000             // Accepte un fix < 60s pour eviter fix immediat
+      }
     );
+    console.log(`[Geo] watchPosition demarre (watchId=${watchId})`);
   });
+}
+
+// Stoppe le tracking continu
+function stopGeolocationTracking() {
+  if (watchId !== null) {
+    navigator.geolocation.clearWatch(watchId);
+    console.log(`[Geo] watchPosition arrete (watchId=${watchId})`);
+    watchId = null;
+  }
 }
 
 // ============================================================
@@ -4335,6 +4571,19 @@ $("settingsBtn").addEventListener("click", openSettings);
 $("closeSettings").addEventListener("click", closeSettings);
 settingsPanel.addEventListener("click", (e) => {
   if (e.target === settingsPanel) closeSettings();
+});
+
+// Panneau détails d'un jour (10 jours)
+const dayDetailPanel = $("dayDetailPanel");
+$("dayDetailClose").addEventListener("click", closeDayDetail);
+dayDetailPanel.addEventListener("click", (e) => {
+  if (e.target === dayDetailPanel) closeDayDetail();
+});
+// Echap pour fermer aussi
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && dayDetailPanel.classList.contains("open")) {
+    closeDayDetail();
+  }
 });
 
 // Bouton actualiser

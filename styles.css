@@ -762,6 +762,151 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   to { transform: translateY(0); }
 }
 /* Header compact avec poignee draggable (visuel iOS) */
+.day {
+  cursor: pointer;
+  transition: background 0.2s;
+  border-radius: 8px;
+}
+.day:active {
+  background: rgba(255,255,255,0.06);
+}
+.day.clickable {
+  cursor: pointer;
+}
+
+/* ===== Day Detail Panel ===== */
+.day-detail-overlay {
+  z-index: 250;
+}
+.day-detail-content {
+  padding: 16px 18px calc(28px + env(safe-area-inset-bottom));
+}
+.day-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+.day-detail-name {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+.day-detail-date {
+  font-size: 13px;
+  opacity: 0.65;
+  margin-top: 2px;
+  text-transform: capitalize;
+}
+.day-detail-close {
+  background: rgba(255,255,255,0.12);
+  border: none;
+  color: inherit;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.day-detail-close:active { background: rgba(255,255,255,0.22); }
+.day-detail-hero {
+  text-align: center;
+  padding: 12px 0 18px;
+}
+.day-detail-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.day-detail-temp {
+  font-size: 28px;
+  font-weight: 500;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  align-items: baseline;
+}
+.day-detail-low { opacity: 0.6; }
+.day-detail-sep { opacity: 0.3; }
+.day-detail-high { font-weight: 700; }
+.day-detail-condition {
+  font-size: 17px;
+  opacity: 0.9;
+  margin-top: 4px;
+}
+.day-detail-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.day-detail-stat {
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 12px;
+}
+.stat-label {
+  font-size: 11px;
+  opacity: 0.55;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.stat-value {
+  font-size: 17px;
+  font-weight: 600;
+}
+.stat-sub {
+  font-size: 12px;
+  opacity: 0.65;
+  margin-top: 2px;
+}
+.day-detail-hourly-title {
+  font-size: 13px;
+  opacity: 0.55;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 8px 0 8px;
+  padding-left: 2px;
+}
+.day-detail-hourly {
+  background: rgba(255,255,255,0.04);
+  border-radius: 12px;
+  padding: 4px 8px;
+  max-height: 50vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.day-detail-hour-row {
+  display: grid;
+  grid-template-columns: 50px 32px 1fr 60px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 14px;
+}
+.day-detail-hour-row:last-child { border-bottom: none; }
+.ddh-time { opacity: 0.75; font-weight: 500; }
+.ddh-icon { display: flex; justify-content: center; }
+.ddh-temp { font-weight: 600; text-align: right; padding-right: 8px; }
+.ddh-pop {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0A84FF;
+  background: rgba(10,132,255,0.18);
+  border-radius: 6px;
+  padding: 2px 8px;
+  text-align: center;
+}
+.ddh-pop.empty {
+  background: transparent;
+  color: transparent;
+}
 .panel-content::before {
   content: "";
   display: block;
@@ -904,6 +1049,37 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
 
 /* ===== Location ===== */
 .location { text-align: center; padding: 28px 0 18px; }
+
+/* Indicateur de geolocalisation (sous le nom de ville) */
+.geo-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 4px 10px;
+  border-radius: 10px;
+  margin: 4px 0 8px;
+}
+.geo-indicator.visible {
+  opacity: 0.85;
+}
+.geo-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #0a84ff;
+  box-shadow: 0 0 8px rgba(10,132,255,0.7);
+  animation: geo-pulse 1.5s ease-in-out infinite;
+}
+@keyframes geo-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50% { transform: scale(1.4); opacity: 1; }
+}
 .city-name {
   font-size: 34px;
   font-weight: 500;

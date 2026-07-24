@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Météo" />
 <title>Météo</title>
-<link rel="stylesheet" href="styles.css?v=20260722" />
+<link rel="stylesheet" href="styles.css?v=20260724" />
 </head>
 <body>
   <!-- Bibliothèque d'icônes SVG premium : halos lumineux, dégradés multi-stops, reflets, ombres -->
@@ -738,10 +738,60 @@
       </div>
     </div>
 
+    <!-- Panneau détails d'un jour (10 jours forecast) -->
+    <div class="panel-overlay day-detail-overlay" id="dayDetailPanel">
+      <div class="panel-content day-detail-content">
+        <div class="day-detail-header">
+          <div>
+            <div class="day-detail-name" id="dayDetailName">Lundi</div>
+            <div class="day-detail-date" id="dayDetailDate">--</div>
+          </div>
+          <button class="day-detail-close" id="dayDetailClose" aria-label="Fermer">×</button>
+        </div>
+        <div class="day-detail-hero">
+          <div class="day-detail-icon" id="dayDetailIcon"></div>
+          <div class="day-detail-temp">
+            <span class="day-detail-low" id="dayDetailLow">--</span>
+            <span class="day-detail-sep">·</span>
+            <span class="day-detail-high" id="dayDetailHigh">--</span>
+          </div>
+          <div class="day-detail-condition" id="dayDetailCondition">--</div>
+        </div>
+        <div class="day-detail-stats">
+          <div class="day-detail-stat">
+            <div class="stat-label">Pluie</div>
+            <div class="stat-value" id="dayDetailRain">--</div>
+            <div class="stat-sub" id="dayDetailRainSub">--</div>
+          </div>
+          <div class="day-detail-stat">
+            <div class="stat-label">Vent max</div>
+            <div class="stat-value" id="dayDetailWind">--</div>
+            <div class="stat-sub" id="dayDetailWindSub">--</div>
+          </div>
+          <div class="day-detail-stat">
+            <div class="stat-label">UV max</div>
+            <div class="stat-value" id="dayDetailUv">--</div>
+            <div class="stat-sub" id="dayDetailUvSub">--</div>
+          </div>
+          <div class="day-detail-stat">
+            <div class="stat-label">Lever/Coucher</div>
+            <div class="stat-value" id="dayDetailSun">--</div>
+            <div class="stat-sub" id="dayDetailSunSub">--</div>
+          </div>
+        </div>
+        <div class="day-detail-hourly-title">Détail heure par heure</div>
+        <div class="day-detail-hourly" id="dayDetailHourly"></div>
+      </div>
+    </div>
+
     <!-- Contenu principal -->
     <main class="content" id="content">
       <section class="location" id="locationSection">
         <h1 class="city-name" id="cityName">Localisation...</h1>
+        <div class="geo-indicator" id="geoIndicator">
+          <span class="geo-dot"></span>
+          <span class="geo-label">Localisation en cours...</span>
+        </div>
         <p class="temp" id="temp">--</p>
         <p class="condition" id="condition">--</p>
         <p class="hilo" id="hilo">H:--  L:--</p>
@@ -829,6 +879,6 @@
     </main>
   </div>
 
-  <script src="script.js?v=20260722"></script>
+  <script src="script.js?v=20260724"></script>
 </body>
 </html>

@@ -1,0 +1,54 @@
+feat: geoloc watchPosition + indicateur visuel + panneau details 10 jours
+
+Le user a 2 demandes :
+
+1. GEOLOCALISATION 100% AUTO (avec watchPosition + indicateur)
+   - tryGeolocate() utilise maintenant navigator.geolocation
+     .watchPosition() au lieu de getCurrentPosition()
+   - Tracking CONTINU : l'API notifie automatiquement quand
+     l'utilisateur bouge (au lieu de polls toutes les 5min)
+   - Le watcher periodique (checkGeoLocation toutes les 5min
+     avec seuil 5km) sert de filet de securite en cas de
+     perte du watch
+   - Premier fix : affiche "Localisation en cours..." puis
+     "Position trouvee..." puis "Suivi GPS actif (45m)"
+   - Indicateur visuel sous le nom de ville :
+     [point bleu pulse] Localisation en cours...
+   - Auto-masquage 2s apres le 1er fix reussi
+   - Messages d'erreur contextuels selon GeolocationPositionError:
+       * code 1 (refus) -> "Geolocalisation refusee par l'utilisateur"
+       * code 2 (POS_UNAVAILABLE) -> "Position indisponible (GPS desactive ?)"
+       * code 3 (TIMEOUT) -> "Delai depasse pour la geolocalisation"
+   - stopGeolocationTracking() pour cleanup via clearWatch()
+   - En cas d'erreur, fallback automatique sur la recherche manuelle
+
+2. NOUVEAU : PANNEAU DETAILS QUAND ON CLIQUE SUR UN JOUR
+   - Chaque ligne de jour est maintenant cliquable (cursor pointer)
+   - Click ou Enter ouvre un panneau modal en bas d'ecran (style iOS)
+   - Contenu du panneau :
+       * Nom du jour (Aujourd'hui, Demain, ou jour de la semaine)
+       * Date formatee (ex: "mercredi 30 juillet")
+       * Icone meteo grande (64px)
+       * Temperature min/max avec separation
+       * Condition (ex: "Averses eparses")
+       * Stats en grille 2x2 :
+           - Pluie : X mm + Xh + POP%
+           - Vent max : X km/h + rafales
+           - UV max : X.X + label (Faible/Modere/Eleve/Tres eleve/Extreme)
+           - Lever/Coucher de soleil
+       * Detail heure par heure (scrollable) :
+           - Heure | Icone | Temperature | POP%
+           - POP arrondi a 5% (coherent avec l'affichage principal)
+   - Tri heures : on filtre toutes les heures du jour concerne
+   - Close : bouton X, click dehors, ou touche Echap
+   - Se ferme automatiquement quand on change de ville
+
+Ameliorations de robustesse :
+- Gestion du cas ou le 1er fix prend plus de 15s (timeout)
+- initialResolved pour eviter les doubles resolves
+- MaximumAge: 60000 pour eviter fix immediat
+- enableHighAccuracy: true pour GPS precis (pas WiFi triangulation)
+
+Cache bump : v=20260722 -> v=20260724
+
+Co-Authored-By: Letta Code <noreply@letta.com>
