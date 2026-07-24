@@ -1434,7 +1434,7 @@ async function callOpenMeteo(lat, lon, signal = null) {
     `longitude=${lon}`,
     `current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,` +
       `precipitation,rain,showers,snowfall,weather_code,cloud_cover,` +
-      `pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m`,
+      `pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility`,
     `hourly=temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,` +
       `precipitation_probability,precipitation,rain,showers,snowfall,weather_code,` +
       `pressure_msl,surface_pressure,cloud_cover,visibility,wind_speed_10m,` +
@@ -3677,8 +3677,7 @@ function renderCity(city, w) {
 
   for (let i = 0; i < daily.time.length; i++) {
     const di = document.createElement("div");
-    di.className = "day";
-    if (hasData = true) di.classList.add("clickable"); // toujours cliquable
+    di.className = "day clickable";
     const lo = daily.temperature_2m_min[i];
     const hi = daily.temperature_2m_max[i];
     const hasData = lo != null && hi != null;
@@ -3729,8 +3728,17 @@ function renderCity(city, w) {
   $("feels").textContent = fmtTemp(cur.apparent_temperature);
   $("feelsSub").textContent = cur.apparent_temperature < cur.temperature_2m - 0.5 ? "Plus frais" : cur.apparent_temperature > cur.temperature_2m + 0.5 ? "Plus chaud" : "Similaire";
   // Visibilite reelle via API (km)
-  if (cur.visibility != null) {
-    $("vis").textContent = cur.visibility >= 1000 ? `${(cur.visibility / 1000).toFixed(0)}+ km` : `${Math.round(cur.visibility)} m`;
+  // Open-Meteo renvoie visibility en metres. Fallback sur hourly[0] si pas dans current.
+  let visVal = cur.visibility;
+  if (visVal == null && w.hourly && w.hourly.visibility && w.hourly.visibility[0] != null) {
+    visVal = w.hourly.visibility[0];
+  }
+  if (visVal != null) {
+    if (visVal >= 1000) {
+      $("vis").textContent = `${(visVal / 1000).toFixed(0)}+ km`;
+    } else {
+      $("vis").textContent = `${Math.round(visVal)} m`;
+    }
   } else {
     $("vis").textContent = "—";
   }
