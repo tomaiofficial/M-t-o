@@ -1,0 +1,18 @@
+fix: nom de ville mobile encore plus remonte
+
+Le user insiste : "pour les mobiles je veut que le nom
+de la ville soit remonte et pas descendu"
+
+Ajustements supplementaires :
+- .location : padding 12px 0 8px -> 4px 0 4px (gain 16px)
+- .location .city-name : margin 0 + line-height 1.1
+  (elimine l'espace au-dessus du nom)
+- .topbar : padding 10px 18px -> 6px 18px (gain 8px)
+
+Total depuis le debut : ~80px gagnes en haut de la
+page mobile. Le nom de ville est maintenant colle
+sous la topbar, comme sur Apple Weather.
+
+Cache bump : v=20260725 -> v=20260725b
+
+Co-Authored-By: Letta Code <noreply@letta.com>

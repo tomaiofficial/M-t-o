@@ -701,7 +701,7 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 18px;
+  padding: 6px 18px;
   background: transparent;
   border-bottom: none;
 }
@@ -1048,7 +1048,8 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
 }
 
 /* ===== Location ===== */
-.location { text-align: center; padding: 12px 0 8px; }
+.location { text-align: center; padding: 4px 0 4px; margin-top: 0; }
+.location .city-name { margin: 0; line-height: 1.1; }
 
 /* Indicateur de geolocalisation (sous le nom de ville) */
 .geo-indicator {
@@ -1640,12 +1641,93 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
 .wicon { display: inline-block; vertical-align: middle; }
 
 /* ===== Responsive ===== */
+@media (max-width: 480px) {
+  /* Touch targets finger-friendly */
+  .day {
+    min-height: 56px;
+    padding: 10px 4px;
+  }
+  .day:active {
+    background: rgba(255,255,255,0.08);
+  }
+  .hour-row {
+    min-height: 60px;
+  }
+  .icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 10px;
+  }
+  .glass-card {
+    border-radius: 22px;
+  }
+  /* Cartes details : 2 colonnes mais plus aerees */
+  .details-grid {
+    gap: 8px;
+  }
+  .detail {
+    padding: 14px 12px;
+  }
+  .detail-label {
+    font-size: 11px;
+  }
+  .detail-value {
+    font-size: 20px;
+  }
+  /* Day detail panel : plus de place pour le contenu */
+  .day-detail-content {
+    max-height: 92vh;
+    padding: 18px 16px calc(24px + env(safe-area-inset-bottom));
+  }
+  .day-detail-name {
+    font-size: 26px;
+  }
+  .day-detail-temp {
+    font-size: 30px;
+  }
+  .day-detail-hour-row {
+    grid-template-columns: 44px 30px 1fr 56px;
+    padding: 10px 6px;
+    font-size: 15px;
+  }
+  .day-detail-hourly {
+    max-height: 45vh;
+  }
+  /* Panel env : safe-area pour bottom */
+  .panel-content {
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+  /* Topbar : safe-area en haut */
+  .topbar {
+    padding-top: calc(10px + env(safe-area-inset-top));
+  }
+  /* Source badge plus lisible */
+  .source-badge {
+    font-size: 11px;
+  }
+  /* Updated-at cliquable pour refresh manuel */
+  .updated-at {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
 @media (max-width: 380px) {
   .content { padding: 50px 12px 80px; }
   .temp { font-size: 80px; }
   .city-name { font-size: 28px; }
   .details-grid { grid-template-columns: 1fr; }
   .glass-card { border-radius: 24px; }
+  .day-detail-stats {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .day-detail-stat {
+    padding: 10px;
+  }
+  .stat-value {
+    font-size: 15px;
+  }
 }
 @media (max-width: 280px) {
   .content { padding: 40px 8px 70px; }
