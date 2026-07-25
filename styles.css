@@ -701,7 +701,7 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 18px;
+  padding: 10px 18px;
   background: transparent;
   border-bottom: none;
 }
@@ -1048,7 +1048,7 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
 }
 
 /* ===== Location ===== */
-.location { text-align: center; padding: 28px 0 18px; }
+.location { text-align: center; padding: 12px 0 8px; }
 
 /* Indicateur de geolocalisation (sous le nom de ville) */
 .geo-indicator {
@@ -1057,16 +1057,23 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   gap: 6px;
   font-size: 12px;
   opacity: 0;
-  transition: opacity 0.3s ease;
+  visibility: hidden;       /* Cache completement quand invisible (pas de place) */
+  height: 0;
+  overflow: hidden;
+  transition: opacity 0.3s ease, height 0.3s ease, visibility 0.3s, margin 0.3s;
   background: rgba(255,255,255,0.08);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  padding: 4px 10px;
+  padding: 0 10px;
   border-radius: 10px;
-  margin: 4px 0 8px;
+  margin: 0;
 }
 .geo-indicator.visible {
   opacity: 0.85;
+  visibility: visible;
+  height: auto;
+  padding: 4px 10px;
+  margin: 4px 0 4px;
 }
 .geo-dot {
   width: 8px;
