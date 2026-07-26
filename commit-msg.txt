@@ -1,0 +1,73 @@
+feat: rubrique Incendies en cours (NASA FIRMS satellite)
+
+Nouvelle fonctionnalite complete sans modifier quoi que
+ce soit d'existant. Module 100% autonome.
+
+SOURCE OFFICIELLE
+NASA FIRMS (Fire Information for Resource Management
+System) — donnees satellite officiels (VIIRS NOAA-20,
+VIIRS NOAA-21, MODIS) — detournement des points chauds
+actifs sur les 24 dernieres heures en France.
+
+3 sources combinees + deduplication : chaque point chaud
+est rapporte une seule fois meme si plusieurs satellites
+le detectent.
+
+CONFIGURATION
+- Cle MAP_KEY NASA FIRMS stockee dans localStorage
+  (gratuite en 2 min via firms.modaps.eosdis.nasa.gov)
+- Sans cle : tentative archive public (souvent suffisante)
+- L'utilisateur peut saisir la cle dans le panneau
+
+CLASSIFICATIONS
+- Niveau (FRP en MW) : Faible (<50) / Modere (50-150) /
+  Eleve (150-500) / Critique (>500) — couleurs vert/jaune/
+  orange/rouge
+- Statut : Actif (<6h) / Maitrise (6-48h) / Eteint (>48h)
+  selon l'age de la detection
+- Surface brulee : estimation FRP x duree / 100 (ha)
+- Distance : Haversine utilisateur -> feu
+
+REVERSE GEOCODING
+- 1er essai Open-Meteo (gratuit, pas de rate limit)
+- Fallback Nominatim 1 req/sec (throttle respect)
+- Limite a 15 incendies enrichis pour eviter 60s d'attente
+- Tous les autres affichent lat/lon
+
+COUVERTURE FONCTIONNELLE
+- Bouton feu dans la topbar (couleur orange, badge rouge
+  si alerte active)
+- Banniere rouge en haut si incendie actif <50km
+- Panneau slide-up avec header, search, filtres, liste
+- Carte par incendie : nom, dept, pays, statut, niveau,
+  surface brulee, distance, age
+- Page de detail au clic : surface, FRP, confiance, debut,
+  coordonnees, lien OSM, conseils de securite adaptes au
+  niveau
+- Empty state : carte verte "Aucun incendie signale"
+- Erreur : message clair avec lien pour obtenir la cle
+
+UX / RESPONSIVE
+- Skeleton pendant le fetch
+- Animations fluides (slide, pulse, shimmer, spin)
+- Filtres : Tous / Actifs / Maitrises / Eteints
+- Recherche live par lieu/dept/pays
+- Refresh auto toutes les 5 min (setInterval)
+- Refresh manuel via bouton
+- Tri : du plus proche au plus eloigne
+- Cache localStorage TTL 10 min pour affichage instantane
+- Banniere dismissable (sessionStorage 30 min)
+- Mode sombre / clair supportes (variables du theme)
+- Responsive : grille 2 colonnes desktop, 1 colonne mobile
+
+CACHE BUST
+styles.css?v=20260726
+fires.js?v=20260726
+
+FILES
++ fires.js (nouveau, ~700 lignes, module autonome IIFE)
+M index.html (panneau + banniere + bouton + detail)
+M styles.css (+~600 lignes)
+M script.js (init FiresModule + wrap switchCity)
+
+Co-Authored-By: Letta Code <noreply@letta.com>

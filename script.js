@@ -4680,4 +4680,22 @@ unitToggle.addEventListener("click", (e) => {
   // Demarre le fast poll : verifie les precipitations toutes les 20s
   // pour detecter pluie/orage le plus rapidement possible.
   startFastPoll();
+
+  // Module Incendies : NASA FIRMS (chargement module externe)
+  if (window.FiresModule) {
+    try {
+      window.FiresModule.init();
+      // Met a jour la position user quand on change de ville
+      const _origSwitchCity = switchCity;
+      switchCity = async function (city) {
+        const r = await _origSwitchCity.apply(this, arguments);
+        if (city && city.lat != null) {
+          window.FiresModule.onCityChange(city.lat, city.lon);
+        }
+        return r;
+      };
+    } catch (e) {
+      console.warn("[Fires] init KO:", e);
+    }
+  }
 })();

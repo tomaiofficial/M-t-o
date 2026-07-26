@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Météo" />
 <title>Météo</title>
-<link rel="stylesheet" href="styles.css?v=20260725b" />
+<link rel="stylesheet" href="styles.css?v=20260726" />
 </head>
 <body>
   <!-- Bibliothèque d'icônes SVG premium : halos lumineux, dégradés multi-stops, reflets, ombres -->
@@ -675,10 +675,19 @@
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       </button>
       <div class="topbar-spacer"></div>
+      <button class="icon-btn fires-icon" id="firesOpenBtn" aria-label="Incendies en cours" title="Incendies en cours">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+      </button>
       <button class="icon-btn" id="settingsBtn" aria-label="Paramètres">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
     </header>
+
+    <!-- Bannière rouge : incendie à proximité -->
+    <div class="fires-alert-banner" id="firesAlertBanner" role="alert" aria-live="polite">
+      <span id="firesAlertText"></span>
+      <button id="firesAlertClose" aria-label="Fermer">×</button>
+    </div>
 
     <!-- Recherche -->
     <div class="search-overlay" id="searchOverlay">
@@ -775,12 +784,115 @@
           </div>
           <div class="day-detail-stat">
             <div class="stat-label">Lever/Coucher</div>
-            <div class="stat-value" id="dayDetailSun">--</div>
+            <div class="day-value" id="dayDetailSun">--</div>
             <div class="stat-sub" id="dayDetailSunSub">--</div>
           </div>
         </div>
         <div class="day-detail-hourly-title">Détail heure par heure</div>
         <div class="day-detail-hourly" id="dayDetailHourly"></div>
+      </div>
+    </div>
+
+    <!-- Panneau Incendies -->
+    <div class="panel-overlay fires-overlay" id="firesPanel">
+      <div class="panel-content fires-content">
+        <div class="fires-header">
+          <div>
+            <div class="fires-title">🔥 Incendies en cours</div>
+            <div class="fires-subtitle">Source : NASA FIRMS (satellite) — France — 24 h</div>
+          </div>
+          <div class="fires-header-actions">
+            <button class="fires-refresh" id="firesRefreshBtn" aria-label="Actualiser" title="Actualiser">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.36L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.5 6.36L3 16M3 21v-5h5"/></svg>
+            </button>
+            <button class="fires-close" id="firesCloseBtn" aria-label="Fermer">×</button>
+          </div>
+        </div>
+        <div class="fires-search-bar">
+          <input type="search" id="firesSearch" placeholder="Rechercher un lieu, département, pays…" autocomplete="off" />
+        </div>
+        <div class="fires-filters" role="tablist">
+          <button class="fires-filter active" data-filter="tous">Tous</button>
+          <button class="fires-filter" data-filter="actifs">Actifs</button>
+          <button class="fires-filter" data-filter="maitrises">Maîtrisés</button>
+          <button class="fires-filter" data-filter="eteints">Éteints</button>
+        </div>
+        <div class="fires-list" id="firesList"></div>
+        <div class="fires-panel-footer" id="firesPanelFooter">
+          <span id="firesLastUpdate"></span>
+          <span id="firesCount"></span>
+        </div>
+        <div class="fires-keybox">
+          <div class="fires-keybox-title">🔑 Clé NASA FIRMS (optionnelle)</div>
+          <div class="fires-keybox-sub">
+            Gratuite en 2 min : <a href="https://firms.modaps.eosdis.nasa.gov/firms-map/" target="_blank" rel="noopener">firms.modaps.eosdis.nasa.gov</a>.
+            Enregistrée localement sur cet appareil.
+          </div>
+          <div class="fires-keybox-row">
+            <input type="text" id="firesMapKey" placeholder="MAP_KEY" />
+            <button id="firesMapKeySave">Enregistrer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panneau détail d'un incendie -->
+    <div class="panel-overlay fire-detail-overlay" id="fireDetailPanel">
+      <div class="panel-content fire-detail-content">
+        <div class="fire-detail-header">
+          <div>
+            <div class="fire-detail-name" id="fireDetailName">—</div>
+            <div class="fire-detail-sub" id="fireDetailDept">—</div>
+          </div>
+          <button class="fire-detail-close" id="fireDetailClose" aria-label="Fermer">×</button>
+        </div>
+        <div class="fire-detail-hero">
+          <div class="fire-detail-emoji">🔥</div>
+          <div class="fire-detail-meta">
+            <div class="fire-detail-level" id="fireDetailLevel" style="color:#ff9500">—</div>
+            <div class="fire-status fire-status--actif" id="fireDetailStatus">—</div>
+          </div>
+        </div>
+        <div class="fire-detail-grid">
+          <div class="fire-detail-stat">
+            <div class="stat-label">Surface brûlée</div>
+            <div class="stat-value" id="fireDetailBurned">—</div>
+            <div class="stat-sub">Estimation</div>
+          </div>
+          <div class="fire-detail-stat">
+            <div class="stat-label">Distance</div>
+            <div class="stat-value" id="fireDetailDistance">—</div>
+            <div class="stat-sub">De votre position</div>
+          </div>
+          <div class="fire-detail-stat">
+            <div class="stat-label">FRP</div>
+            <div class="stat-value" id="fireDetailFrp">—</div>
+            <div class="stat-sub">Puissance radiative</div>
+          </div>
+          <div class="fire-detail-stat">
+            <div class="stat-label">Confiance</div>
+            <div class="stat-value" id="fireDetailConfidence">—</div>
+            <div class="stat-sub">Détection satellite</div>
+          </div>
+          <div class="fire-detail-stat">
+            <div class="stat-label">Début</div>
+            <div class="stat-value" id="fireDetailStart">—</div>
+            <div class="stat-sub">Heure d'acquisition</div>
+          </div>
+          <div class="fire-detail-stat">
+            <div class="stat-label">Mise à jour</div>
+            <div class="stat-value" id="fireDetailUpdated">—</div>
+            <div class="stat-sub">Dernière détection</div>
+          </div>
+          <div class="fire-detail-stat">
+            <div class="stat-label">Coordonnées</div>
+            <div class="stat-value mono" id="fireDetailCoords">—</div>
+            <div class="stat-sub">
+              <a id="fireDetailMapLink" href="#" target="_blank" rel="noopener">Voir sur la carte ↗</a>
+            </div>
+          </div>
+        </div>
+        <div class="fire-detail-advice" id="fireDetailAdvice"></div>
       </div>
     </div>
 
@@ -880,5 +992,6 @@
   </div>
 
   <script src="script.js?v=20260725b"></script>
+  <script src="fires.js?v=20260726"></script>
 </body>
 </html>
