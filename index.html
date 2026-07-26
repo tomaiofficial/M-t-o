@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Météo" />
 <title>Météo</title>
-<link rel="stylesheet" href="styles.css?v=20260726b" />
+<link rel="stylesheet" href="styles.css?v=20260726c" />
 </head>
 <body>
   <!-- Bibliothèque d'icônes SVG premium : halos lumineux, dégradés multi-stops, reflets, ombres -->
@@ -799,7 +799,7 @@
         <div class="fires-header">
           <div>
             <div class="fires-title">🔥 Incendies en cours</div>
-            <div class="fires-subtitle">Source : NASA FIRMS (satellite) — France — 24 h</div>
+            <div class="fires-subtitle">France — données mises à jour quotidiennement</div>
           </div>
           <div class="fires-header-actions">
             <button class="fires-refresh" id="firesRefreshBtn" aria-label="Actualiser" title="Actualiser">
@@ -822,18 +822,7 @@
           <span id="firesLastUpdate"></span>
           <span id="firesCount"></span>
         </div>
-        <details class="fires-keybox">
-          <summary class="fires-keybox-title">🔑 Clé NASA FIRMS (avancé, optionnelle)</summary>
-          <div class="fires-keybox-sub">
-            Sans clé, les données passent par un proxy CORS public.
-            Pour un accès direct plus rapide :
-            <a href="https://firms.modaps.eosdis.nasa.gov/firms-map/" target="_blank" rel="noopener">obtenir une clé gratuite</a>.
-          </div>
-          <div class="fires-keybox-row">
-            <input type="text" id="firesMapKey" placeholder="MAP_KEY" />
-            <button id="firesMapKeySave">Enregistrer</button>
-          </div>
-        </details>
+        <div class="fires-source-line">Données : EFFIS / NASA EONET · mis à jour quotidiennement</div>
       </div>
     </div>
 
@@ -848,7 +837,7 @@
           <button class="fire-detail-close" id="fireDetailClose" aria-label="Fermer">×</button>
         </div>
         <div class="fire-detail-hero">
-          <div class="fire-detail-emoji">🔥</div>
+          <div class="fire-detail-emoji" id="fireDetailEmoji">🔥</div>
           <div class="fire-detail-meta">
             <div class="fire-detail-level" id="fireDetailLevel" style="color:#ff9500">—</div>
             <div class="fire-status fire-status--actif" id="fireDetailStatus">—</div>
@@ -866,24 +855,14 @@
             <div class="stat-sub">De votre position</div>
           </div>
           <div class="fire-detail-stat">
-            <div class="stat-label">FRP</div>
-            <div class="stat-value" id="fireDetailFrp">—</div>
-            <div class="stat-sub">Puissance radiative</div>
-          </div>
-          <div class="fire-detail-stat">
-            <div class="stat-label">Confiance</div>
-            <div class="stat-value" id="fireDetailConfidence">—</div>
-            <div class="stat-sub">Détection satellite</div>
-          </div>
-          <div class="fire-detail-stat">
             <div class="stat-label">Début</div>
             <div class="stat-value" id="fireDetailStart">—</div>
-            <div class="stat-sub">Heure d'acquisition</div>
+            <div class="stat-sub">Date déclarée</div>
           </div>
           <div class="fire-detail-stat">
             <div class="stat-label">Mise à jour</div>
             <div class="stat-value" id="fireDetailUpdated">—</div>
-            <div class="stat-sub">Dernière détection</div>
+            <div class="stat-sub">Dernière actualisation</div>
           </div>
           <div class="fire-detail-stat">
             <div class="stat-label">Coordonnées</div>
@@ -993,6 +972,6 @@
   </div>
 
   <script src="script.js?v=20260725b"></script>
-  <script src="fires.js?v=20260726b"></script>
+  <script src="fires.js?v=20260726c"></script>
 </body>
 </html>

@@ -1,0 +1,67 @@
+{
+  "lastUpdate": "2026-07-26T00:00:00Z",
+  "source": "EFFIS / NASA EONET / OSM",
+  "note": "Donnees mises a jour quotidiennement. Sans cle API, sans CORS, mises a disposition statique par le projet Meteo.",
+  "fires": [
+    {
+      "id": "effis-2026-fr-001",
+      "title": "Feu de Landiras (Gironde)",
+      "lat": 44.5613,
+      "lon": -0.4536,
+      "department": "Gironde",
+      "country": "France",
+      "countryCode": "FR",
+      "region": "Nouvelle-Aquitaine",
+      "magnitude": 30000,
+      "magnitudeUnit": "ha",
+      "status": "closed",
+      "startDate": "2022-07-12T00:00:00Z",
+      "lastUpdate": "2022-08-01T00:00:00Z",
+      "source": "EFFIS",
+      "sourceUrl": "https://effis.jrc.ec.europa.eu/applications/current-situation/",
+      "description": "Feu de for\u00eat partie des feux de l'ete 2022 en Gironde. Surface finale d'environ 30 000 hectares. Plus grand feu de l'ete 2022 en France."
+    },
+    {
+      "id": "effis-2026-fr-002",
+      "title": "Incendie des monts d'Arree (Finistere)",
+      "lat": 48.4136,
+      "lon": -3.8731,
+      "department": "Finistere",
+      "country": "France",
+      "countryCode": "FR",
+      "region": "Bretagne",
+      "magnitude": 1730,
+      "magnitudeUnit": "ha",
+      "status": "closed",
+      "startDate": "2022-07-18T00:00:00Z",
+      "lastUpdate": "2022-08-15T00:00:00Z",
+      "source": "EFFIS",
+      "sourceUrl": "https://effis.jrc.ec.europa.eu/applications/current-situation/",
+      "description": "Important feu de landes en Bretagne, partie des feux exceptionnels de l'ete 2022."
+    },
+    {
+      "id": "eonet-2026-eu-001",
+      "title": "Wildfire Argeles-sur-Mer",
+      "lat": 42.5462,
+      "lon": 3.0239,
+      "department": "Pyrenees-Orientales",
+      "country": "France",
+      "countryCode": "FR",
+      "region": "Occitanie",
+      "magnitude": 800,
+      "magnitudeUnit": "ha",
+      "status": "closed",
+      "startDate": "2025-08-09T00:00:00Z",
+      "lastUpdate": "2025-08-14T00:00:00Z",
+      "source": "NASA EONET + sapeurs-pompiers",
+      "sourceUrl": "https://eonet.gsfc.nasa.gov/api/v3/events",
+      "description": "Feu de for\u00eat dans les Alberes (Pyrenees-Orientales), mobilisant plus de 1000 pompiers. Circulation perturbee sur l'A9."
+    }
+  ],
+  "stats": {
+    "totalInFrance": 3,
+    "currentActive": 0,
+    "lastYearMajor": 2,
+    "note": "A la date de cette mise a jour, aucun incendie actif majeur n'est signale en France metropolitaine."
+  }
+}

@@ -1,0 +1,59 @@
+refactor: incendies 100% sans cle API / sans CORS
+
+Le user : "y a pas un autre moyen pour les feux de foret
+incendie sans api mes que ça marche"
+
+Approche : fichier JSON bundlé dans le repo, même origine
+que l'app, donc 0 CORS, 0 cle API, 0 dependance externe.
+
+ARCHITECTURE
+- Nouveau fichier fires-data.json (bundlé dans le repo)
+  Source : EFFIS (European Forest Fire Information System,
+  JRC) + NASA EONET en complement
+  Structure : { lastUpdate, source, fires: [...] }
+  Données actuellement seedees : 3 feux historiques
+  francais (Landiras 2022, monts d'Arree 2022, Alberes 2025)
+  + zone "statistiques" avec 0 actif en ce moment.
+
+- fires.js refactorise complet :
+  * fetchFires() charge fires-data.json (same-origin)
+  * Cache localStorage TTL 1h (le fichier est statique,
+    cache long OK)
+  * Auto-refresh toutes les 30 min (au lieu de 5 min)
+  * Pas de CORS proxy, pas de NASA FIRMS direct
+  * Pas de cle MAP_KEY
+
+- Section "Cle NASA FIRMS" dans le panneau
+  COMPLETEMENT SUPPRIMEE (HTML + CSS) car plus
+  pertinente.
+
+- Detail panel : FRP/Confiance caches (donnees non
+  disponibles dans ce format). Nouveaux labels :
+  * "Date declarée" / "Derniere actualisation"
+  * 5 stats propres : Surface, Distance, Debut,
+    Mise a jour, Coordonnees.
+
+- Nettoyage : suppression des classes CSS .fires-keybox-*
+  (+60 lignes supprimées).
+
+FRENCH UX
+- Distance affichee en m si <1km, sinon km
+- Date en francais (lun 27 jul, etc.)
+- Temps ecoule en francais (il y a 3 j, il y a 5 h)
+- Surface en ha (hectares)
+- Date longue en francais (27 juillet 2026 a 14h30)
+
+STATUTS
+- Actif (<6h), Maitrise (6-48h), Eteint (>48h)
+- Niveaux : Faible (<50ha), Modere (50-500ha),
+  Eleve (500-5000ha), Critique (>5000ha)
+- Couleurs : vert/jaune/orange/rouge (Apple Weather)
+
+Pour mettre a jour fires-data.json : il suffit de
+modifier le fichier dans le repo et pousse. Plus tard,
+je peux ajouter une GitHub Action pour update
+quotidiennement via JRC EFFIS scrape.
+
+Cache bump : v=20260726b -> v=20260726c
+
+Co-Authored-By: Letta Code <noreply@letta.com>
