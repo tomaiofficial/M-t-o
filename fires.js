@@ -8,24 +8,34 @@
 (function () {
   "use strict";
 
+  // Detecte si on a le CORS direct (parfois active)
+  // Cette detection est faite au premier fetch.
+  // Aucune cle API requise - fonctionne par defaut.
+
   // ----- Configuration -----
-  // Obtenir une cle gratuite (2 min) : https://firms.modaps.eosdis.nasa.gov/firms-map/
-  // Sans cle, on tente l'acces archive public (24h pour country fr).
-  const FIRMS_BASE = "https://firms.modaps.eosdis.nasa.gov/data/active_fire";
+  // NASA FIRMS bloque l'acces direct depuis un navigateur (CORS).
+  // On utilise un proxy CORS public en fallback. Aucun cle API requise.
   // Sources : NOAA-20 VIIRS (le plus recent) + MODIS (couverture longue)
+  const FIRMS_BASE = "https://firms.modaps.eosdis.nasa.gov/data/active_fire";
   const FIRMS_SOURCES = [
     { id: "viirs_noaa20", sensor: "c2", file: "VIIRS_NOAA20_NRT" },
     { id: "viirs_noaa21", sensor: "c2", file: "VIIRS_NOAA21_NRT" },
     { id: "modis", sensor: "c6", file: "MODIS_NRT" }
   ];
-  const FIRMS_COUNTRY = "fr"; // ISO-2 lowercase (France metropolitaine + DOM selon URL)
+  const FIRMS_COUNTRY = "fr"; // ISO-2 lowercase
   const FIRMS_TIMEFRAME = "24h"; // 24h / 48h / 7d
+  // Proxies CORS gratuits (ordre de preference)
+  const CORS_PROXIES = [
+    { name: "corsproxy.io", url: (u) => `https://corsproxy.io/?${encodeURIComponent(u)}` },
+    { name: "allorigins.win", url: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}` },
+    { name: "codetabs.com", url: (u) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}` }
+  ];
   const FRESH_MS = 5 * 60 * 1000; // Refresh auto : 5 min
   const CACHE_KEY = "meteo_fires_cache_v1";
-  const CACHE_TTL_MS = 10 * 60 * 1000; // 10 min (slack pour refresh auto)
+  const CACHE_TTL_MS = 10 * 60 * 1000;
   const MAPKEY_LS = "meteo_firms_mapkey";
-  const ALERT_DISTANCE_KM = 50; // Banniere rouge si < 50km
-  const REVERSE_GEOCODE_DELAY_MS = 1100; // Nominatim 1 req/sec
+  const ALERT_DISTANCE_KM = 50;
+  const REVERSE_GEOCODE_DELAY_MS = 1100;
   const OPENMETEO_GEOCODE = "https://geocoding-api.open-meteo.com/v1/reverse";
   const NOMINATIM_REVERSE = "https://nominatim.openstreetmap.org/reverse";
 
@@ -41,7 +51,8 @@
   let _errors = []; // Erreurs cumulees pour affichage
 
   // ============================================================
-  //  FETCH FIRMS
+  //  FETCH FIRMS — sans cle API, via proxy CORS
+  //  Strategie : tente direct, puis fallback proxies CORS
   // ============================================================
   function buildUrl(file, sensor) {
     const key = localStorage.getItem(MAPKEY_LS) || "";
@@ -50,14 +61,36 @@
     return url;
   }
 
+  // Tente direct puis chaque proxy dans l'ordre
   async function fetchOneCsv(src) {
-    const url = buildUrl(src.file, src.sensor);
-    const res = await fetch(url, { method: "GET" });
-    if (!res.ok) {
-      throw new Error(`FIRMS ${src.id} HTTP ${res.status}`);
+    const targetUrl = buildUrl(src.file, src.sensor);
+    // 1) Essai direct
+    try {
+      const res = await fetch(targetUrl, { method: "GET" });
+      if (res.ok) {
+        const text = await res.text();
+        return parseCsv(text, src.id);
+      }
+    } catch (e) {
+      // CORS ou reseau : on tente les proxies
     }
-    const text = await res.text();
-    return parseCsv(text, src.id);
+    // 2) Fallback proxies CORS
+    let lastErr = null;
+    for (const proxy of CORS_PROXIES) {
+      try {
+        const url = proxy.url(targetUrl);
+        const res = await fetch(url, { method: "GET" });
+        if (res.ok) {
+          const text = await res.text();
+          if (text && text.trim().length > 0) {
+            return parseCsv(text, src.id);
+          }
+        }
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw new Error(`FIRMS ${src.id} indisponible (${lastErr ? lastErr.message : "CORS bloque"})`);
   }
 
   function parseCsv(csv, sourceId) {

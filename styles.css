@@ -2156,12 +2156,28 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   border-radius: 12px;
   padding: 12px;
 }
+.fires-keybox > summary {
+  cursor: pointer;
+  list-style: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.fires-keybox > summary::-webkit-details-marker { display: none; }
+.fires-keybox > summary::after {
+  content: "▾";
+  float: right;
+  font-size: 12px;
+  transition: transform 0.2s;
+}
+.fires-keybox[open] > summary::after {
+  transform: rotate(180deg);
+}
 .fires-keybox-title {
   font-size: 12px;
   font-weight: 700;
-  margin-bottom: 4px;
+  margin-bottom: 0;
   color: #ff9500;
 }
+.fires-keybox[open] .fires-keybox-title { margin-bottom: 4px; }
 .fires-keybox-sub {
   font-size: 11px;
   opacity: 0.7;

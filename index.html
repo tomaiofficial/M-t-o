@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Météo" />
 <title>Météo</title>
-<link rel="stylesheet" href="styles.css?v=20260726" />
+<link rel="stylesheet" href="styles.css?v=20260726b" />
 </head>
 <body>
   <!-- Bibliothèque d'icônes SVG premium : halos lumineux, dégradés multi-stops, reflets, ombres -->
@@ -822,17 +822,18 @@
           <span id="firesLastUpdate"></span>
           <span id="firesCount"></span>
         </div>
-        <div class="fires-keybox">
-          <div class="fires-keybox-title">🔑 Clé NASA FIRMS (optionnelle)</div>
+        <details class="fires-keybox">
+          <summary class="fires-keybox-title">🔑 Clé NASA FIRMS (avancé, optionnelle)</summary>
           <div class="fires-keybox-sub">
-            Gratuite en 2 min : <a href="https://firms.modaps.eosdis.nasa.gov/firms-map/" target="_blank" rel="noopener">firms.modaps.eosdis.nasa.gov</a>.
-            Enregistrée localement sur cet appareil.
+            Sans clé, les données passent par un proxy CORS public.
+            Pour un accès direct plus rapide :
+            <a href="https://firms.modaps.eosdis.nasa.gov/firms-map/" target="_blank" rel="noopener">obtenir une clé gratuite</a>.
           </div>
           <div class="fires-keybox-row">
             <input type="text" id="firesMapKey" placeholder="MAP_KEY" />
             <button id="firesMapKeySave">Enregistrer</button>
           </div>
-        </div>
+        </details>
       </div>
     </div>
 
@@ -992,6 +993,6 @@
   </div>
 
   <script src="script.js?v=20260725b"></script>
-  <script src="fires.js?v=20260726"></script>
+  <script src="fires.js?v=20260726b"></script>
 </body>
 </html>
