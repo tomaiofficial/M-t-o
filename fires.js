@@ -333,7 +333,7 @@
         '<button id="firesAlertClose" aria-label="Fermer">×</button>';
       banner.classList.add("visible");
       // Update topbar icon badge
-      const ico = $("#firesIconBtn");
+      const ico = $("#firesOpenBtn") || $("#firesIconBtn");
       if (ico) ico.classList.add("has-alert");
       const dismissBtn = $("#firesAlertClose");
       if (dismissBtn) {
@@ -346,7 +346,7 @@
       }
     } else {
       banner.classList.remove("visible");
-      const ico = $("#firesIconBtn");
+      const ico = $("#firesOpenBtn") || $("#firesIconBtn");
       if (ico) ico.classList.remove("has-alert");
     }
   }
@@ -554,7 +554,7 @@
   // ============================================================
   function init() {
     // Bouton topbar
-    const btn = $("#firesIconBtn");
+    const btn = $("#firesOpenBtn") || $("#firesIconBtn");
     if (btn) {
       btn.addEventListener("click", toggleAlert);
     }
