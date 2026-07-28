@@ -1438,7 +1438,7 @@ async function callOpenMeteo(lat, lon, signal = null) {
     `hourly=temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,` +
       `precipitation_probability,precipitation,rain,showers,snowfall,weather_code,` +
       `pressure_msl,surface_pressure,cloud_cover,visibility,wind_speed_10m,` +
-      `wind_direction_10m,wind_gusts_10m`,
+      `wind_direction_10m,wind_gusts_10m,fire_weather_index`,
     `daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,` +
       `daylight_duration,uv_index_max,precipitation_sum,precipitation_hours,` +
       `precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,` +
@@ -3603,6 +3603,7 @@ function renderCity(city, w) {
     let mmHour = 0;
     let popVisible = false;
     let popClass = '';
+    let fireRisk = 0; // FWI (Fire Weather Index)
     if (hasData) {
       timeLabel = isNow ? "Maint." : fmtHourLabel(hourly.time[i]);
       hourCode = isNow ? cur.weather_code : hourly.weather_code[i];
@@ -3610,6 +3611,7 @@ function renderCity(city, w) {
       hourIsNight = isNow ? isNight : isHourAtNight(hourly.time[i], daily);
       pop = (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0;
       mmHour = (hourly.precipitation && hourly.precipitation[i]) || 0;
+      fireRisk = (hourly.fire_weather_index && hourly.fire_weather_index[i]) || 0;
       popVisible = pop >= 1;
       if (pop >= 70 || mmHour >= 4) popClass = ' heavy';
       else if (pop >= 30 || mmHour >= 1) popClass = ' medium';
@@ -3631,9 +3633,24 @@ function renderCity(city, w) {
     // passait a Math.round(pop/5)*5 (5% pres) -> saute de 3 a 5.
     const popRounded = Math.round(pop / 5) * 5;
     const popVisibleRounded = popRounded >= 5;
+    // Risque d'incendie (FWI - Fire Weather Index, norme canadienne)
+    // 0-5  : Faible  (caché)
+    // 5-15 : Modéré  (jaune)
+    // 15-30 : Élevé   (orange)
+    // >30   : Extrême (rouge)
+    // Repli logique : s'il pleut abondamment, pas de risque (le FWI Open-Meteo
+    // integre deja la pluie recente, mais on securise visuellement).
+    let fireClass = '';
+    let fireIcon = '';
+    if (hasData && fireRisk >= 5 && mmHour < 3 && pop < 60) {
+      if (fireRisk >= 30) { fireClass = ' extreme'; }
+      else if (fireRisk >= 15) { fireClass = ' high'; }
+      else { fireClass = ' moderate'; }
+      fireIcon = `<span class="hour-fire${fireClass}" title="Risque incendie (FWI ${fireRisk.toFixed(0)})">🔥</span>`;
+    }
     h.innerHTML = `
       <div class="hour-time">${timeLabel}</div>
-      <div class="hour-icon">${icon(wi.icon, 32)}</div>
+      <div class="hour-icon">${icon(wi.icon, 32)}${fireIcon}</div>
       <div class="hour-pop${popVisibleRounded ? popClass : " empty"}">${popVisibleRounded ? popRounded + "%" : ""}</div>
       <div class="hour-temp${hasData ? "" : " pending"}">${hasData ? fmtTemp(hourTemp) : "—"}</div>
     `;
