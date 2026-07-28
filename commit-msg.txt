@@ -1,0 +1,48 @@
+fix: anti-faux-orage (WMO 95-99 demotes vers Couvert par defaut)
+
+Le user : "corrige il dit que orage dans les donnees par moment"
+
+PROBLEME
+Open-Meteo peut retourner WMO 95/96/99 (orage) sans
+qu'aucune precipitation ne soit reellement observee
+(modele trop optimiste / cellule orageuse seche). Cela
+causait des flashs "Orages" dans :
+- la condition principale (gros texte)
+- les 24h horaires
+- les 10 jours
+- le detail d'un jour
+- la description generee (IA + template)
+
+SOLUTION
+Nouvelle fonction safeWmoLabel(code, isNight, precipMm)
+qui encapsule wmoInfo avec la logique anti-faux-orage :
+- Si code 95-99 ET precip >= 0.15 mm : garde "Orages"
+- Si code 95-99 ET precip < 0.15 mm : demote vers
+  "Couvert" (au lieu de "Risque d'orages" qui etait
+  trop alarmiste)
+- Autres codes : passthrough
+
+CHANGEMENTS
+1. seuil precip orage : 0.05 mm -> 0.15 mm
+   (au-dessus du bruit capteur)
+2. classifyLiveCondition : supprime "Risque d'orages",
+   tout demonte vers "Couvert" si pas de precip
+3. Tous les calls wmoInfo() proteges remplaces par
+   safeWmoLabel() :
+   - hourly rendering (24h)
+   - daily rendering (10j)
+   - 10-day detail hero
+   - 10-day detail hourly breakdown
+   - code change detection (courant)
+4. buildConditionSentence() accepte precipMm et
+   demote les orages
+5. generateDescription() ne mentionne plus "Orages"
+   double validation que si precip >= 0.15 mm
+
+Le resultat : si Open-Meteo dit "orage" mais qu'il ne
+pleut pas, l'utilisateur voit "Couvert" (fiable) au
+lieu de "Orages" (faux positif). Plus de flash.
+
+Cache bump : v=20260728 -> v=20260728b
+
+Co-Authored-By: Letta Code <noreply@letta.com>

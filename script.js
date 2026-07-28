@@ -866,7 +866,10 @@ function generateDescription(w) {
   const sentences = [];
 
   // ---- Phrase 1 : condition actuelle (courte) ----
-  sentences.push(buildConditionSentence(code, period, h));
+  // On passe la precip observee pour que buildConditionSentence puisse
+  // demoter les orages (95-99) vers "Couvert" si pas de pluie.
+  const curPrecip = (cur.precipitation || 0) + (cur.rain || 0) + (cur.showers || 0);
+  sentences.push(buildConditionSentence(code, period, h, curPrecip));
 
   // ---- Phrase 2 : precipitations observees MAINTENANT (priorite) ----
   const liveObs = classifyLiveCondition(cur);
@@ -933,15 +936,18 @@ function generateDescription(w) {
   // Si fiabilite 'high' (Open-Meteo + Met.no d'accord), mention explicite
   // Si fiabilite 'medium' (une seule source), mention prudente
   // Sinon pas de mention
+  // Anti-faux-orage : si AUCUNE precip observee actuellement, on enleve
+  // la mention d'orage (meme double validation) pour eviter le flash.
   const thunderRel = w._thunderReliability;
-  if (thunderRel && thunderRel.confidence === 'high') {
+  const curTotalMm = (cur.precipitation || 0) + (cur.rain || 0) + (cur.showers || 0);
+  if (curTotalMm >= 0.15 && thunderRel && thunderRel.confidence === 'high') {
     const intensityLabel = thunderRel.maxIntensity === 2
       ? "avec risque de grele forte"
       : thunderRel.maxIntensity === 1
         ? "eventuellement avec grele"
         : "";
     sentences.push(`Orages confirmes par double validation meteorologique${intensityLabel ? ", " + intensityLabel : ""}. Restez a l'abri.`);
-  } else if (thunderRel && thunderRel.confidence === 'medium' && isThunderHour(code)) {
+  } else if (curTotalMm >= 0.15 && thunderRel && thunderRel.confidence === 'medium' && isThunderHour(code)) {
     // Orage actuellement observe (code 95/96/99) mais cross-check a echoue
     sentences.push("Orages en cours, restez a l'abri (verification en cours).");
   }
@@ -1060,7 +1066,12 @@ function buildPrecipForecastSentence(hourly, nowMs) {
   return `Pluie ${timingText}, ${popText} de probabilite${durationText}.`;
 }
 
-function buildConditionSentence(code, period, hour) {
+function buildConditionSentence(code, period, hour, precipMm) {
+  // Anti-faux-orage : si code 95-99 mais precip < 0.15 mm, on remplace
+  // par "Couvert" avant de construire la phrase.
+  if (code >= 95 && code <= 99 && (precipMm == null || precipMm < 0.15)) {
+    code = 3; // "Couvert"
+  }
   const isNight = period.key === "nuit" || period.key === "fin_nuit";
   const art = period.article;
   const lbl = period.label;
@@ -2612,6 +2623,24 @@ function codeToPrecipType(code) {
   return 'pluie';
 }
 
+// ============================================================
+//  SAFE WMO LABEL — wrapper qui demote les orages (WMO 95-99) si
+//  pas de precipitation observee. Evite les faux "Orages" quand
+//  le modele predit un orage mais qu'aucune pluie n'est encore
+//  la (courant + hourly).
+//  Seuil precip : 0.15 mm/h (au-dessus du bruit capteur ~0.05).
+// ============================================================
+function safeWmoLabel(code, isNight, precipMm) {
+  const raw = wmoInfo(code, isNight);
+  // Si le code n'est pas un orage : on retourne le label brut
+  if (code < 95 || code > 99) return raw;
+  // Orage avec precip mesuree (>= 0.15 mm) : on garde le label orage
+  if (precipMm != null && precipMm >= 0.15) return raw;
+  // Sinon : on demote vers "Couvert" (pas de "Risque d'orages" -> trop
+  // alarmiste quand la pluie n'est pas encore la).
+  return { code: 3, label: 'Couvert', icon: 'cloudy', night: isNight ? 'night-cloudy' : 'cloudy' };
+}
+
 // Classifie la condition actuelle en fonction des observations temps reel.
 // Priorite aux donnees observees sur le forecast WMO hourly.
 function classifyLiveCondition(cur) {
@@ -2633,7 +2662,8 @@ function classifyLiveCondition(cur) {
   // Orage observe : UNIQUEMENT si on observe aussi de la pluie/precipitation
   // Sinon le code 95/96/99 (prevu par modele) est affiche alors qu'aucun orage
   // n'est reellement visible -> flash desagreable "Orages" puis mise a jour.
-  if (code >= 95 && code <= 99 && (mm > 0.05 || rainMm > 0.05 || showerMm > 0.05)) {
+  // Seuil relevE a 0.15 mm (au-dessus du bruit capteur ~0.05).
+  if (code >= 95 && code <= 99 && (mm > 0.15 || rainMm > 0.15 || showerMm > 0.15)) {
     if (code === 99 || (mm >= 8)) return { code: 99, label: 'Orages violents', icon: 'thunder-storm', override: true };
     return { code: 95, label: 'Orages', icon: 'thunder', override: true };
   }
@@ -2647,8 +2677,8 @@ function classifyLiveCondition(cur) {
       // On affiche "Couvert" au lieu de "Orages" pour eviter le flash faux.
       return { code: 3, label: 'Couvert', icon: 'cloudy', override: true, realCode: code };
     }
-    // Sinon ciel partiellement nuageux : "Risque d'orages" (info mais moins alarmiste)
-    return { code: code, label: code === 99 ? 'Risque d\'orages violents' : 'Risque d\'orages', icon: code === 99 ? 'thunder-storm' : 'thunder', override: true, realCode: code };
+    // Sinon ciel partiellement nuageux : "Couvert" aussi (plus prudent)
+    return { code: 3, label: 'Couvert', icon: 'cloudy', override: true, realCode: code };
   }
 
   // Pluie observee
@@ -2876,9 +2906,11 @@ function applyLiveTick() {
     // Le code observe a change : on suit l'observation
     const dayCycle = getDayCycleInfo(cur, state.lastWeather.daily);
     const isNight = dayCycle.isNight;
-    const info = wmoInfo(cur.weather_code, isNight);
+    // Anti-faux-orage : si le code change ET qu'on tombe sur 95-99
+    // mais aucune precip observee, on demote vers "Couvert".
+    const info = safeWmoLabel(cur.weather_code, isNight, (cur.precipitation || 0) + (cur.rain || 0) + (cur.showers || 0));
     setText('condition', info.label);
-    app.className = "app " + themeFor(cur.weather_code, dayCycle, cur.wind_speed_10m);
+    app.className = "app " + themeFor(info.code, dayCycle, cur.wind_speed_10m);
   }
 
   // Maj description generee : throttled intelligent
@@ -3626,7 +3658,10 @@ function renderCity(city, w) {
       hourIsNight = baseTime.getHours() >= 21 || baseTime.getHours() < 6;
       // Pas de precip connue -> placeholder
     }
-    const wi = wmoInfo(hourCode, hourIsNight);
+    // Anti-faux-orage horaire : si le code 95-99 est prevu pour CETTE
+    // heure mais precip < 0.15 mm/h, on demote vers "Couvert" pour eviter
+    // le flash "Orages" quand la pluie n'est pas encore la.
+    const wi = safeWmoLabel(hourCode, hourIsNight, mmHour);
     // IMPORTANT : meme arrondi a 5% pres que applyHourlyInterpolation
     // pour eviter le flash "3%" -> "5%" au lancement. Avant, le render
     // initial utilisait Math.round(pop) (unite) puis l'interpolation
@@ -3700,7 +3735,9 @@ function renderCity(city, w) {
     const hasData = lo != null && hi != null;
     const startPct = hasData ? ((lo - allMin) / range) * 100 : 0;
     const endPct = hasData ? ((hi - allMin) / range) * 100 : 100;
-    const wi = wmoInfo(daily.weather_code[i], false);
+    const dailyMm = (daily.precipitation_sum && daily.precipitation_sum[i]) || 0;
+    const dailyAvgMm = dailyMm / 24; // repartition sur la journee
+    const wi = safeWmoLabel(daily.weather_code[i], false, dailyAvgMm);
     const popDay = (daily.precipitation_probability_max && daily.precipitation_probability_max[i]) || 0;
     const popVisible = popDay >= 5;
     if (!hasData) di.classList.add("day-empty");
@@ -3886,7 +3923,10 @@ function openDayDetail(dayIdx, w) {
   }
 
   // Hero : icone + min/max + condition
-  const wi = wmoInfo(code, false);
+  // Anti-faux-orage : si code 95-99 mais precip <= 0.15 mm/h en moyenne,
+  // on demote vers "Couvert" pour eviter le flash dans le detail.
+  const dailyAvgMm = rainSum > 0 ? rainSum / 24 : 0;
+  const wi = safeWmoLabel(code, false, dailyAvgMm);
   $("dayDetailIcon").innerHTML = icon(wi.icon, 64);
   $("dayDetailLow").textContent = lo != null ? fmtTemp(lo) : "—";
   $("dayDetailHigh").textContent = hi != null ? fmtTemp(hi) : "—";
@@ -3933,7 +3973,7 @@ function openDayDetail(dayIdx, w) {
       const codeH = h.weather_code ? h.weather_code[idx] : 0;
       const popH = h.precipitation_probability ? (h.precipitation_probability[idx] || 0) : 0;
       const mmH = h.precipitation ? (h.precipitation[idx] || 0) : 0;
-      const wiH = wmoInfo(codeH, isHourAtNight(t, d));
+      const wiH = safeWmoLabel(codeH, isHourAtNight(t, d), mmH);
       const rounded = Math.round(popH / 5) * 5;
       const popVis = rounded >= 5;
       const row = document.createElement("div");
