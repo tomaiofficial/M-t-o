@@ -1449,7 +1449,7 @@ async function callOpenMeteo(lat, lon, signal = null) {
     `hourly=temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,` +
       `precipitation_probability,precipitation,rain,showers,snowfall,weather_code,` +
       `pressure_msl,surface_pressure,cloud_cover,visibility,wind_speed_10m,` +
-      `wind_direction_10m,wind_gusts_10m,fire_weather_index`,
+      `wind_direction_10m,wind_gusts_10m`,
     `daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,` +
       `daylight_duration,uv_index_max,precipitation_sum,precipitation_hours,` +
       `precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,` +
@@ -2623,6 +2623,28 @@ function codeToPrecipType(code) {
   return 'pluie';
 }
 
+// ===== Compute fire risk locally from weather conditions =====
+// Open-Meteo ne fournit pas d'indice feu standard (fire_weather_index)
+// sur l'endpoint /v1/forecast. On calcule un indice simple base sur les
+// conditions observees (temperature, humidite, vent, precipitations).
+// Echelle reprise/approx de la classification FWI canadienne.
+// =====
+function computeFireRisk(tempC, humidity, windKmh, mmHour) {
+  // Base : combinaison ponderee
+  // - Temp elevee : +0.5 par degre au-dessus de 15C
+  // - Humidite basse : +0.3 par % sous 60%
+  // - Vent fort : +0.2 par km/h au-dessus de 15
+  // - Pluie : soustrait fortement (0.3 par mm)
+  let score = 0;
+  if (tempC != null) score += Math.max(0, tempC - 15) * 0.5;
+  if (humidity != null) score += Math.max(0, 60 - humidity) * 0.3;
+  if (windKmh != null) score += Math.max(0, windKmh - 15) * 0.2;
+  if (mmHour != null) score -= mmHour * 30;
+  // Plafonds : ignorer si pluie recente
+  if (mmHour != null && mmHour >= 1) return 0;
+  return Math.max(0, score);
+}
+
 // ============================================================
 //  SAFE WMO LABEL — wrapper qui demote les orages (WMO 95-99) si
 //  pas de precipitation observee. Evite les faux "Orages" quand
@@ -3643,7 +3665,12 @@ function renderCity(city, w) {
       hourIsNight = isNow ? isNight : isHourAtNight(hourly.time[i], daily);
       pop = (hourly.precipitation_probability && hourly.precipitation_probability[i]) || 0;
       mmHour = (hourly.precipitation && hourly.precipitation[i]) || 0;
-      fireRisk = (hourly.fire_weather_index && hourly.fire_weather_index[i]) || 0;
+      fireRisk = computeFireRisk(
+        hourTemp,
+        hourly.relative_humidity_2m && hourly.relative_humidity_2m[i],
+        hourly.wind_speed_10m && hourly.wind_speed_10m[i],
+        mmHour
+      );
       popVisible = pop >= 1;
       if (pop >= 70 || mmHour >= 4) popClass = ' heavy';
       else if (pop >= 30 || mmHour >= 1) popClass = ' medium';
@@ -3668,20 +3695,19 @@ function renderCity(city, w) {
     // passait a Math.round(pop/5)*5 (5% pres) -> saute de 3 a 5.
     const popRounded = Math.round(pop / 5) * 5;
     const popVisibleRounded = popRounded >= 5;
-    // Risque d'incendie (FWI - Fire Weather Index, norme canadienne)
-    // 0-5  : Faible  (caché)
-    // 5-15 : Modéré  (jaune)
-    // 15-30 : Élevé   (orange)
-    // >30   : Extrême (rouge)
-    // Repli logique : s'il pleut abondamment, pas de risque (le FWI Open-Meteo
-    // integre deja la pluie recente, mais on securise visuellement).
+    // Risque incendie (calcul local, echelle 0-30 approx)
+    // 0-3   : Faible   (caché)
+    // 3-8   : Modéré   (jaune)
+    // 8-15  : Élevé    (orange)
+    // >15   : Extrême  (rouge)
+    // Repli logique : s'il pleut abondamment, pas de risque.
     let fireClass = '';
     let fireIcon = '';
-    if (hasData && fireRisk >= 5 && mmHour < 3 && pop < 60) {
-      if (fireRisk >= 30) { fireClass = ' extreme'; }
-      else if (fireRisk >= 15) { fireClass = ' high'; }
+    if (hasData && fireRisk >= 3 && mmHour < 3 && pop < 60) {
+      if (fireRisk >= 15) { fireClass = ' extreme'; }
+      else if (fireRisk >= 8) { fireClass = ' high'; }
       else { fireClass = ' moderate'; }
-      fireIcon = `<span class="hour-fire${fireClass}" title="Risque incendie (FWI ${fireRisk.toFixed(0)})">🔥</span>`;
+      fireIcon = `<span class="hour-fire${fireClass}" title="Risque incendie (indice ${fireRisk.toFixed(0)})">🔥</span>`;
     }
     h.innerHTML = `
       <div class="hour-time">${timeLabel}</div>
