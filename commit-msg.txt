@@ -1,0 +1,50 @@
+feat: avis de suspension plus pro (date, raison, contact)
+
+Le user : "ajoute un autre truc par rapport suspendu ect
+pro ect"
+
+AJOUTS
+- Badge "Information officielle" en haut de la modale
+  (pastille orange, lettres espacees, discret)
+- Bloc metadonnees (label : valeur) avec barre
+  verticale orange :
+  - Date de fin : 31 decembre 2026
+  - Raison : Fin de la maintenance developpeur
+  - Service apres : indisponible
+  - Contact : mailto:contact@meteo.local
+  - Remerciements : A vous
+- Case a cocher "Ne plus afficher cet avis"
+  (sauvegarde localStorage persistente)
+- Fermeture par Echap ou clic sur backdrop
+  (en plus du bouton Compris)
+
+MESSAGES MISA JOUR (ton pro, pas alarmiste)
+1/3 - "Cette application meteo sera mise hors service
+  le 31 decembre 2026. Le service reste fonctionnel
+  d'ici la..."
+2/3 - "A partir du 31 decembre 2026, l'acces aux
+  donnees meteo sera interrompu..."
+3/3 - "Nous remercions l'ensemble des utilisateurs
+  pour leur confiance. Le code source reste
+  consultable sur le depot..."
+
+VARIABLES CENTRALISEES
+  SUSPEND_END_DATE = "31 decembre 2026"
+  SUSPEND_REASON = "Fin de la maintenance developpeur"
+  SUSPEND_CONTACT = "mailto:contact@meteo.local"
+  -> modifiables en haut de script.js
+
+SECURITE
+- escapeHtml() sur les metadonnees
+- localStorage pour "ne plus afficher"
+- sessionStorage pour la progression dans la session
+
+ACCESSIBILITE
+- aria-modal + role="dialog"
+- Fermeture Echap
+- Focus visible
+- Accent-color orange pour la checkbox
+
+Cache bump : v=20260819 -> v=20260819b
+
+Co-Authored-By: Letta Code <noreply@letta.com>

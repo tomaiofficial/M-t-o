@@ -4793,21 +4793,39 @@ unitToggle.addEventListener("click", (e) => {
 // ============================================================
 //  SUSPENSION NOTICES - module dedie
 // ============================================================
+
+// Metadonnees globales affichees dans une ligne info
+const SUSPEND_END_DATE = "31 décembre 2026";
+const SUSPEND_REASON = "Fin de la maintenance développeur";
+const SUSPEND_CONTACT = "mailto:contact@meteo.local";
+
 const SUSPEND_MESSAGES = [
   {
     icon: "⚠️",
-    title: "Avis important (1/3)",
-    body: "Cette application météo sera bientôt suspendue.\n\nLe service reste fonctionnel pour le moment, mais aucune nouvelle fonctionnalité ne sera ajoutée dans les semaines à venir."
+    title: "Avis de suspension",
+    body: `Cette application météo sera mise hors service le ${SUSPEND_END_DATE}.\n\nLe service reste fonctionnel d'ici là, mais aucune nouvelle fonctionnalité ne sera ajoutée.`,
+    meta: [
+      { label: "Date de fin", value: SUSPEND_END_DATE },
+      { label: "Raison", value: SUSPEND_REASON }
+    ]
   },
   {
     icon: "🛑",
-    title: "Information (2/3)",
-    body: "L'application va être mise en pause temporairement.\n\nLes données météo resteront accessibles tant que le service de prévision reste en ligne, mais le développement est arrêté."
+    title: "Calendrier de fin de service",
+    body: `À partir du ${SUSPEND_END_DATE}, l'accès aux données météo sera interrompu.\n\nLes données en cache ne seront plus mises à jour. Pensez à exporter toute information nécessaire avant cette date.`,
+    meta: [
+      { label: "Service après", value: "indisponible" },
+      { label: "Assistance", value: SUSPEND_CONTACT }
+    ]
   },
   {
     icon: "📴",
-    title: "Dernier avis (3/3)",
-    body: "Cette application météo sera prochainement suspendue.\n\nMerci à tous les utilisateurs pour leur soutien. Vous pouvez consulter cette page tant que le serveur reste actif."
+    title: "Dernier communiqué",
+    body: `Nous remercions l'ensemble des utilisateurs pour leur confiance.\n\nLe code source reste consultable sur le dépôt. Pour toute question relative à cette suspension, vous pouvez nous contacter via l'adresse indiquée ci-dessous.`,
+    meta: [
+      { label: "Remerciements", value: "À vous" },
+      { label: "Contact", value: SUSPEND_CONTACT }
+    ]
   }
 ];
 
@@ -4818,7 +4836,14 @@ function initSuspensionNotices() {
   const bodyEl = document.getElementById("suspendBody");
   const iconEl = document.getElementById("suspendIcon");
   const progressEl = document.getElementById("suspendProgress");
+  const metaEl = document.getElementById("suspendMeta");
   const btn = document.getElementById("suspendBtn");
+  const noShowEl = document.getElementById("suspendNoShow");
+
+  // Si l'utilisateur a demande a ne plus revoir l'avis (localStorage, persiste)
+  try {
+    if (localStorage.getItem("meteo_suspend_dismissed") === "1") return;
+  } catch (e) {}
 
   // Index demarre a 0 sauf si on a deja valide certains messages dans cette session
   let idx = 0;
@@ -4841,12 +4866,25 @@ function initSuspensionNotices() {
     iconEl.textContent = msg.icon;
     titleEl.textContent = msg.title;
     bodyEl.textContent = msg.body;
+    // Metadonnees : label : value
+    if (msg.meta && msg.meta.length) {
+      metaEl.innerHTML = msg.meta.map(m =>
+        `<div><strong>${escapeHtml(m.label)} :</strong> ${escapeHtml(m.value)}</div>`
+      ).join("");
+      metaEl.style.display = "block";
+    } else {
+      metaEl.style.display = "none";
+    }
     progressEl.textContent = `${i + 1} / ${SUSPEND_MESSAGES.length}`;
     overlay.classList.add("visible");
   }
 
-  btn.addEventListener("click", () => {
+  function dismissCurrent() {
     overlay.classList.remove("visible");
+    // Si "ne plus afficher" est coche, on marque dans localStorage et on sort
+    if (noShowEl && noShowEl.checked) {
+      try { localStorage.setItem("meteo_suspend_dismissed", "1"); } catch (e) {}
+    }
     idx++;
     try { sessionStorage.setItem("meteo_suspend_step", String(idx)); } catch (e) {}
     // Petit delai avant le suivant pour eviter le saccade
@@ -4855,8 +4893,25 @@ function initSuspensionNotices() {
         showMessage(idx);
       }
     }, 350);
+  }
+
+  btn.addEventListener("click", dismissCurrent);
+  // Fermer avec Echap ou clic backdrop
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) dismissCurrent();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && overlay.classList.contains("visible")) {
+      dismissCurrent();
+    }
   });
 
   // Affiche le 1er apres 600ms (laisser l'app se charger)
   setTimeout(() => showMessage(idx), 600);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
 }
