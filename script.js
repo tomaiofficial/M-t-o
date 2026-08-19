@@ -4797,7 +4797,7 @@ unitToggle.addEventListener("click", (e) => {
 // Metadonnees globales affichees dans une ligne info
 const SUSPEND_END_DATE = "31 décembre 2026";
 const SUSPEND_REASON = "Fin de la maintenance développeur";
-const SUSPEND_CONTACT = "mailto:guegan_tom@icloud.com";
+const SUSPEND_CONTACT = "guegan_tom@icloud.com";
 
 const SUSPEND_MESSAGES = [
   {
