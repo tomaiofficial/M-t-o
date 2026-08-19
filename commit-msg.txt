@@ -1,0 +1,46 @@
+feat: suspension pro (vacances Noel + countdown live)
+
+Le user : "la suspension de la meteo corrige c pas le
+31 dec c au vacances de decembre et ameliore encore
+plus"
+
+CORRECTIFS
+- SUSPEND_START_DATE = 2026-12-19 (samedi, debut vacances
+  Noel)
+- SUSPEND_END_DATE = 2027-01-05 (mardi, rentree)
+- Periode : "Vacances de Noel 2026" (zone A, B, C
+  regroupes)
+- SUSPEND_REASON = "Pause hivernale du projet" (plus
+  neutre que "fin de maintenance")
+- SUSPEND_PUBLISHED = "Communique du 19 aout 2026"
+
+NOUVEAUTES PRO
+- Countdown live "Suspension dans X jours Yh" qui se
+  met a jour toutes les minutes vers la date de debut
+  (format compact : jours/heures ou heures/minutes)
+- Bloc countdown avec gradient orange subtil
+- Badge avec dot pulse anime (2s loop)
+- Bouton avec gradient (haut clair -> bas fonce)
+- Modale avec gradient background + bordure interne
+- Footer "Meteo . Communique de maintenance" en
+  petites capitales
+- Metadonnees alignees (label min-width 110px pour
+  alignement vertical)
+- Animation pop-in amelioree (cubic-bezier avec
+  overshoot)
+- Duree d'interruption calculee automatiquement
+  (Math.ceil entre les 2 dates)
+
+MESSAGES MISA JOUR (vacances de Noel)
+1/3 - "L'application meteo sera mise en pause pendant
+  les Vacances de Noel 2026. Le service reste
+  fonctionnel d'ici la..."
+2/3 - "Du 19 decembre 2026 au 5 janvier 2027, l'acces
+  aux donnees meteo en temps reel sera interrompu..."
+3/3 - "Nous remercions l'ensemble des utilisateurs.
+  Code source consultable sur le depot..."
+
+CACHE
+v=20260819b -> v=20260819c
+
+Co-Authored-By: Letta Code <noreply@letta.com>

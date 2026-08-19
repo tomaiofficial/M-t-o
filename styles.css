@@ -744,14 +744,14 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   position: fixed;
   inset: 0;
   z-index: 500;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   display: none;
   align-items: center;
   justify-content: center;
   padding: 20px;
-  animation: suspend-fade-in 0.3s ease-out;
+  animation: suspend-fade-in 0.35s ease-out;
 }
 .suspend-overlay.visible { display: flex; }
 
@@ -763,18 +763,24 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   0% { opacity: 0; transform: scale(0.85) translateY(20px); }
   100% { opacity: 1; transform: scale(1) translateY(0); }
 }
+@keyframes suspend-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 149, 0, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(255, 149, 0, 0); }
+}
 
 .suspend-modal {
   width: 100%;
-  max-width: 420px;
-  background: rgba(20, 25, 35, 0.92);
+  max-width: 440px;
+  background: linear-gradient(180deg, rgba(30, 35, 50, 0.96), rgba(20, 25, 35, 0.96));
   backdrop-filter: blur(40px) saturate(180%);
   -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border-radius: 22px;
-  padding: 28px 24px 22px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  border-radius: 24px;
+  padding: 30px 26px 24px;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
   text-align: center;
-  animation: suspend-pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: suspend-pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .suspend-icon {
@@ -786,31 +792,33 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
 
 .suspend-title {
   margin: 0 0 14px;
-  font-size: 22px;
+  font-size: 23px;
   font-weight: 800;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.4px;
   color: #ff9500;
 }
 
 .suspend-body {
   font-size: 15px;
-  line-height: 1.5;
+  line-height: 1.55;
   opacity: 0.9;
-  margin-bottom: 22px;
+  margin-bottom: 20px;
   white-space: pre-line;
 }
 
 .suspend-progress {
   font-size: 11px;
   opacity: 0.5;
-  margin-bottom: 16px;
-  letter-spacing: 1px;
+  margin-bottom: 14px;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
   font-weight: 600;
 }
 
 .suspend-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1.5px;
@@ -819,26 +827,63 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   background: rgba(255, 149, 0, 0.12);
   border: 1px solid rgba(255, 149, 0, 0.3);
   border-radius: 100px;
-  padding: 5px 12px;
-  margin-bottom: 14px;
+  padding: 6px 14px;
+  margin-bottom: 18px;
+}
+.suspend-dot {
+  width: 8px;
+  height: 8px;
+  background: #ff9500;
+  border-radius: 50%;
+  display: inline-block;
+  animation: suspend-pulse 2s infinite;
+}
+
+/* Countdown "Suspension dans X jours" */
+.suspend-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(255, 149, 0, 0.12), rgba(255, 149, 0, 0.04));
+  border: 1px solid rgba(255, 149, 0, 0.2);
+  border-radius: 14px;
+}
+.suspend-cd-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  opacity: 0.65;
+  margin-bottom: 4px;
+}
+.suspend-cd-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: #ff9500;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
 }
 
 .suspend-meta {
-  font-size: 12px;
-  opacity: 0.75;
+  font-size: 12.5px;
+  opacity: 0.85;
   margin-bottom: 18px;
-  padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 10px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
   border-left: 3px solid #ff9500;
   text-align: left;
-  line-height: 1.5;
+  line-height: 1.7;
 }
+.suspend-meta div + div { margin-top: 4px; }
 .suspend-meta strong {
   color: #ff9500;
   font-weight: 700;
   display: inline-block;
-  margin-right: 4px;
+  margin-right: 6px;
+  min-width: 110px;
 }
 
 .suspend-actions {
@@ -866,20 +911,32 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
 }
 
 .suspend-btn {
-  background: #ff9500;
+  background: linear-gradient(180deg, #ffb84d, #ff9500);
   color: #1a1a2e;
   border: none;
   border-radius: 12px;
-  padding: 12px 32px;
+  padding: 13px 36px;
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
   min-width: 140px;
-  transition: transform 0.15s, background 0.2s;
+  transition: transform 0.15s, filter 0.2s;
   -webkit-tap-highlight-color: transparent;
+  letter-spacing: 0.2px;
 }
-.suspend-btn:hover { background: #ffb84d; }
+.suspend-btn:hover { filter: brightness(1.1); }
 .suspend-btn:active { transform: scale(0.96); }
+
+.suspend-foot {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  opacity: 0.4;
+  font-weight: 600;
+}
 .panel-content {
   width: 100%;
   max-width: 480px;

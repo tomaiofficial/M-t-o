@@ -4794,40 +4794,62 @@ unitToggle.addEventListener("click", (e) => {
 //  SUSPENSION NOTICES - module dedie
 // ============================================================
 
-// Metadonnees globales affichees dans une ligne info
-const SUSPEND_END_DATE = "31 décembre 2026";
-const SUSPEND_REASON = "Fin de la maintenance développeur";
+// Periode de suspension : vacances de Noel (scolaires France)
+const SUSPEND_START_DATE = new Date("2026-12-19T00:00:00");
+const SUSPEND_END_DATE = new Date("2027-01-05T00:00:00");
+const SUSPEND_PERIOD_LABEL = "Vacances de Noël 2026";
+const SUSPEND_REASON = "Pause hivernale du projet";
 const SUSPEND_CONTACT = "guegan_tom@icloud.com";
+const SUSPEND_PUBLISHED = "Communiqué du 19 août 2026";
+
+function formatSuspendDate(d) {
+  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function formatCountdown(target) {
+  const now = new Date();
+  const diffMs = target.getTime() - now.getTime();
+  if (diffMs <= 0) return "Service suspendu";
+  const days = Math.floor(diffMs / 86400000);
+  const hours = Math.floor((diffMs % 86400000) / 3600000);
+  if (days >= 1) return `${days} jour${days > 1 ? "s" : ""} ${hours}h`;
+  const mins = Math.floor((diffMs % 3600000) / 60000);
+  return `${hours}h ${mins}min`;
+}
 
 const SUSPEND_MESSAGES = [
   {
-    icon: "⚠️",
+    icon: "📅",
     title: "Avis de suspension",
-    body: `Cette application météo sera mise hors service le ${SUSPEND_END_DATE}.\n\nLe service reste fonctionnel d'ici là, mais aucune nouvelle fonctionnalité ne sera ajoutée.`,
+    body: `L'application météo sera mise en pause pendant les ${SUSPEND_PERIOD_LABEL}.\n\nLe service reste fonctionnel d'ici là, mais aucune nouvelle fonctionnalité ne sera ajoutée pendant cette période.`,
     meta: [
-      { label: "Date de fin", value: SUSPEND_END_DATE },
+      { label: "Début", value: formatSuspendDate(SUSPEND_START_DATE) },
+      { label: "Reprise prévue", value: formatSuspendDate(SUSPEND_END_DATE) },
       { label: "Raison", value: SUSPEND_REASON }
     ]
   },
   {
-    icon: "🛑",
-    title: "Calendrier de fin de service",
-    body: `À partir du ${SUSPEND_END_DATE}, l'accès aux données météo sera interrompu.\n\nLes données en cache ne seront plus mises à jour. Pensez à exporter toute information nécessaire avant cette date.`,
+    icon: "⏸️",
+    title: "Calendrier d'interruption",
+    body: `Du ${formatSuspendDate(SUSPEND_START_DATE)} au ${formatSuspendDate(SUSPEND_END_DATE)}, l'accès aux données météo en temps réel sera interrompu.\n\nLes données en cache resteront consultables mais ne seront plus mises à jour automatiquement.`,
     meta: [
-      { label: "Service après", value: "indisponible" },
+      { label: "Durée", value: `${Math.ceil((SUSPEND_END_DATE - SUSPEND_START_DATE) / 86400000)} jours` },
+      { label: "Service après", value: "Indisponible" },
       { label: "Assistance", value: SUSPEND_CONTACT }
     ]
   },
   {
     icon: "📴",
     title: "Dernier communiqué",
-    body: `Nous remercions l'ensemble des utilisateurs pour leur confiance.\n\nLe code source reste consultable sur le dépôt. Pour toute question relative à cette suspension, vous pouvez nous contacter via l'adresse indiquée ci-dessous.`,
+    body: `Nous remercions l'ensemble des utilisateurs pour leur confiance.\n\nLe code source reste consultable sur le dépôt. Pour toute question relative à cette suspension, vous pouvez nous écrire à l'adresse ci-dessous.`,
     meta: [
-      { label: "Remerciements", value: "À vous" },
+      { label: "Publié le", value: SUSPEND_PUBLISHED },
       { label: "Contact", value: SUSPEND_CONTACT }
     ]
   }
 ];
+
+let _suspendCountdownTimer = null;
 
 function initSuspensionNotices() {
   const overlay = document.getElementById("suspendOverlay");
@@ -4837,6 +4859,7 @@ function initSuspensionNotices() {
   const iconEl = document.getElementById("suspendIcon");
   const progressEl = document.getElementById("suspendProgress");
   const metaEl = document.getElementById("suspendMeta");
+  const cdValueEl = document.getElementById("suspendCdValue");
   const btn = document.getElementById("suspendBtn");
   const noShowEl = document.getElementById("suspendNoShow");
 
@@ -4876,18 +4899,25 @@ function initSuspensionNotices() {
       metaEl.style.display = "none";
     }
     progressEl.textContent = `${i + 1} / ${SUSPEND_MESSAGES.length}`;
+    // Countdown live (jusqu'a la date de debut de suspension)
+    function tick() {
+      if (cdValueEl) cdValueEl.textContent = formatCountdown(SUSPEND_START_DATE);
+    }
+    tick();
+    if (_suspendCountdownTimer) clearInterval(_suspendCountdownTimer);
+    _suspendCountdownTimer = setInterval(tick, 60000); // maj toutes les minutes
     overlay.classList.add("visible");
   }
 
   function dismissCurrent() {
     overlay.classList.remove("visible");
+    if (_suspendCountdownTimer) { clearInterval(_suspendCountdownTimer); _suspendCountdownTimer = null; }
     // Si "ne plus afficher" est coche, on marque dans localStorage et on sort
     if (noShowEl && noShowEl.checked) {
       try { localStorage.setItem("meteo_suspend_dismissed", "1"); } catch (e) {}
     }
     idx++;
     try { sessionStorage.setItem("meteo_suspend_step", String(idx)); } catch (e) {}
-    // Petit delai avant le suivant pour eviter le saccade
     setTimeout(() => {
       if (idx < SUSPEND_MESSAGES.length) {
         showMessage(idx);
@@ -4896,7 +4926,6 @@ function initSuspensionNotices() {
   }
 
   btn.addEventListener("click", dismissCurrent);
-  // Fermer avec Echap ou clic backdrop
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) dismissCurrent();
   });
