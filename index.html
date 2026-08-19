@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Météo" />
 <title>Météo</title>
-<link rel="stylesheet" href="styles.css?v=20260819c" />
+<link rel="stylesheet" href="styles.css?v=20260819d" />
 </head>
 <body>
   <!-- Bibliothèque d'icônes SVG premium : halos lumineux, dégradés multi-stops, reflets, ombres -->
@@ -869,6 +869,24 @@
 
     <!-- Contenu principal -->
     <main class="content" id="content">
+
+      <!-- Bandeau d'avis de suspension (toujours visible tant que non dismissed) -->
+      <div class="suspend-banner" id="suspendBanner" role="status" aria-live="polite">
+        <div class="suspend-banner-icon">⚠️</div>
+        <div class="suspend-banner-content">
+          <div class="suspend-banner-title">
+            Suspension pendant les vacances de Noël
+          </div>
+          <div class="suspend-banner-meta">
+            <span id="suspendBannerPeriod">Du 19 décembre 2026 au 5 janvier 2027</span>
+            <span class="suspend-banner-sep">·</span>
+            <span id="suspendBannerCountdown">J-X</span>
+          </div>
+        </div>
+        <button class="suspend-banner-info" id="suspendBannerInfo" aria-label="Plus d'informations" title="Plus d'informations">ⓘ</button>
+        <button class="suspend-banner-close" id="suspendBannerClose" aria-label="Masquer ce bandeau" title="Masquer ce bandeau">×</button>
+      </div>
+
       <section class="location" id="locationSection">
         <h1 class="city-name" id="cityName">Localisation...</h1>
         <div class="geo-indicator" id="geoIndicator">
@@ -962,7 +980,7 @@
     </main>
   </div>
 
-  <script src="script.js?v=20260819c"></script>
+  <script src="script.js?v=20260819d"></script>
   <script src="fires.js?v=20260727"></script>
 
   <!-- 3 messages d'avis de suspension (séquentiels à l'ouverture) -->

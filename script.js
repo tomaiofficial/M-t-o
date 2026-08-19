@@ -4788,6 +4788,8 @@ unitToggle.addEventListener("click", (e) => {
   //  Reset uniquement quand l'onglet est ferme (sessionStorage).
   // ============================================================
   initSuspensionNotices();
+  // Bandeau persistant en haut (peut etre ferme par l'utilisateur)
+  initSuspensionBanner();
 })();
 
 // ============================================================
@@ -4937,6 +4939,58 @@ function initSuspensionNotices() {
 
   // Affiche le 1er apres 600ms (laisser l'app se charger)
   setTimeout(() => showMessage(idx), 600);
+}
+
+// ============================================================
+//  BANDEAU DE SUSPENSION (top, persistent)
+// ============================================================
+function initSuspensionBanner() {
+  const banner = document.getElementById("suspendBanner");
+  if (!banner) return;
+  // Si l'utilisateur a ferme le bandeau, on ne le remet pas
+  try {
+    if (localStorage.getItem("meteo_suspend_banner_dismissed") === "1") {
+      banner.classList.add("hidden");
+      return;
+    }
+  } catch (e) {}
+  const cdEl = document.getElementById("suspendBannerCountdown");
+  const closeBtn = document.getElementById("suspendBannerClose");
+  const infoBtn = document.getElementById("suspendBannerInfo");
+
+  function tickBanner() {
+    if (!cdEl) return;
+    const now = Date.now();
+    const start = SUSPEND_START_DATE.getTime();
+    const end = SUSPEND_END_DATE.getTime();
+    if (now < start) {
+      const days = Math.ceil((start - now) / 86400000);
+      cdEl.textContent = `dans ${days} jour${days > 1 ? "s" : ""}`;
+    } else if (now >= start && now < end) {
+      const days = Math.ceil((end - now) / 86400000);
+      cdEl.textContent = `en cours · ${days}j restants`;
+    } else {
+      cdEl.textContent = "service suspendu";
+    }
+  }
+  tickBanner();
+  setInterval(tickBanner, 60000);
+
+  closeBtn.addEventListener("click", () => {
+    banner.classList.add("hidden");
+    try { localStorage.setItem("meteo_suspend_banner_dismissed", "1"); } catch (e) {}
+  });
+
+  infoBtn.addEventListener("click", () => {
+    // Ouvre la modale complete (re-init depuis l'etat sauvegarde)
+    try {
+      sessionStorage.removeItem("meteo_suspend_step");
+    } catch (e) {}
+    initSuspensionNotices();
+    // Si pas de modale actuellement, on simule l'ouverture
+    const overlay = document.getElementById("suspendOverlay");
+    if (overlay) overlay.classList.add("visible");
+  });
 }
 
 function escapeHtml(s) {
