@@ -1,0 +1,50 @@
+feat: 3 messages d'avis de suspension a l'ouverture
+
+Le user : "pour l'app meteo elle affcihe au moins 3 fois
+le message a l'ouverture que l'app va bientot etre
+suspendu ect"
+
+IMPLEMENTATION
+- 3 modales seQuentielles apparaissent a l'ouverture
+  de l'app, chacune annoncant la suspension prochaine
+- Chaque modale est dismissable via un bouton "Compris"
+- Un delai de 350ms entre chaque modale pour eviter
+  le saccade visuel
+- Le 1er message apparait 600ms apres le chargement
+  (laisser l'app finir de s'initialiser)
+- La progression est sauvegardee en sessionStorage
+  (cle : meteo_suspend_step), donc enchainement
+  fluide sans repetition dans la meme session
+- Apres avoir valide les 3 messages, ils ne
+  reapparaissent plus dans la meme session
+- Nouvel onglet / nouvelle session : cycle recommence
+
+DESIGN
+- Backdrop floute (12px) + overlay semi-transparent
+- Modale centree avec animation "pop in" cubic-bezier
+- Icones distinctes : !, stop, off
+- Compteur "1 / 3", "2 / 3", "3 / 3"
+- Bouton orange #ff9500 (coherent avec l'app)
+- Style sombre / glassmorphism (coherent avec l'app)
+
+MESSAGES (variations francaises)
+1/3 - "Cette application meteo sera bientot suspendue.
+  Le service reste fonctionnel pour le moment, mais
+  aucune nouvelle fonctionnalite ne sera ajoutee."
+2/3 - "L'application va etre mise en pause
+  temporairement. Les donnees meteo resteront
+  accessibles tant que le service de prevision
+  reste en ligne."
+3/3 - "Cette application meteo sera prochainement
+  suspendue. Merci a tous les utilisateurs pour
+  leur soutien."
+
+ACCESSIBILITE
+- role="dialog" + aria-modal="true"
+- aria-labelledby pointe vers le titre
+- Bouton "Compris" avec focus visible
+
+Cache bump : v=20260728c -> v=20260819
+Styles : v=20260728 -> v=20260819
+
+Co-Authored-By: Letta Code <noreply@letta.com>

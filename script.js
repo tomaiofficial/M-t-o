@@ -4781,4 +4781,82 @@ unitToggle.addEventListener("click", (e) => {
       console.warn("[Fires] init KO:", e);
     }
   }
+
+  // ============================================================
+  //  AVIS DE SUSPENSION - 3 messages sequentiels a l'ouverture
+  //  S'affiche au moins 3 fois par session, puis disparait.
+  //  Reset uniquement quand l'onglet est ferme (sessionStorage).
+  // ============================================================
+  initSuspensionNotices();
 })();
+
+// ============================================================
+//  SUSPENSION NOTICES - module dedie
+// ============================================================
+const SUSPEND_MESSAGES = [
+  {
+    icon: "⚠️",
+    title: "Avis important (1/3)",
+    body: "Cette application météo sera bientôt suspendue.\n\nLe service reste fonctionnel pour le moment, mais aucune nouvelle fonctionnalité ne sera ajoutée dans les semaines à venir."
+  },
+  {
+    icon: "🛑",
+    title: "Information (2/3)",
+    body: "L'application va être mise en pause temporairement.\n\nLes données météo resteront accessibles tant que le service de prévision reste en ligne, mais le développement est arrêté."
+  },
+  {
+    icon: "📴",
+    title: "Dernier avis (3/3)",
+    body: "Cette application météo sera prochainement suspendue.\n\nMerci à tous les utilisateurs pour leur soutien. Vous pouvez consulter cette page tant que le serveur reste actif."
+  }
+];
+
+function initSuspensionNotices() {
+  const overlay = document.getElementById("suspendOverlay");
+  if (!overlay) return;
+  const titleEl = document.getElementById("suspendTitle");
+  const bodyEl = document.getElementById("suspendBody");
+  const iconEl = document.getElementById("suspendIcon");
+  const progressEl = document.getElementById("suspendProgress");
+  const btn = document.getElementById("suspendBtn");
+
+  // Index demarre a 0 sauf si on a deja valide certains messages dans cette session
+  let idx = 0;
+  try {
+    const raw = sessionStorage.getItem("meteo_suspend_step");
+    if (raw != null) {
+      const saved = parseInt(raw, 10);
+      if (!isNaN(saved) && saved >= 0 && saved <= SUSPEND_MESSAGES.length) {
+        idx = saved;
+      }
+    }
+  } catch (e) {}
+
+  // Si tous les messages ont deja valés dans cette session -> rien a faire
+  if (idx >= SUSPEND_MESSAGES.length) return;
+
+  function showMessage(i) {
+    const msg = SUSPEND_MESSAGES[i];
+    if (!msg) return;
+    iconEl.textContent = msg.icon;
+    titleEl.textContent = msg.title;
+    bodyEl.textContent = msg.body;
+    progressEl.textContent = `${i + 1} / ${SUSPEND_MESSAGES.length}`;
+    overlay.classList.add("visible");
+  }
+
+  btn.addEventListener("click", () => {
+    overlay.classList.remove("visible");
+    idx++;
+    try { sessionStorage.setItem("meteo_suspend_step", String(idx)); } catch (e) {}
+    // Petit delai avant le suivant pour eviter le saccade
+    setTimeout(() => {
+      if (idx < SUSPEND_MESSAGES.length) {
+        showMessage(idx);
+      }
+    }, 350);
+  });
+
+  // Affiche le 1er apres 600ms (laisser l'app se charger)
+  setTimeout(() => showMessage(idx), 600);
+}
