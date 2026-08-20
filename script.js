@@ -4790,6 +4790,8 @@ unitToggle.addEventListener("click", (e) => {
   initSuspensionNotices();
   // Bandeau persistant en haut (peut etre ferme par l'utilisateur)
   initSuspensionBanner();
+  // Modales de don : 2 affichages apres la sequence de suspension
+  initDonateNotices();
 })();
 
 // ============================================================
@@ -4943,6 +4945,100 @@ function initSuspensionNotices() {
 
 // ============================================================
 //  BANDEAU DE SUSPENSION (top, persistent)
+// ============================================================
+//  MODALES DE DON (2 affichages au lancement, apres suspension)
+// ============================================================
+const DONATE_EMAIL = "guegan_tom@icloud.com";
+const DONATE_MESSAGES = [
+  {
+    icon: "☕",
+    title: "Soutenir Météo",
+    body: "Cette application est développée et maintenue gratuitement.\n\nSi elle vous est utile, vous pouvez soutenir le projet avec un petit don. Chaque contribution aide à couvrir les coûts et à améliorer l'app."
+  },
+  {
+    icon: "💙",
+    title: "Faire un don",
+    body: "Vous pouvez envoyer votre don à l'adresse ci-dessous, par n'importe quel moyen (PayPal, virement, etc.).\n\nMerci à tous ceux qui soutiennent le projet !"
+  }
+];
+
+function initDonateNotices() {
+  const overlay = document.getElementById("donateOverlay");
+  if (!overlay) return;
+  // Si l'utilisateur a demande a ne plus revoir l'avis (localStorage, persiste)
+  try {
+    if (localStorage.getItem("meteo_donate_dismissed") === "1") return;
+  } catch (e) {}
+
+  const titleEl = document.getElementById("donateTitle");
+  const bodyEl = document.getElementById("donateBody");
+  const iconEl = document.getElementById("donateIcon");
+  const progressEl = document.getElementById("donateProgress");
+  const emailLink = document.getElementById("donateEmail");
+  const btn = document.getElementById("donateBtn");
+  const laterBtn = document.getElementById("donateLaterBtn");
+  const noShowEl = document.getElementById("donateNoShow");
+
+  if (emailLink) {
+    emailLink.textContent = DONATE_EMAIL;
+    emailLink.href = "mailto:" + DONATE_EMAIL;
+  }
+
+  // Index demarre a 0 sauf si on a deja valide certains messages dans cette session
+  let idx = 0;
+  try {
+    const raw = sessionStorage.getItem("meteo_donate_step");
+    if (raw != null) {
+      const saved = parseInt(raw, 10);
+      if (!isNaN(saved) && saved >= 0 && saved <= DONATE_MESSAGES.length) {
+        idx = saved;
+      }
+    }
+  } catch (e) {}
+
+  if (idx >= DONATE_MESSAGES.length) return;
+
+  function showMessage(i) {
+    const msg = DONATE_MESSAGES[i];
+    if (!msg) return;
+    iconEl.textContent = msg.icon;
+    titleEl.textContent = msg.title;
+    bodyEl.textContent = msg.body;
+    progressEl.textContent = `${i + 1} / ${DONATE_MESSAGES.length}`;
+    overlay.classList.add("visible");
+  }
+
+  function dismissCurrent() {
+    overlay.classList.remove("visible");
+    // Si "ne plus afficher" est coche, on marque dans localStorage et on sort
+    if (noShowEl && noShowEl.checked) {
+      try { localStorage.setItem("meteo_donate_dismissed", "1"); } catch (e) {}
+    }
+    idx++;
+    try { sessionStorage.setItem("meteo_donate_step", String(idx)); } catch (e) {}
+    setTimeout(() => {
+      if (idx < DONATE_MESSAGES.length) {
+        showMessage(idx);
+      }
+    }, 350);
+  }
+
+  btn.addEventListener("click", dismissCurrent);
+  laterBtn.addEventListener("click", dismissCurrent);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) dismissCurrent();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && overlay.classList.contains("visible")) {
+      dismissCurrent();
+    }
+  });
+
+  // Attendre que la sequence de suspension (3 modales * 350ms + 600ms initial)
+  // soit terminee avant de lancer les modales de don
+  setTimeout(() => showMessage(idx), 600 + 350 * DONATE_MESSAGES.length + 200);
+}
+
 // ============================================================
 function initSuspensionBanner() {
   const banner = document.getElementById("suspendBanner");

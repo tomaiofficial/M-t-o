@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Météo" />
 <title>Météo</title>
-<link rel="stylesheet" href="styles.css?v=20260819d" />
+<link rel="stylesheet" href="styles.css?v=20260820" />
 </head>
 <body>
   <!-- Bibliothèque d'icônes SVG premium : halos lumineux, dégradés multi-stops, reflets, ombres -->
@@ -980,7 +980,7 @@
     </main>
   </div>
 
-  <script src="script.js?v=20260819d"></script>
+  <script src="script.js?v=20260820"></script>
   <script src="fires.js?v=20260727"></script>
 
   <!-- 3 messages d'avis de suspension (séquentiels à l'ouverture) -->
@@ -1008,6 +1008,37 @@
       </div>
       <div class="suspend-foot" id="suspendFoot">
         Météo · Communiqué de maintenance
+      </div>
+    </div>
+  </div>
+
+  <!-- Modales de don (2 fois au lancement) -->
+  <div class="donate-overlay" id="donateOverlay" role="dialog" aria-modal="true" aria-labelledby="donateTitle">
+    <div class="donate-modal" id="donateModal">
+      <div class="donate-badge">
+        <span class="donate-dot"></span>
+        Soutenir le projet
+      </div>
+      <div class="donate-icon" id="donateIcon">☕</div>
+      <h2 class="donate-title" id="donateTitle">Faire un don</h2>
+      <div class="donate-body" id="donateBody">…</div>
+      <div class="donate-email-box" id="donateEmailBox">
+        <span class="donate-email-label">Envoyer à</span>
+        <a class="donate-email" id="donateEmail" href="#">guegan_tom@icloud.com</a>
+      </div>
+      <div class="donate-progress" id="donateProgress">1 / 2</div>
+      <div class="donate-actions">
+        <label class="donate-check">
+          <input type="checkbox" id="donateNoShow" />
+          <span>Ne plus afficher</span>
+        </label>
+        <div class="donate-btn-row">
+          <button class="donate-btn-secondary" id="donateLaterBtn">Plus tard</button>
+          <button class="donate-btn-primary" id="donateBtn">OK</button>
+        </div>
+      </div>
+      <div class="donate-foot">
+        Météo · Soutien au développeur
       </div>
     </div>
   </div>
