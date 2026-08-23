@@ -1485,7 +1485,6 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
     0 4px 24px rgba(0,0,0,0.35),
     0 2px 8px rgba(0,0,0,0.2);
   color: #ffffff;
-  display: inline-block;
   filter: drop-shadow(0 0 30px rgba(255,255,255,0.05));
 }
 .condition {

@@ -1,0 +1,27 @@
+fix: temp aussi centre comme avant
+
+Le user : "maintenant c la temperature sous le nom de
+la ville c decale corrige je veut que tout soit
+centre comme avant"
+
+PROBLEME
+  Meme bug que city-name dans le commit precedent :
+  j'avais ajoute `display: inline-block` a .temp
+  (pour le drop-shadow filter), resultat : le
+  span ne prenait plus 100% de largeur -> le
+  text-align: center du parent ne le recentrait
+  plus -> legere decalage.
+
+FIX
+  - Retire `display: inline-block` du .temp
+  - Conserve le filter: drop-shadow qui marche
+    tres bien sur un element block
+  - city-name et temp : meme traitement, tout
+    est maintenant en display block par defaut
+    -> centrage parfait via text-align: center
+    du parent .location
+
+CACHE
+v=20260823b -> v=20260823c
+
+Co-Authored-By: Letta Code <noreply@letta.com>
