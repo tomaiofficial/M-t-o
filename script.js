@@ -534,6 +534,14 @@ function themeFor(code, dayCycle, windSpeed) {
   return "theme-day-clear";
 }
 
+// Temperature-based extra theme (hot/cold effects)
+function tempExtraTheme(tempC) {
+  const extras = [];
+  if (tempC != null && tempC >= 30) extras.push("theme-hot");
+  if (tempC != null && tempC <= 5) extras.push("theme-cold");
+  return extras.join(" ");
+}
+
 // ============================================================
 //  Description dynamique Apple-Weather-like
 //  Texte entièrement basé sur l'heure locale réelle + sunrise/sunset
@@ -2923,7 +2931,7 @@ function applyLiveTick() {
     setText('condition', liveInfo.label);
     // Theme dynamique selon la nouvelle condition observee
     const dayCycle = state.lastWeather ? getDayCycleInfo(cur, state.lastWeather.daily) : { isNight: false };
-    app.className = "app " + themeFor(liveInfo.code, dayCycle, cur.wind_speed_10m);
+    app.className = "app " + themeFor(liveInfo.code, dayCycle, cur.wind_speed_10m) + " " + tempExtraTheme(cur.temperature_2m);
   } else if (state.lastWeather && state.lastWeather.current && state.lastWeather.current.weather_code !== cur.weather_code) {
     // Le code observe a change : on suit l'observation
     const dayCycle = getDayCycleInfo(cur, state.lastWeather.daily);
@@ -2932,7 +2940,7 @@ function applyLiveTick() {
     // mais aucune precip observee, on demote vers "Couvert".
     const info = safeWmoLabel(cur.weather_code, isNight, (cur.precipitation || 0) + (cur.rain || 0) + (cur.showers || 0));
     setText('condition', info.label);
-    app.className = "app " + themeFor(info.code, dayCycle, cur.wind_speed_10m);
+    app.className = "app " + themeFor(info.code, dayCycle, cur.wind_speed_10m) + " " + tempExtraTheme(cur.temperature_2m);
   }
 
   // Maj description generee : throttled intelligent
@@ -3573,7 +3581,7 @@ function renderCity(city, w) {
   const finalCode = liveInfo ? liveInfo.code : code;
 
   // Theme
-  app.className = "app " + themeFor(finalCode, dayCycle, cur.wind_speed_10m);
+  app.className = "app " + themeFor(finalCode, dayCycle, cur.wind_speed_10m) + " " + tempExtraTheme(cur.temperature_2m);
 
   // Canvas particles based on weather (basé sur code override inclus)
   if ([95,96,99].includes(finalCode)) {
