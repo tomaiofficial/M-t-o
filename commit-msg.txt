@@ -1,0 +1,33 @@
+fix: icones meteo invisibles parfois sur mobile
+
+Le user : "Corrige sur mobiles dans les prochains jours
+des fois je vois pas les icones alors que ce pc on
+vois tout correct y a que sur mobiles corrigestp"
+
+PROBLEME
+  Sur iOS Safari (surtout en mode PWA), les SVG <use>
+  dans les .glass-card avec backdrop-filter peuvent
+  etre "manges" par le compositing layer iOS.
+  Symptome : icones invisibles par moments (notamment
+  apres transitions de theme, scroll, ou backdrop-filter
+  repaints).
+
+FIX CSS sur .wicon
+  - transform: translateZ(0) : force un GPU layer
+    propre, separe du stacking context du backdrop-filter
+  - backface-visibility: hidden : empeche Safari de
+    eliminer le layer pour des raisons d'optimisation
+  - perspective: 1000px : hack Safari pour stabiliser
+    le rendu 3D context
+  - will-change: transform : hint au navigateur de
+    pre-allouer un layer dedie
+  - position: relative + z-index: 1 : garantit que
+    l'icone est au-dessus des pseudo-elements
+    ::before / ::after des glass-card
+  - Avec prefixe -webkit- partout (certaines versions
+    Safari ignorent les proprietes non-prefixees)
+
+CACHE
+v=20260823c -> v=20260827 (force refresh mobile PWA)
+
+Co-Authored-By: Letta Code <noreply@letta.com>

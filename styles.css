@@ -2091,7 +2091,24 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
 .fav-item-remove:hover { color: rgba(255,100,100,1); }
 
 /* ===== Weather icon ===== */
-.wicon { display: inline-block; vertical-align: middle; }
+.wicon {
+  display: inline-block;
+  vertical-align: middle;
+  /* FIX MOBILE (iOS Safari PWA) : force le layer GPU pour empecher
+     backdrop-filter de clipper le SVG. Safari a un bug connu ou
+     le backdrop-filter peut "manger" les contenus enfants sans
+     leur propre compositing layer. translateZ(0) + will-change +
+     backface-visibility = solution classique. */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-perspective: 1000px;
+  perspective: 1000px;
+  will-change: transform;
+  position: relative;
+  z-index: 1;
+}
 
 /* ===== Responsive ===== */
 @media (max-width: 480px) {
