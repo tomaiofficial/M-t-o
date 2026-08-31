@@ -2446,7 +2446,15 @@ function lerp(a, b, t) {
 // Interpolation de la meteo "current" entre deux fetches successifs
 function computeInterpolatedCurrent(elapsedMs) {
   if (!currLiveData) return null;
-  if (!prevLiveData || elapsedMs >= REFRESH_LIVE_MS) return currLiveData.current;
+  if (!prevLiveData || elapsedMs >= REFRESH_LIVE_MS) {
+    // Radar override : si le radar detecte pluie et que le modele dit soleil,
+    // on retourne la version avec _radarOverrideCode pour l'affichage.
+    const c = currLiveData.current;
+    if (c && c._radarOverrideCode != null) {
+      return { ...c, weather_code: c._radarOverrideCode };
+    }
+    return c;
+  }
   const t = Math.max(0, Math.min(1, elapsedMs / REFRESH_LIVE_MS));
   const p = prevLiveData.current;
   const n = currLiveData.current;
@@ -2462,7 +2470,7 @@ function computeInterpolatedCurrent(elapsedMs) {
     dew_point_2m: lerp(p.dew_point_2m ?? n.dew_point_2m, n.dew_point_2m, t),
     surface_pressure: lerp(p.surface_pressure ?? n.surface_pressure, n.surface_pressure, t),
     pressure_msl: lerp(p.pressure_msl ?? n.pressure_msl, n.pressure_msl, t),
-    weather_code: n.weather_code,
+    weather_code: (n._radarOverrideCode != null ? n._radarOverrideCode : n.weather_code),
     is_day: n.is_day,
     wind_direction_10m: n.wind_direction_10m,
     visibility: lerp(p.visibility ?? n.visibility ?? 0, n.visibility ?? 0, t),
@@ -2882,6 +2890,72 @@ function stopFastPoll() {
   if (fastPollTimerId) {
     clearInterval(fastPollTimerId);
     fastPollTimerId = null;
+  }
+}
+
+// ============================================================
+//  RADAR CHECK — utilise RainViewer (radar.js) pour detecter
+//  la precipitation temps reel et override la condition affichee
+//  si le modele Open-Meteo n'a pas encore integre l'averse.
+//  Latence radar : ~5-10 min (vs 5-15 min pour Open-Meteo).
+// ============================================================
+let radarCheckTimerId = null;
+let lastRadarOverrideCode = null; // code WMO avant override (pour restaurer)
+let lastRadarResult = null;       // dernier resultat pour debug + UI
+
+async function checkRadarAndApply() {
+  if (!state.city || state.city.lat == null || state.city.lon == null) return;
+  if (!window.RadarModule) return;
+  const myRequestId = state.requestId;
+  const result = await window.RadarModule.sampleRadarAt(state.city.lat, state.city.lon);
+  if (myRequestId !== state.requestId) return; // ville a change pendant le fetch
+  if (!result) return;
+  lastRadarResult = result;
+  console.log(`[Radar] dBZ=${result.dbz} mm/h=${result.mmHour.toFixed(2)} hasRain=${result.hasRain} latency=${(result.latencyMs/60000).toFixed(1)}min`);
+
+  const lw = state.lastWeather;
+  if (!lw || !lw.current) return;
+  const cur = lw.current;
+  const modelSaysRain = (cur.precipitation || 0) > 0.1 || [51,53,55,56,57,61,63,65,66,67,80,81,82,95,96,99].includes(cur.weather_code);
+  const modelSaysClear = !modelSaysRain;
+
+  // Cas 1 : radar detecte pluie alors que le modele dit "soleil"
+  // -> on override la condition affichee (sans toucher au modele)
+  if (result.hasRain && modelSaysClear) {
+    const overrideCode = window.RadarModule.radarIntensityToWmo(result);
+    if (overrideCode && overrideCode !== lastRadarOverrideCode) {
+      console.log(`[Radar] Override pluie: ${cur.weather_code} -> ${overrideCode} (${result.dbz} dBZ)`);
+      lastRadarOverrideCode = cur.weather_code; // memorise pour restoration
+      cur._radarOverrideCode = overrideCode;
+      // Re-render via applyLiveTick si dispo, sinon trigger un re-render
+      if (typeof applyLiveTick === "function") applyLiveTick();
+      updateRainAlert && updateRainAlert();
+      updateThunderBanner && updateThunderBanner();
+    }
+  }
+  // Cas 2 : le radar dit "pas de pluie" et on avait un override actif
+  // -> on restaure le code original
+  else if (!result.hasRain && lastRadarOverrideCode !== null) {
+    console.log(`[Radar] Restauration: ${lastRadarOverrideCode}`);
+    cur._radarOverrideCode = null;
+    lastRadarOverrideCode = null;
+    if (typeof applyLiveTick === "function") applyLiveTick();
+  }
+}
+
+function startRadarCheck() {
+  if (radarCheckTimerId) return;
+  // Premier check : 10s apres le lancement (laisser le temps de charger la meteo)
+  setTimeout(checkRadarAndApply, 10 * 1000);
+  // Puis toutes les 5 min
+  radarCheckTimerId = setInterval(checkRadarAndApply, 5 * 60 * 1000);
+  console.log("[Radar] Check precip toutes les 5min via RainViewer");
+}
+
+function stopRadarCheck() {
+  if (radarCheckTimerId) {
+    clearInterval(radarCheckTimerId);
+    radarCheckTimerId = null;
   }
 }
 
@@ -3572,7 +3646,9 @@ function renderCity(city, w) {
   // Cycle jour/nuit basé sur sunrise/sunset réels (pas cur.is_day qui peut être imprécis)
   const dayCycle = getDayCycleInfo(cur, daily);
   const isNight = dayCycle.isNight;
-  const code = cur.weather_code;
+  // Si le radar a deja flagué une pluie non detectee par le modele,
+  // on prend le code override (sinon code modele brut)
+  const code = cur._radarOverrideCode != null ? cur._radarOverrideCode : cur.weather_code;
   // IMPORTANT : utiliser classifyLiveCondition EN PREMIER pour que le rendu
   // initial soit coherent avec ce que applyLiveTick affichera juste apres.
   // Sinon on voit 1 flash "Orages" puis 1 sec apres la vraie condition.
@@ -4123,6 +4199,13 @@ async function switchCity(city) {
   // Ferme le panneau de detail d'un jour s'il est ouvert
   const dayDetail = $("dayDetailPanel");
   if (dayDetail) dayDetail.classList.remove("open");
+
+  // Reset l'override radar pour eviter qu'un flag de l'ancienne ville
+  // (pluie detectee a l'autre endroit) ne reste colle sur la nouvelle.
+  lastRadarOverrideCode = null;
+  if (state.lastWeather && state.lastWeather.current) {
+    state.lastWeather.current._radarOverrideCode = null;
+  }
 
   // 1) Annule toutes les requetes reseau en cours
   if (state.currentFetchController) {
@@ -4807,6 +4890,10 @@ unitToggle.addEventListener("click", (e) => {
   // Demarre le fast poll : verifie les precipitations toutes les 20s
   // pour detecter pluie/orage le plus rapidement possible.
   startFastPoll();
+
+  // Demarre le check radar (precipitation temps reel via RainViewer)
+  // Permet de detecter la pluie avant que le modele Open-Meteo l'ait integre.
+  startRadarCheck();
 
   // Module Incendies : NASA FIRMS (chargement module externe)
   if (window.FiresModule) {

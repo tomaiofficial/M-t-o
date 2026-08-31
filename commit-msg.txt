@@ -1,0 +1,70 @@
+feat: detection pluie via radar RainViewer (ground truth)
+
+Le user : "quand il pleut pres de chez moi [Weather
+Channel] il met [pluie] alors que toi tu mes soleil"
+
+PROBLEME RACINE
+
+  Open-Meteo et Met.no sont des MODELES NUMERIQUES qui
+  mettent 5-15 MINUTES entre l'observation reelle et
+  sa publication. Quand une averse arrive, l'API dit
+  encore "ensoleille" pendant 10-15 min.
+
+  Aucun fastTick (notre poll toutes les 20s) ne peut
+  remedier a cette limite - on ne peut pas accelerer
+  ce que le fournisseur ne fournit pas plus vite.
+
+SOLUTION : RADAR EN TEMPS REEL
+
+  RainViewer agrege les radars meteorologiques
+  nationaux (MeteoFrance, NOAA, JMA, etc.) avec une
+  latence de 5-10 min - bien meilleure que les modeles.
+  Gratuit, sans cle API, CORS autorise pour les tuiles.
+
+ARCHITECTURE
+
+  1. radar.js (nouveau, 200 lignes) :
+     - getRadarMeta() : manifest JSON, cache 10 min
+     - sampleRadarAt(lat, lon) :
+       * Calcule la tuile (z=9, ~5km)
+       * Fetch tuile PNG via createImageBitmap
+       * Decode pixel (3x3 echantillon)
+       * Match couleur -> dBZ -> mm/h (palette Universal Blue)
+     - radarIntensityToWmo(dBZ) : 51/63/65/82/95
+
+  2. script.js (integre, minimal) :
+     - checkRadarAndApply() toutes les 5 min
+       * Si radar dit pluie + modele dit soleil
+         -> override cur._radarOverrideCode
+       * Si radar dit pas pluie + on avait override
+         -> restaure code original
+     - Premier check 10s apres lancement
+     - Reset auto sur switchCity (evite pollution cross-ville)
+
+  3. computeInterpolatedCurrent (modifie, 2 lignes) :
+     - weather_code utilise _radarOverrideCode si present
+     - Fallback sur weather_code brut sinon
+
+  4. renderCity (modifie, 1 ligne) :
+     - Idem : respecte l'override au rendu initial
+
+CODES WMO RETOURNES PAR LE RADAR
+  dBZ < 15  -> 51 (bruine)
+  dBZ 15-24 -> 63 (pluie moderee)
+  dBZ 25-34 -> 65 (pluie forte)
+  dBZ 35-44 -> 82 (averses fortes)
+  dBZ >= 45 -> 95 (orage)
+
+ROBUSTESSE
+
+  - sampleRadarAt retourne null si erreur -> pas d'impact
+  - Pas de cle API, pas de setup
+  - Manifest cache 10 min, tuile decode 1 fois par check
+  - Pas de modif du modele (juste override affichage)
+  - Si radar dit "pas pluie" -> restauration auto 5min plus tard
+  - Throttle 5 min integre dans setInterval
+
+CACHE
+v=20260831 -> v=20260831b (pour forcer le refresh)
+
+Co-Authored-By: Letta Code <noreply@letta.com>
