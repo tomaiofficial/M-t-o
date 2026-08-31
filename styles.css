@@ -2277,6 +2277,43 @@ button, .glass-card, .search-result, .day, .detail, .icon-btn {
   background: #0974e0;
 }
 
+/* Toast bref pour confirmer une MAJ auto de ville (sans clic requis) */
+.geo-toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: rgba(20, 30, 50, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  z-index: 1100;
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.3s cubic-bezier(.2,.9,.3,1.2), opacity 0.3s ease;
+  max-width: 90vw;
+}
+.geo-toast.visible {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+.geo-toast .geo-icon { font-size: 18px; }
+
+/* Safe-area iOS PWA : toast plus haut pour pas etre masque par la barre */
+@supports (padding: max(0px)) {
+  .geo-toast {
+    bottom: max(30px, env(safe-area-inset-bottom) + 10px);
+  }
+}
+
 /* ============================================================
    FIRES MODULE — NASA FIRMS
    ============================================================ */

@@ -4271,10 +4271,14 @@ async function loadWeather(city) {
 // ============================================================
 //  Géolocalisation : Détection automatique de la position
 //  Utilise watchPosition() pour tracking continu + indicateur UI
+//  AUTO-UPDATE sans clic : si l'utilisateur bouge > 5km,
+//  la ville se met a jour automatiquement.
 // ============================================================
 let geoIndicatorEl = null;
 let geoLabelEl = null;
 let watchId = null; // ID du watchPosition pour pouvoir l'arreter
+let lastGeoUpdateTs = 0; // throttle pour eviter MAJ trop rapides
+let isAutoUpdatingCity = false; // verrou anti-double-update
 
 function showGeoIndicator(label = "Localisation en cours...") {
   geoIndicatorEl = $("geoIndicator");
@@ -4294,6 +4298,25 @@ function hideGeoIndicator() {
   if (geoIndicatorEl) {
     geoIndicatorEl.classList.remove("visible");
   }
+}
+
+// Toast bref qui apparait 3s pour confirmer le changement de ville
+function showGeoToast(placeName) {
+  let toast = document.getElementById("geoToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "geoToast";
+    toast.className = "geo-toast";
+    toast.innerHTML = `
+      <span class="geo-icon">📍</span>
+      <span class="geo-text"></span>
+    `;
+    document.body.appendChild(toast);
+  }
+  toast.querySelector(".geo-text").textContent = `Position mise à jour : ${placeName}`;
+  toast.classList.add("visible");
+  clearTimeout(showGeoToast._timer);
+  showGeoToast._timer = setTimeout(() => toast.classList.remove("visible"), 3000);
 }
 
 // Helper : formate un message d'erreur selon le code GeolocationPositionError
@@ -4344,6 +4367,7 @@ async function tryGeolocate() {
             const placeName = await reverseGeocode(latitude, longitude);
             state.city = { name: placeName, lat: latitude, lon: longitude };
             lastKnownLocation = { lat: latitude, lon: longitude, ts: Date.now() };
+            lastGeoUpdateTs = Date.now();
             saveState();
             await loadWeather(state.city);
             updateGeoLabel(`Suivi GPS actif (${pos.coords.accuracy.toFixed(0)}m)`);
@@ -4362,9 +4386,10 @@ async function tryGeolocate() {
             }
           }
         } else {
-          // Mises a jour suivantes : watchPosition nous notifie.
-          // Le watcher periodique (5min/5km) gere le switch de ville.
+          // Mises a jour suivantes : si le deplacement est significatif (>5km)
+          // on lance immediatement une MAJ de la ville (pas besoin d'attendre 2-5min)
           lastKnownLocation = { lat: latitude, lon: longitude, ts: Date.now() };
+          maybeAutoUpdateCity(latitude, longitude);
         }
       },
       (err) => {
@@ -4398,13 +4423,15 @@ function stopGeolocationTracking() {
 
 // ============================================================
 //  GEOLOCATION WATCHER : vérifie periodiquement la position
-//  pour detecter si l'utilisateur a change de ville/commune.
-//  - Toutes les 5 min
+//  pour detecter si l'utilisateur a change de ville/commune
+//  et AUTO-UPDATE sans clic.
+//  - Toutes les 2 min
 //  - Seuil de 5km pour declencher (evite les micro-deplacements)
-//  - Demande confirmation avant switch via banniere
+//  - Throttle 60s entre 2 MAJ pour eviter le spam API
 // ============================================================
-const GEO_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const GEO_CHECK_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes (etait 5min)
 const GEO_DISTANCE_THRESHOLD_KM = 5; // 5km minimum
+const GEO_MIN_UPDATE_INTERVAL_MS = 60 * 1000; // throttle 60s
 let geoWatcherTimerId = null;
 let lastKnownLocation = null; // { lat, lon, ts }
 
@@ -4419,18 +4446,55 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
-// Vérifie la position actuelle et propose un switch si deplace de >5km
+// Si l'ecart avec la ville courante est significatif, MAJ auto.
+// Utilise par watchPosition pour une reponse instantanee.
+async function maybeAutoUpdateCity(lat, lon) {
+  if (isAutoUpdatingCity) return;
+  // Throttle : pas plus d'1 MAJ par 60s
+  const now = Date.now();
+  if (now - lastGeoUpdateTs < GEO_MIN_UPDATE_INTERVAL_MS) return;
+  if (!state.city || !state.city.lat || !state.city.lon) return;
+  const dist = haversineKm(state.city.lat, state.city.lon, lat, lon);
+  if (dist < GEO_DISTANCE_THRESHOLD_KM) return;
+  await autoUpdateCityTo(lat, lon);
+}
+
+// MAJ auto de la ville sans confirmation utilisateur
+async function autoUpdateCityTo(lat, lon) {
+  if (isAutoUpdatingCity) return;
+  isAutoUpdatingCity = true;
+  try {
+    const placeName = await reverseGeocode(lat, lon);
+    // Verifie si la ville a vraiment change
+    if (state.city && state.city.name === placeName) {
+      console.log("[Geo] Ville inchangee, skip MAJ:", placeName);
+      return;
+    }
+    console.log(`[Geo] Auto-update ville: ${state.city && state.city.name} -> ${placeName}`);
+    state.city = { name: placeName, lat, lon };
+    lastKnownLocation = { lat, lon, ts: Date.now() };
+    lastGeoUpdateTs = Date.now();
+    saveState();
+    await loadWeather(state.city);
+    showGeoToast(placeName);
+  } catch (e) {
+    console.warn("[Geo] Erreur MAJ auto:", e);
+  } finally {
+    isAutoUpdatingCity = false;
+  }
+}
+
+// Vérifie la position actuelle et MAJ auto si deplace de >5km
 async function checkGeoLocation() {
   if (!navigator.geolocation) return;
-  // Le suivi auto est TOUJOURS actif (plus de toggle dans l'UI)
   return new Promise((resolve) => {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude, longitude } = pos.coords;
-        // Compare avec la derniere position connue
-        if (lastKnownLocation) {
+        // Compare avec la ville courante
+        if (state.city && state.city.lat && state.city.lon) {
           const dist = haversineKm(
-            lastKnownLocation.lat, lastKnownLocation.lon,
+            state.city.lat, state.city.lon,
             latitude, longitude
           );
           if (dist < GEO_DISTANCE_THRESHOLD_KM) {
@@ -4439,54 +4503,26 @@ async function checkGeoLocation() {
           }
         }
         lastKnownLocation = { lat: latitude, lon: longitude, ts: Date.now() };
-        // Geocoder la nouvelle position pour obtenir le nom de ville
-        const placeName = await reverseGeocode(latitude, longitude);
-        // Afficher une notification : "Nouvelle ville détectée : X"
-        showGeoSwitchBanner(placeName, latitude, longitude);
+        // AUTO-UPDATE sans banniere (zéro clic requis)
+        await autoUpdateCityTo(latitude, longitude);
         resolve(true);
       },
       (err) => {
+        console.warn("[Geo] checkGeoLocation erreur:", geoErrorMessage(err));
         resolve(false);
       },
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 30000 }
     );
   });
 }
 
-// Affiche un bandeau de notification pour proposer le switch de ville
-function showGeoSwitchBanner(placeName, lat, lon) {
-  let banner = document.getElementById('geoSwitchBanner');
-  if (!banner) {
-    banner = document.createElement('div');
-    banner.id = 'geoSwitchBanner';
-    banner.className = 'geo-switch-banner';
-    document.body.appendChild(banner);
-  }
-  banner.innerHTML = `
-    <span class="geo-icon">📍</span>
-    <span class="geo-text">Nouvelle position : <strong>${placeName}</strong></span>
-    <button class="geo-accept">Aller à cette ville</button>
-    <button class="geo-ignore">Ignorer</button>
-  `;
-  banner.classList.add('visible');
-  banner.querySelector('.geo-accept').onclick = async () => {
-    state.city = { name: placeName, lat, lon };
-    saveState();
-    await loadWeather(state.city);
-    banner.classList.remove('visible');
-  };
-  banner.querySelector('.geo-ignore').onclick = () => {
-    banner.classList.remove('visible');
-  };
-}
-
 function startGeolocationWatcher() {
   if (geoWatcherTimerId) return;
-  // Premier check rapide (30s apres lancement)
-  setTimeout(() => checkGeoLocation(), 30 * 1000);
-  // Puis checks periodiques toutes les 5 min
+  // Premier check rapide (20s apres lancement)
+  setTimeout(() => checkGeoLocation(), 20 * 1000);
+  // Puis checks periodiques toutes les 2 min (etait 5min)
   geoWatcherTimerId = setInterval(checkGeoLocation, GEO_CHECK_INTERVAL_MS);
-  console.log('[Geo] Watcher demarre (verif toutes les 5min, seuil 5km)');
+  console.log('[Geo] Watcher demarre (verif toutes les 2min, seuil 5km, AUTO-UPDATE)');
 }
 
 function stopGeolocationWatcher() {

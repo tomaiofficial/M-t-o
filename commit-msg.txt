@@ -1,0 +1,67 @@
+fix: suivi auto de position FONCTIONNE vraiment (zero clic)
+
+Le user : "Suivi auto tjr actif mes fait le correct
+parce que avant cela ne change rien ca fesais rien"
+
+PROBLEME (3 bugs critiques dans l'ancien code)
+
+  1. watchPosition subsequent updates (ligne 4364)
+     ne faisait QUE stocker lastKnownLocation sans
+     rien declencher. Le user bougeait -> le
+     navigateur detectait -> mais rien ne se passait.
+
+  2. checkGeoLocation affichait une BANNIERE avec
+     boutons Accept/Ignore. Si l'utilisateur ne
+     cliquait pas "Aller a cette ville", la ville
+     ne changeait JAMAIS. Friction = 0 adoption.
+
+  3. Watcher periodique toutes les 5 MINUTES.
+     Trop lent pour un vrai suivi.
+
+FIX MAJEUR : auto-update sans aucun clic
+
+  A. maybeAutoUpdateCity(lat, lon) appelee depuis
+     watchPosition :
+     - Verifie distance avec state.city actuel
+     - Si > 5km et throttle OK (60s depuis derniere
+       MAJ), declenche autoUpdateCityTo()
+     - Reponse INSTANTANEE quand l'utilisateur bouge
+       (plus besoin d'attendre le watcher periodique)
+
+  B. autoUpdateCityTo(lat, lon) :
+     - Verrou isAutoUpdatingCity (anti-double-update
+       si watchPosition fire plusieurs fois)
+     - Reverse geocoding Nominatim
+     - Compare avec ville courante, skip si identique
+     - state.city = nouveau, saveState(), loadWeather()
+     - showGeoToast() notification 3s (auto-dismiss)
+
+  C. checkGeoLocation simplifie :
+     - AUTO-UPDATE direct (plus de banniere Accept)
+     - Fallback de surete si watchPosition ne fire pas
+
+  D. Intervals reduits :
+     - 5min -> 2min (watcher periodique)
+     - Premier check 30s -> 20s
+     - Throttle MAJ : 60s minimum entre 2 updates
+
+  E. Toast notification (.geo-toast) :
+     - Apparait 3s en bas de l'ecran
+     - Auto-dismiss sans clic
+     - "Position mise a jour : [ville]"
+     - Respecte safe-area iOS PWA
+     - backdrop-filter blur 20px
+
+DETAILS TECHNIQUES
+  - Verrou isAutoUpdatingCity : empeche les appels
+    en parallele (watchPosition + watcher periodique
+    peuvent firer en meme temps)
+  - Throttle GEO_MIN_UPDATE_INTERVAL_MS = 60s :
+    evite le spam API si le user oscille pres du seuil
+  - haversineKm() toujours la pour le calcul distance
+  - reverseGeocode via Nominatim (no API key)
+
+CACHE
+v=20260827 -> v=20260831
+
+Co-Authored-By: Letta Code <noreply@letta.com>
