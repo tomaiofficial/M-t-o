@@ -4850,23 +4850,41 @@ unitToggle.addEventListener("click", (e) => {
   if (ok && state.city) {
     await loadWeather(state.city);
   } else {
-    // Premiere visite : on charge Paris immediatement pour eviter
-    // que l'app reste bloquee sur le prompt de geoloc.
-    state.city = { name: "Paris", lat: 48.8566, lon: 2.3522 };
-    saveState();
-    await loadWeather(state.city);
-
-    // Geoloc en best-effort : si elle reussit, on bascule vers la vraie ville.
-    setTimeout(() => {
-      if (state.city && state.city.name === "Paris") {
-        tryGeolocate().then(geoOk => {
-          if (geoOk && state.city && state.city.name !== "Paris") {
-            saveState();
-            loadWeather(state.city);
-          }
-        }).catch(() => {});
+    // ============================================================
+    // Premiere visite : strategie "IP silent + GPS auto"
+    //   1) IP geoloc (~200ms) -> ville probable (silencieux)
+    //   2) GPS prompt en background -> ville precise (silencieux)
+    //   3) Si GPS refuse -> on garde la ville IP
+    // ============================================================
+    if (window.GeoIpModule) {
+      const ipLoc = await window.GeoIpModule.tryIpGeolocation().catch(() => null);
+      if (ipLoc) {
+        // IP reussie : on utilise directement la ville detectee
+        state.city = { name: ipLoc.city, lat: ipLoc.lat, lon: ipLoc.lon };
+        saveState();
+        await loadWeather(state.city);
+        console.log("[Init] Ville IP detectee:", ipLoc.city);
+      } else {
+        // IP echouee : fallback Paris le temps que la geoloc GPS aboutisse
+        state.city = { name: "Paris", lat: 48.8566, lon: 2.3522 };
+        saveState();
+        await loadWeather(state.city);
       }
-    }, 1500);
+    } else {
+      state.city = { name: "Paris", lat: 48.8566, lon: 2.3522 };
+      saveState();
+      await loadWeather(state.city);
+    }
+
+    // GPS en background : si l'utilisateur accepte, on upgrade la precision.
+    // Si GPS refuse, on garde la ville IP/Paris (deja chargee ci-dessus).
+    // tryGeolocate charge lui-meme la meteo si le GPS aboutit (voir ligne 4455),
+    // donc pas besoin de re-loadWeather ici -> juste saveState pour la persistance.
+    setTimeout(() => {
+      tryGeolocate().then(geoOk => {
+        if (geoOk) saveState();
+      }).catch(() => {});
+    }, 2500);
   }
 
   // Auto-refresh "live" toutes les 60s (lite fetch : current seulement)

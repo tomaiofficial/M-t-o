@@ -1,0 +1,49 @@
+feat: fallback IP geoloc silencieux (zero UI)
+
+Le user a colle un module complet (IP + GPS optionnel)
+mais il rentre en conflit avec ses preferences (bouton
+GPS visible, ipapi.co CORS bloque sur tier gratuit).
+
+REFACTOR SELON PREFERENCES USER
+  - Pas de bouton visible (zero friction)
+  - Pas de status UI (silencieux)
+  - Choix API : geo.kamero.ai au lieu de ipapi.co
+    * Gratuit pour usage commercial
+    * CORS explicitement active ("Works from any domain")
+    * Deploye sur Vercel Edge Network (rapide mondialement)
+    * Pas de cle API, pas de rate limit documente
+
+ARCHITECTURE
+  1. geo-ip.js (nouveau, 110 lignes) :
+     - tryIpGeolocation() retourne {lat, lon, city, country}
+     - Cache localStorage 24h (IP change rarement)
+     - Timeout 4s (on ne veut pas bloquer l'app)
+     - Dedup des appels concurrents
+     - JAMAIS d'exception (toujours null en cas d'erreur)
+     - Validation anti-ocean (rejet lat=0,lon=0)
+
+  2. script.js (init first-visit, ~15 lignes modifiees) :
+     - Etape 1 : IP silent (~200ms) -> ville probable
+       Charge la meteo de la ville IP directement
+     - Etape 2 : GPS prompt en background (~2.5s apres)
+       Si accepte -> upgrade precision (tryGeolocate gere)
+       Si refuse -> garde la ville IP (deja affichee)
+
+FLUX UTILISATEUR
+  - Premiere visite :
+    AVANT : Paris affiche -> prompt GPS -> ville reelle
+    APRES : ville IP affichee -> prompt GPS -> ville precise
+  - GPS refuse : on garde la ville IP au lieu de Paris
+  - VPN/proxy : IP peut etre fausse mais GPS corrige apres
+
+CAS PARTICULIERS
+  - Cache hit : 0ms (localStorage), pas d'appel reseau
+  - Cache miss : appel reseau ~200-500ms
+  - API down : null -> fallback Paris (comme avant)
+  - Ville IP = ville GPS : pas de flash visible (loadWeather
+    reappelee mais donnees identiques)
+
+CACHE
+v=20260831b -> v=20260905
+
+Co-Authored-By: Letta Code <noreply@letta.com>
