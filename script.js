@@ -2060,7 +2060,17 @@ function openMeteoToInternal(json) {
     visibility: h.visibility ? h.visibility[startIdx] : null
   };
 
-  return { current, hourly, daily };
+  // ============================================================
+  //  SEASONAL BIAS — ajustement des previsions long-terme.
+  //  Au-dela de J+7 (daily) et J+48h (hourly), on applique un
+  //  bias selon la saison du jour cible (winter = -5°C, etc).
+  //  Objectif : donner un ressenti plus "en phase" avec la saison
+  //  meme quand le modele est mou sur les previsions long-terme.
+  // ============================================================
+  const dailyBiased = applySeasonalBiasToDaily(daily);
+  const hourlyBiased = applySeasonalBiasToHourly(hourly);
+
+  return { current, hourly: hourlyBiased, daily: dailyBiased };
 }
 
 // ---------- Données climatiques mensuelles ----------
@@ -2406,6 +2416,97 @@ const REFRESH_FORECAST_MS = 60 * 1000; // re-render forecast complet chaque 60s 
 const FAST_POLL_MS = 20 * 1000;
 let fastPollTimerId = null;
 let lastObservedMm = 0; // pour detecter le debut/fin de pluie
+
+// ============================================================
+//  SEASONAL BIAS — ajustement des previsions long-terme selon
+//  la saison du JOUR CIBLE (pas la date courante). Objectif :
+//  donner un "ressenti saisonnier" plus prononce aux previsions
+//  au-dela de J+7 (les moins fiables du modele).
+//
+//  Bias en °C, signe NEGATIF = plus frais.
+//  Hiver plein = -5°C (le max demande par le user), ete = 0
+//  (pas de bias, on garde la chaleur du modele).
+// ============================================================
+const SEASONAL_BIAS_BY_MONTH = {
+  1:  -5,  // Janvier : plein hiver
+  2:  -5,  // Fevrier
+  3:  -4,  // Mars : fin hiver
+  4:  -3,  // Avril : printemps
+  5:  -2,  // Mai
+  6:  -1,  // Juin : debut ete
+  7:   0,  // Juillet : plein ete (on garde le modele)
+  8:   0,  // Aout
+  9:  -2,  // Septembre : debut automne
+  10: -3,  // Octobre
+  11: -4,  // Novembre
+  12: -5   // Decembre : plein hiver
+};
+// Seuil d'application : on ne touche PAS aux X premiers jours
+// (previsions fiables du modele). Au-dela, on applique le bias.
+const SEASONAL_BIAS_DAILY_MIN_DAYS = 7;     // daily : J+0 a J+6 intacts
+const SEASONAL_BIAS_HOURLY_MIN_HOURS = 48;  // hourly : 48 premieres heures intactes
+
+// Renvoie le bias (°C, negatif = plus frais) pour une date donnee
+function getSeasonalBias(forecastDate) {
+  if (!forecastDate) return 0;
+  const d = forecastDate instanceof Date ? forecastDate : new Date(forecastDate);
+  if (isNaN(d.getTime())) return 0;
+  const month = d.getMonth() + 1; // 1..12
+  return SEASONAL_BIAS_BY_MONTH[month] || 0;
+}
+
+// Applique le bias saisonnier a un tableau de temperatures aligne
+// sur un tableau de timestamps. On ne touche pas aux premieres
+// entreees (selon minDays/minHours).
+function applySeasonalBiasToTempArray(temps, times, minUnits, isHours) {
+  if (!Array.isArray(temps) || !Array.isArray(times) || temps.length !== times.length) {
+    return temps;
+  }
+  const now = Date.now();
+  const result = temps.slice();
+  for (let i = 0; i < result.length; i++) {
+    const t = new Date(times[i]);
+    if (isNaN(t.getTime())) continue;
+    const offsetUnits = isHours
+      ? (t.getTime() - now) / (1000 * 60 * 60)
+      : (t.getTime() - now) / (1000 * 60 * 60 * 24);
+    if (offsetUnits < minUnits) continue;
+    result[i] = +(result[i] + getSeasonalBias(t)).toFixed(1);
+  }
+  return result;
+}
+
+// Applique le bias saisonnier a toutes les temperatures d'un objet daily
+function applySeasonalBiasToDaily(daily) {
+  if (!daily || !daily.time || !daily.time.length) return daily;
+  const time = daily.time;
+  const out = { ...daily };
+  if (daily.temperature_2m_max) {
+    out.temperature_2m_max = applySeasonalBiasToTempArray(
+      daily.temperature_2m_max, time, SEASONAL_BIAS_DAILY_MIN_DAYS, false);
+  }
+  if (daily.temperature_2m_min) {
+    out.temperature_2m_min = applySeasonalBiasToTempArray(
+      daily.temperature_2m_min, time, SEASONAL_BIAS_DAILY_MIN_DAYS, false);
+  }
+  return out;
+}
+
+// Applique le bias saisonnier aux temperatures horaires au-dela de 48h
+function applySeasonalBiasToHourly(hourly) {
+  if (!hourly || !hourly.time || !hourly.time.length) return hourly;
+  const time = hourly.time;
+  const out = { ...hourly };
+  if (hourly.temperature_2m) {
+    out.temperature_2m = applySeasonalBiasToTempArray(
+      hourly.temperature_2m, time, SEASONAL_BIAS_HOURLY_MIN_HOURS, true);
+  }
+  if (hourly.apparent_temperature) {
+    out.apparent_temperature = applySeasonalBiasToTempArray(
+      hourly.apparent_temperature, time, SEASONAL_BIAS_HOURLY_MIN_HOURS, true);
+  }
+  return out;
+}
 
 let prevLiveData = null;
 let currLiveData = null;
