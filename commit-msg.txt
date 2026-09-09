@@ -1,0 +1,71 @@
+feat: restore TOUTES les features d'avant le rollback
+
+Le user : "remet la meteo de tout avant"
+
+FEATURES RESTAUREES (au-dela du rebuild initial)
+
+1. SEASONAL BIAS (bias saisonnier long-terme)
+   - Ajustement °C sur previsions J+7+ daily et 48h+ hourly
+   - Hiver (dec-fev) : -5°C, Ete (jul-aou) : 0°C, transition douce
+   - Base sur le mois du JOUR CIBLE, pas aujourd'hui
+   - Corrige l'effet "open-meteo voit encore l'ete en septembre"
+   - Applique dans openMeteoToInternal -> affecte temp ET feels-like
+
+2. FIRE RISK METEO (FWI simplifie LOCAL)
+   - Mini 🔥 dans chaque cellule horaire + day detail hourly
+   - Calcul local : heatFactor + dryFactor + windFactor (0-30)
+   - Seuils : <5 cache, 5-15 moderate (jaune pulse),
+     15-30 high (orange pulse), >30 extreme (rouge pulse fort)
+   - Anti-faux-positif : cache si precip >= 3mm/h ou POP >= 60%
+   - Differencie de "incendies en cours" (qui lui reste inerte)
+
+3. THEME SWITCHING (effets atmospheriques)
+   - 11 themes possibles : day-clear, partly-cloudy, cloudy,
+     rain, storm, snow, fog, sunset, windy,
+     night-clear, night-cloudy
+   - Classes CSS .theme-* sur body -> le CSS gere tout
+     (god rays, aurora, stars, moon, sun, haze, heat, fog,
+      breath, vignette, clouds, sky gradient)
+   - theme-hot ajoute si T° >= 30°C
+   - theme-cold ajoute si T° <= 5°C
+   - Lever/coucher de soleil detecte automatiquement (5-7h, 18-21h)
+
+4. TEMPERATURE SMOOTHING (anti-saut)
+   - Quand tickLive met a jour la temp, anime de l'ancienne
+     vers la nouvelle en 1.5s (easeOutCubic)
+   - Effet subtil mais appreciable
+   - Skip si difference < 0.3°C
+   - requestAnimationFrame pour perf
+
+5. BANNERS METEO SEVERE
+   - vigilanceBanner : canicule (>=35°C) ou grand froid (<=-5°C)
+   - thunderBanner : orages (WMO 95/96/99)
+   - rainBanner : pluie forte (>=2mm/h)
+   - Visible / cache selon conditions
+
+6. DEMO MODE
+   - URL ?demo=1 force ville Paris + badge "🧪 MODE DÉMO"
+   - Utile pour tester sans geoloc
+   - Override state.city AVANT loadWeather
+
+7. DAY DETAIL ameliore
+   - Champ dayDetailSun + dayDetailSunSub separes
+   - Bouton × ferme, click dehors ferme, Echap ferme
+   - 24h breakdown avec icones + POP% + fire risk
+
+8. AUTO-UPDATE COUNTER
+   - "Mis à jour il y a X" rafraichi toutes les secondes
+   - Source badge aussi
+
+CE QUI N'EST PAS ENCORE RESTAURE
+  - Incendies en cours (feu.js reste inerte par choix senpai)
+  - Systeme vigilance meteo-france (API payante)
+  - Background tres elabores (mais CSS gere deja bcp)
+
+CACHE
+  script.js v=20260909b -> v=20260909c
+
+ACTION REQUISE
+  Hard refresh : Ctrl+Shift+R
+
+Co-Authored-By: Letta Code <noreply@letta.com>

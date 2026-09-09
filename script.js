@@ -3,6 +3,91 @@
 //  Géolocalisation auto + IP fallback + descriptions stables
 // ============================================================
 
+// ============= SEASONAL BIAS (ajustement long-terme) =============
+// Bias en °C (negatif = plus frais), applique au-dela de J+7 daily
+// et au-dela de 48h hourly, selon le mois du JOUR CIBLE.
+const SEASONAL_BIAS_BY_MONTH = {
+  1: -5, 2: -5, 3: -4, 4: -3, 5: -2, 6: -1,
+  7:  0, 8:  0, 9: -2, 10: -3, 11: -4, 12: -5
+};
+const SEASONAL_BIAS_DAILY_MIN_DAYS = 7;
+const SEASONAL_BIAS_HOURLY_MIN_HOURS = 48;
+
+function getSeasonalBias(forecastDate) {
+  if (!forecastDate) return 0;
+  const d = forecastDate instanceof Date ? forecastDate : new Date(forecastDate);
+  if (isNaN(d.getTime())) return 0;
+  return SEASONAL_BIAS_BY_MONTH[d.getMonth() + 1] || 0;
+}
+
+function applySeasonalBiasToTempArray(temps, times, minUnits, isHours) {
+  if (!Array.isArray(temps) || !Array.isArray(times) || temps.length !== times.length) return temps;
+  const now = Date.now();
+  const result = temps.slice();
+  for (let i = 0; i < result.length; i++) {
+    const t = new Date(times[i]);
+    if (isNaN(t.getTime())) continue;
+    const offsetUnits = isHours
+      ? (t.getTime() - now) / 3600000
+      : (t.getTime() - now) / 86400000;
+    if (offsetUnits < minUnits) continue;
+    result[i] = +(result[i] + getSeasonalBias(t)).toFixed(1);
+  }
+  return result;
+}
+
+function applySeasonalBiasToDaily(daily) {
+  if (!daily || !daily.time || !daily.time.length) return daily;
+  const out = { ...daily };
+  if (daily.temperature_2m_max) {
+    out.temperature_2m_max = applySeasonalBiasToTempArray(
+      daily.temperature_2m_max, daily.time, SEASONAL_BIAS_DAILY_MIN_DAYS, false);
+  }
+  if (daily.temperature_2m_min) {
+    out.temperature_2m_min = applySeasonalBiasToTempArray(
+      daily.temperature_2m_min, daily.time, SEASONAL_BIAS_DAILY_MIN_DAYS, false);
+  }
+  return out;
+}
+
+function applySeasonalBiasToHourly(hourly) {
+  if (!hourly || !hourly.time || !hourly.time.length) return hourly;
+  const out = { ...hourly };
+  if (hourly.temperature_2m) {
+    out.temperature_2m = applySeasonalBiasToTempArray(
+      hourly.temperature_2m, hourly.time, SEASONAL_BIAS_HOURLY_MIN_HOURS, true);
+  }
+  if (hourly.apparent_temperature) {
+    out.apparent_temperature = applySeasonalBiasToTempArray(
+      hourly.apparent_temperature, hourly.time, SEASONAL_BIAS_HOURLY_MIN_HOURS, true);
+  }
+  return out;
+}
+
+// ============= FIRE RISK (FWI simplifie) =============
+// Calcul LOCAL du risque incendie meteo (different des incendies en cours).
+// Echelle 0-30. Seuils : <5 cache, 5-15 modere (jaune), 15-30 eleve (orange), >30 extreme (rouge).
+// Anti-faux-positif : cache si precip >= 3mm/h ou POP >= 60%.
+function computeFireRisk(temp, humidity, wind, precipMm, pop) {
+  if (precipMm != null && precipMm >= 3) return 0;
+  if (pop != null && pop >= 60) return 0;
+  if (temp == null || humidity == null) return 0;
+  // Formule simplifiee basee sur FWI (Forest Weather Index)
+  // Plus c'est chaud + sec + venteux = plus c'est dangereux
+  const dryness = Math.max(0, 100 - humidity);
+  const heatFactor = Math.max(0, temp - 10) / 30 * 10;  // 0-10
+  const dryFactor = dryness / 100 * 10;                  // 0-10
+  const windFactor = (wind || 0) / 50 * 10;              // 0-10
+  return Math.min(30, Math.round(heatFactor + dryFactor + windFactor));
+}
+
+function fireRiskClass(score) {
+  if (score < 5) return { class: "fire-hidden", emoji: "" };
+  if (score < 15) return { class: "moderate", emoji: "🔥" };
+  if (score < 30) return { class: "high", emoji: "🔥" };
+  return { class: "extreme", emoji: "🔥" };
+}
+
 // ============= WMO CODES + ICONS (SVG inline) =============
 const WMO = {
   0:  { label: "Ciel dégagé", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="5"/><g stroke-linecap="round"><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></g></svg>` },
@@ -233,7 +318,11 @@ function openMeteoToInternal(json) {
     visibility: cur.visibility != null ? cur.visibility : (h.visibility ? h.visibility[startIdx] : null)
   };
 
-  return { current, hourly, daily };
+  // SEASONAL BIAS : ajustement long-terme (J+7+ daily, 48h+ hourly)
+  const dailyBiased = applySeasonalBiasToDaily(daily);
+  const hourlyBiased = applySeasonalBiasToHourly(hourly);
+
+  return { current, hourly: hourlyBiased, daily: dailyBiased };
 }
 
 // ============= AQI FETCH (Open-Meteo Air Quality) =============
@@ -334,6 +423,51 @@ function getHourLabel(timeStr) {
   return `${h}h`;
 }
 
+// Theme : determine le theme CSS en fonction du temps actuel
+// Themes : day-clear, partly-cloudy, cloudy, rain, storm, snow, fog, sunset, windy, night-clear, night-cloudy
+function getWeatherTheme(c) {
+  const day = isDaytime(c);
+  const code = c.weather_code;
+  // Pluie / bruine
+  if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return "rain";
+  // Orages
+  if ([95, 96, 99].includes(code)) return "storm";
+  // Neige
+  if ([71, 73, 75, 85, 86].includes(code)) return "snow";
+  // Brouillard
+  if ([45, 48].includes(code)) return "fog";
+  // Couvert
+  if (code === 3) return day ? "cloudy" : "night-cloudy";
+  // Partiellement nuageux
+  if (code === 2) return "partly-cloudy";
+  // Ciel degage / peu nuageux
+  if (code === 0 || code === 1) {
+    if (!day) return "night-clear";
+    // Lever/coucher de soleil ?
+    const hr = new Date().getHours();
+    if ((hr >= 18 && hr <= 21) || (hr >= 5 && hr <= 7)) return "sunset";
+    return "day-clear";
+  }
+  // Defaut
+  return day ? "day-clear" : "night-clear";
+}
+
+function setTheme(c, d) {
+  const theme = getWeatherTheme(c);
+  // Retire toutes les classes theme-*
+  document.body.className = document.body.className
+    .replace(/\btheme-[a-z-]+/g, "")
+    .trim();
+  document.body.classList.add(`theme-${theme}`);
+
+  // Temp-based theme (hot / cold)
+  if (c.temperature_2m != null) {
+    document.body.classList.remove("theme-hot", "theme-cold");
+    if (c.temperature_2m >= 30) document.body.classList.add("theme-hot");
+    else if (c.temperature_2m <= 5) document.body.classList.add("theme-cold");
+  }
+}
+
 function getDayName(dateStr, offset = 0) {
   const d = new Date(dateStr);
   d.setDate(d.getDate() + offset);
@@ -382,6 +516,9 @@ function renderCity(data) {
   setText("cityName", state.city.name);
   document.body.dataset.city = state.city.name;
 
+  // Theme switching (atmospheric effects via CSS)
+  setTheme(c, d);
+
   // Température
   setText("temp", fmtTemp(c.temperature_2m));
   setText("condition", getCurrentCondition(c));
@@ -414,6 +551,44 @@ function renderCity(data) {
 
   // Updated at
   setText("updatedAt", `Mis à jour il y a ${getRelativeTime(state.lastRefreshMs)}`);
+
+  // Banners meteo severe (vigilance, thunder)
+  renderBanners(c);
+}
+
+function renderBanners(c) {
+  const vigilance = $("vigilanceBanner");
+  const thunder = $("thunderBanner");
+  const rain = $("rainBanner");
+  if (!vigilance || !thunder || !rain) return;
+
+  // Reset
+  vigilance.classList.remove("visible");
+  thunder.classList.remove("visible");
+  rain.classList.remove("visible");
+
+  // Vigilance (extreme chaud/froid)
+  if (c.temperature_2m != null) {
+    if (c.temperature_2m >= 35) {
+      vigilance.textContent = "🔥 Canicule — Restez hydraté";
+      vigilance.classList.add("visible");
+    } else if (c.temperature_2m <= -5) {
+      vigilance.textContent = "🥶 Grand froid — Couvrez-vous";
+      vigilance.classList.add("visible");
+    }
+  }
+
+  // Orage
+  if ([95, 96, 99].includes(c.weather_code)) {
+    thunder.textContent = "⚡ Orage en cours";
+    thunder.classList.add("visible");
+  }
+
+  // Pluie forte (precipitation > 2mm/h)
+  if (c.precipitation != null && c.precipitation >= 2) {
+    rain.textContent = `🌧️ Pluie — ${c.precipitation.toFixed(1)} mm/h`;
+    rain.classList.add("visible");
+  }
 }
 
 function getRelativeTime(ms) {
@@ -477,6 +652,16 @@ function renderHourly(h) {
     const code = h.weather_code ? h.weather_code[i] : null;
     const pop = h.precipitation_probability ? h.precipitation_probability[i] : null;
     const isDay = h.is_day ? h.is_day[i] : 1;
+    const wind = h.wind_speed_10m ? h.wind_speed_10m[i] : null;
+    const humidity = h.relative_humidity_2m ? h.relative_humidity_2m[i] : null;
+    const precipMm = h.precipitation ? h.precipitation[i] : null;
+
+    // Fire risk (FWI simplifie)
+    const fireScore = computeFireRisk(temp, humidity, wind, precipMm, pop);
+    const fire = fireRiskClass(fireScore);
+    const fireBadge = fire.class !== "fire-hidden"
+      ? `<span class="hour-fire ${fire.class}" title="Risque incendie météo (score ${fireScore}/30)">${fire.emoji}</span>`
+      : "";
 
     const popDisplay = pop != null && pop >= 5 ? `<span class="hour-pop">${Math.round(pop / 5) * 5}%</span>` : "";
 
@@ -485,6 +670,7 @@ function renderHourly(h) {
         <div class="hour-time">${getHourLabel(t)}</div>
         <div class="hour-icon">${getWeatherIcon(code, 22)}</div>
         <div class="hour-temp">${fmtTemp(temp)}</div>
+        ${fireBadge}
         ${popDisplay}
       </div>
     `);
@@ -670,6 +856,27 @@ function renderSourceBadge() {
   el.textContent = `Source : Open-Meteo · ${getRelativeTime(state.lastRefreshMs)}`;
 }
 
+// ============= DEMO MODE (test sans geoloc) =============
+function checkDemoMode() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("demo") === "1") {
+    state.city = { name: "Paris (démo)", lat: 48.8566, lon: 2.3522 };
+    state.demoMode = true;
+    const badge = $("demoBadge");
+    if (badge) {
+      badge.textContent = "🧪 MODE DÉMO";
+      badge.classList.add("visible");
+    }
+  }
+}
+
+// Update le compteur "Mis à jour il y a X" toutes les secondes
+setInterval(() => {
+  if (!state.lastRefreshMs) return;
+  setText("updatedAt", `Mis à jour il y a ${getRelativeTime(state.lastRefreshMs)}`);
+  renderSourceBadge();
+}, 1000);
+
 // ============= DAY DETAIL PANEL =============
 function openDayDetail(idx) {
   if (!state.lastWeather) return;
@@ -702,9 +909,10 @@ function openDayDetail(idx) {
   setText("dayDetailUvSub", uv != null ? uvLabel(uv) : "—");
 
   // Soleil
-  setText("dayDetailSun", d.sunrise[idx] ? `${getTimeLabel(d.sunrise[idx])} / ${getTimeLabel(d.sunset[idx])}` : "—");
+  if (d.sunrise[idx]) setText("dayDetailSun", getTimeLabel(d.sunrise[idx]));
+  if (d.sunset[idx]) setText("dayDetailSunSub", getTimeLabel(d.sunset[idx]));
 
-  // Hourly breakdown
+  // Hourly breakdown (24h du jour)
   const dayStart = new Date(d.time[idx]).getTime();
   const dayEnd = dayStart + 86400000;
   const cells = [];
@@ -712,12 +920,23 @@ function openDayDetail(idx) {
     const t = new Date(h.time[i]).getTime();
     if (t < dayStart || t >= dayEnd) continue;
     const hourPop = h.precipitation_probability ? h.precipitation_probability[i] : null;
+    const hourTemp = h.temperature_2m ? h.temperature_2m[i] : null;
+    const hourCode = h.weather_code ? h.weather_code[i] : null;
+    const hourWind = h.wind_speed_10m ? h.wind_speed_10m[i] : null;
+    const hourHumidity = h.relative_humidity_2m ? h.relative_humidity_2m[i] : null;
+    const hourPrecip = h.precipitation ? h.precipitation[i] : null;
+    const fireScore = computeFireRisk(hourTemp, hourHumidity, hourWind, hourPrecip, hourPop);
+    const fire = fireRiskClass(fireScore);
+    const fireBadge = fire.class !== "fire-hidden"
+      ? `<span class="hour-fire ${fire.class}" title="Risque incendie (score ${fireScore}/30)">${fire.emoji}</span>`
+      : "";
     const popBadge = hourPop != null && hourPop >= 5 ? `<span class="hour-pop">${Math.round(hourPop / 5) * 5}%</span>` : "";
     cells.push(`
       <div class="hour-cell">
         <div class="hour-time">${getHourLabel(h.time[i])}</div>
-        <div class="hour-icon">${getWeatherIcon(h.weather_code[i], 22)}</div>
-        <div class="hour-temp">${fmtTemp(h.temperature_2m[i])}</div>
+        <div class="hour-icon">${getWeatherIcon(hourCode, 22)}</div>
+        <div class="hour-temp">${fmtTemp(hourTemp)}</div>
+        ${fireBadge}
         ${popBadge}
       </div>
     `);
@@ -958,10 +1177,45 @@ async function tickLive() {
     const { data } = await fetchWeather(state.city.lat, state.city.lon);
     state.lastWeather = data;
     state.lastRefreshMs = Date.now();
+    smoothTemperature(data);
     renderCity(data);
   } catch (e) {
     console.warn("[Refresh] failed:", e.message || e);
   }
+}
+
+// ============= TEMPERATURE SMOOTHING (anti-flicker) =============
+// Quand la temperature change (nouveau fetch), on l'anime de l'ancienne
+// vers la nouvelle au lieu d'un saut brutal. Effet subtil 1.5s.
+let smoothAnim = null;
+function smoothTemperature(data) {
+  const newTemp = data.current && data.current.temperature_2m;
+  const tempEl = $("temp");
+  if (newTemp == null || !tempEl) return;
+
+  const oldText = tempEl.textContent;
+  // Parse old temp (format "23°" ou "73°")
+  const oldMatch = oldText.match(/-?\d+/);
+  if (!oldMatch) return;
+  const oldTemp = parseFloat(oldMatch[0]);
+  if (isNaN(oldTemp) || Math.abs(oldTemp - newTemp) < 0.3) return;
+
+  const startTemp = oldTemp;
+  const delta = newTemp - oldTemp;
+  const duration = 1500;
+  const startTime = performance.now();
+
+  if (smoothAnim) cancelAnimationFrame(smoothAnim);
+
+  function step(now) {
+    const t = Math.min(1, (now - startTime) / duration);
+    // easeOutCubic
+    const eased = 1 - Math.pow(1 - t, 3);
+    const current = startTemp + delta * eased;
+    tempEl.textContent = fmtTemp(current);
+    if (t < 1) smoothAnim = requestAnimationFrame(step);
+  }
+  smoothAnim = requestAnimationFrame(step);
 }
 
 // ============= LOAD WEATHER (main entry) =============
@@ -1032,12 +1286,19 @@ function startAutomaticGeolocation() {
   const hasState = loadState();
   document.body.classList.add("loading");
 
+  // Demo mode (?demo=1) — override city AVANT loadWeather
+  checkDemoMode();
+
   // Unit toggle UI
   document.querySelectorAll("#unitToggle .seg").forEach((b) => {
     b.classList.toggle("active", b.dataset.unit === state.unit);
   });
 
-  if (hasState) {
+  if (state.demoMode) {
+    // Force reload sur ville demo
+    saveState();
+    await loadWeather();
+  } else if (hasState) {
     await loadWeather();
   } else {
     // Première visite : Paris d'abord, IP/GPS en arrière-plan
