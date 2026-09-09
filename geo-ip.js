@@ -69,23 +69,27 @@ async function tryIpGeolocation(force = false) {
 
       const data = await res.json();
 
-      // Validation minimale
-      if (typeof data.latitude !== "number" || typeof data.longitude !== "number") {
-        console.warn("[GeoIP] Coordonnees invalides");
+      // L'API retourne latitude/longitude en STRINGS ("40.7126")
+      // -> parseFloat() obligatoire avant validation
+      const lat = parseFloat(data.latitude);
+      const lon = parseFloat(data.longitude);
+
+      if (isNaN(lat) || isNaN(lon)) {
+        console.warn("[GeoIP] Coordonnees invalides:", data.latitude, data.longitude);
         return null;
       }
       // Rejet si c'est au milieu de l'ocean (cas IP non resolue)
-      if (Math.abs(data.latitude) < 0.5 && Math.abs(data.longitude) < 0.5) {
+      if (Math.abs(lat) < 0.5 && Math.abs(lon) < 0.5) {
         console.warn("[GeoIP] Coordonnees = 0,0 (ocean) -> ignore");
         return null;
       }
 
       const result = {
-        lat: data.latitude,
-        lon: data.longitude,
+        lat: lat,
+        lon: lon,
         city: data.city || data.region || "Position detectee",
         country: data.country || "",
-        region: data.region || "",
+        region: data.region || data.countryRegion || "",
         timezone: data.timezone || "",
         source: "IP"
       };
