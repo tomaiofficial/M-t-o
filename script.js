@@ -31,14 +31,25 @@ const WMO = {
   82: { label: "Violentes averses",      icon: "apple-heavy-rain",        night: "apple-heavy-rain" },
   85: { label: "Averses de neige",       icon: "apple-snow",              night: "apple-snow" },
   86: { label: "Averses de neige",       icon: "apple-snow",              night: "apple-snow" },
-  95: { label: "Orages",                 icon: "apple-thunder",            night: "apple-thunder" },
-  96: { label: "Orages avec pluie",      icon: "apple-thunder",            night: "apple-thunder" },
-  99: { label: "Orages violents",        icon: "apple-thunder",            night: "apple-thunder" }
+  95: { label: "Orages",                 icon: "apple-thunder",           night: "apple-thunder" },
+  96: { label: "Orages avec pluie",      icon: "apple-thunder",           night: "apple-thunder" },
+  99: { label: "Orages violents",        icon: "apple-thunder",           night: "apple-thunder" }
 };
 
-const state = { city: null, unit: "C", lastWeather: null, lastRefreshMs: 0, favorites: [], requestId: 0, currentFetchController: null };
+// State
+const state = {
+  city: null,
+  unit: "C",
+  lastWeather: null,
+  lastRefreshMs: 0,
+  favorites: [],
+  requestId: 0,
+  currentFetchController: null
+};
+
 const $ = id => document.getElementById(id);
 const FETCH_TIMEOUT_MS = 8000;
+
 async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -47,6 +58,9 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS)
     if (externalSignal.aborted) controller.abort();
     else externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
   }
-  try { return await fetch(url, { ...options, signal: controller.signal }); }
-  finally { clearTimeout(timer); }
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
