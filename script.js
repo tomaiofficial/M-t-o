@@ -656,26 +656,28 @@ function renderHourly(h) {
     const humidity = h.relative_humidity_2m ? h.relative_humidity_2m[i] : null;
     const precipMm = h.precipitation ? h.precipitation[i] : null;
 
-    // Fire risk (FWI simplifie)
+    // Fire risk (FWI simplifie) — badge dans l'icone comme avant
     const fireScore = computeFireRisk(temp, humidity, wind, precipMm, pop);
     const fire = fireRiskClass(fireScore);
     const fireBadge = fire.class !== "fire-hidden"
       ? `<span class="hour-fire ${fire.class}" title="Risque incendie météo (score ${fireScore}/30)">${fire.emoji}</span>`
       : "";
 
-    const popDisplay = pop != null && pop >= 5 ? `<span class="hour-pop">${Math.round(pop / 5) * 5}%</span>` : "";
+    const popRounded = pop != null ? Math.round(pop / 5) * 5 : 0;
+    const popVisible = pop != null && pop >= 5;
+    const popClass = popVisible ? (popRounded >= 60 ? "heavy" : popRounded >= 30 ? "medium" : "") : "empty";
 
+    // Structure attendue par le CSS : .hour enfant direct de #hourly (flex horizontal)
     cells.push(`
-      <div class="hour-cell">
+      <div class="hour">
         <div class="hour-time">${getHourLabel(t)}</div>
-        <div class="hour-icon">${getWeatherIcon(code, 22)}</div>
+        <div class="hour-icon">${getWeatherIcon(code, 22)}${fireBadge}</div>
+        <div class="hour-pop ${popClass}">${popVisible ? `${popRounded}%` : "0%"}</div>
         <div class="hour-temp">${fmtTemp(temp)}</div>
-        ${fireBadge}
-        ${popDisplay}
       </div>
     `);
   }
-  el.innerHTML = `<div class="hour-row">${cells.join("")}</div>`;
+  el.innerHTML = cells.join("");
 }
 
 // ============= RENDER: daily 10 jours =============
@@ -686,6 +688,14 @@ function renderDaily(d, h) {
     el.innerHTML = "<p style='opacity:0.5;text-align:center;padding:20px'>Données 10 jours indisponibles</p>";
     return;
   }
+
+  // Bornes globales pour la barre de temperature (style Apple Weather)
+  let weekMin = Infinity, weekMax = -Infinity;
+  for (let i = 0; i < Math.min(d.time.length, 10); i++) {
+    if (d.temperature_2m_min && d.temperature_2m_min[i] != null) weekMin = Math.min(weekMin, d.temperature_2m_min[i]);
+    if (d.temperature_2m_max && d.temperature_2m_max[i] != null) weekMax = Math.max(weekMax, d.temperature_2m_max[i]);
+  }
+  const weekRange = Math.max(1, weekMax - weekMin);
 
   const rows = [];
   for (let i = 0; i < Math.min(d.time.length, 10); i++) {
@@ -698,6 +708,14 @@ function renderDaily(d, h) {
     const popDisplay = pop != null && pop >= 5 ? `${popRounded}%` : "";
     const popClass = pop != null && pop >= 5 ? "" : "empty";
 
+    // Barre de plage de temperature : position + largeur en % de la semaine
+    let barHtml = `<div class="day-bar"><div class="fill" style="left:0%;width:100%"></div></div>`;
+    if (tmin != null && tmax != null && isFinite(weekMin)) {
+      const left = ((tmin - weekMin) / weekRange) * 100;
+      const width = Math.max(4, ((tmax - tmin) / weekRange) * 100);
+      barHtml = `<div class="day-bar"><div class="fill" style="left:${left.toFixed(1)}%;width:${width.toFixed(1)}%"></div></div>`;
+    }
+
     rows.push(`
       <div class="day" data-day-idx="${i}">
         <div class="day-name">${getDayName(d.time[i])}</div>
@@ -706,6 +724,7 @@ function renderDaily(d, h) {
           <div class="day-pop ${popClass}">${popDisplay}</div>
         </div>
         <div class="day-low">${fmtTemp(tmin)}</div>
+        ${barHtml}
         <div class="day-high">${fmtTemp(tmax)}</div>
       </div>
     `);
@@ -930,18 +949,19 @@ function openDayDetail(idx) {
     const fireBadge = fire.class !== "fire-hidden"
       ? `<span class="hour-fire ${fire.class}" title="Risque incendie (score ${fireScore}/30)">${fire.emoji}</span>`
       : "";
-    const popBadge = hourPop != null && hourPop >= 5 ? `<span class="hour-pop">${Math.round(hourPop / 5) * 5}%</span>` : "";
+    const popRounded = hourPop != null ? Math.round(hourPop / 5) * 5 : 0;
+    const popVisible = hourPop != null && hourPop >= 5;
+    // Structure attendue par le CSS : .day-detail-hour-row (grid vertical)
     cells.push(`
-      <div class="hour-cell">
-        <div class="hour-time">${getHourLabel(h.time[i])}</div>
-        <div class="hour-icon">${getWeatherIcon(hourCode, 22)}</div>
-        <div class="hour-temp">${fmtTemp(hourTemp)}</div>
-        ${fireBadge}
-        ${popBadge}
+      <div class="day-detail-hour-row">
+        <span class="ddh-time">${getHourLabel(h.time[i])}</span>
+        <span class="ddh-icon">${getWeatherIcon(hourCode, 20)}${fireBadge}</span>
+        <span class="ddh-temp">${fmtTemp(hourTemp)}</span>
+        <span class="ddh-pop ${popVisible ? "" : "empty"}">${popVisible ? `${popRounded}%` : "0%"}</span>
       </div>
     `);
   }
-  $("dayDetailHourly").innerHTML = `<div class="hour-row">${cells.join("")}</div>`;
+  $("dayDetailHourly").innerHTML = cells.join("");
 
   $("dayDetailPanel").classList.add("open");
 }
