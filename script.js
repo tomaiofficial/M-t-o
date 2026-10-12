@@ -404,7 +404,15 @@ function openMeteoToInternal(json) {
   const h = json.hourly || {};
   const d = json.daily || {};
 
-  const nowMs = Date.now();
+  // "Maintenant" vu depuis le fuseau de la VILLE (timezone=auto).
+  // Les heures ISO d'Open-Meteo ("2026-10-12T08:00") sont en heure locale
+  // de la ville et sont parsees par JS comme heure locale de l'appareil.
+  // Pour comparer correctement il faut donc le "maintenant" en heure de
+  // la ville, sinon decalage quand la ville est dans un autre fuseau.
+  const utcOffsetSec = typeof json.utc_offset_seconds === "number" ? json.utc_offset_seconds : null;
+  const nowMs = utcOffsetSec != null
+    ? Date.now() + utcOffsetSec * 1000 + new Date().getTimezoneOffset() * 60000
+    : Date.now();
   let startIdx = 0;
   if (Array.isArray(h.time) && h.time.length) {
     for (let i = 0; i < h.time.length; i++) {
@@ -417,6 +425,7 @@ function openMeteoToInternal(json) {
 
   const hourly = {
     time: h.time || [],
+    utcOffsetSeconds: utcOffsetSec,
     temperature_2m: h.temperature_2m || [],
     apparent_temperature: h.apparent_temperature || [],
     precipitation_probability: h.precipitation_probability || [],
@@ -831,8 +840,18 @@ function renderHourly(h, d, c) {
     return;
   }
 
-  const nowMs = Date.now();
-  const startIdx = h.time.findIndex((t) => new Date(t).getTime() >= nowMs - 30 * 60 * 1000);
+  // "Maintenant" dans le fuseau de la ville (les heures ISO sont en heure
+  // locale de la ville, parsees comme heure locale de l'appareil)
+  const nowMs = h.utcOffsetSeconds != null
+    ? Date.now() + h.utcOffsetSeconds * 1000 + new Date().getTimezoneOffset() * 60000
+    : Date.now();
+  // Positionne "Maint" EXACTEMENT sur l'heure courante : le creneau [H:00, H+1:00)
+  // qui contient maintenant. L'ancien code (buffer 30 min) faisait sauter
+  // "Maint" sur l'heure SUIVANTE passe 30 min -> decalage d'une heure.
+  const startIdx = h.time.findIndex((t) => {
+    const ms = new Date(t).getTime();
+    return !isNaN(ms) && ms + 3600000 > nowMs;
+  });
   const fromIdx = Math.max(0, startIdx);
   const toIdx = Math.min(h.time.length, fromIdx + 24);
 
@@ -1123,7 +1142,11 @@ function openDayDetail(idx) {
   if (d.sunset[idx]) setText("dayDetailSunSub", getTimeLabel(d.sunset[idx]));
 
   // Hourly breakdown (24h du jour)
-  const dayStart = new Date(d.time[idx]).getTime();
+  // ATTENTION : d.time[idx] = "2026-10-12" (date seule) -> parse en minuit UTC
+  // par JS, alors que les heures hourly sont en heure locale -> decalage 2h
+  // (la journee commencait a 02h et finissait a 01h le lendemain).
+  // On force le parsing en minuit LOCAL avec "T00:00".
+  const dayStart = new Date(d.time[idx] + "T00:00").getTime();
   const dayEnd = dayStart + 86400000;
   const cells = [];
   for (let i = 0; i < h.time.length; i++) {
@@ -1520,6 +1543,22 @@ function startAutomaticGeolocation() {
     await loadWeather();
   } else if (hasState) {
     await loadWeather();
+
+    // Geoloc IP des le debut : si la ville sauvegardee est loin de la
+    // position IP (> ~50 km), on bascule dessus sans attendre le GPS.
+    if (window.GeoIpModule && state.city) {
+      window.GeoIpModule.tryIpGeolocation().then((ipLoc) => {
+        if (!ipLoc || !state.city) return;
+        const dLat = Math.abs(state.city.lat - ipLoc.lat);
+        const dLon = Math.abs(state.city.lon - ipLoc.lon);
+        if (dLat > 0.5 || dLon > 0.5) {
+          console.log("[Init] Ville sauvegardee loin de l'IP, upgrade:", ipLoc.city);
+          state.city = { name: ipLoc.city, lat: ipLoc.lat, lon: ipLoc.lon };
+          saveState();
+          loadWeather();
+        }
+      }).catch(() => {});
+    }
   } else {
     // Première visite : Paris d'abord, IP/GPS en arrière-plan
     state.city = { name: "Paris", lat: 48.8566, lon: 2.3522 };
@@ -1556,7 +1595,7 @@ function startAutomaticGeolocation() {
   // GPS en arrière-plan
   setTimeout(() => {
     try { startAutomaticGeolocation(); } catch (e) { console.warn(e); }
-  }, 2500);
+  }, 1000);
 
   // Auto-refresh 60s
   setInterval(tickLive, 60 * 1000);
