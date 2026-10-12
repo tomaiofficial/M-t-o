@@ -461,7 +461,6 @@ function getHourLabel(timeStr) {
   const d = new Date(timeStr);
   const h = d.getHours();
   if (h === 0) return "Minuit";
-  if (h === 12) return "Midi";
   return `${h}h`;
 }
 
@@ -693,20 +692,10 @@ function renderHourly(h, d) {
     const temp = h.temperature_2m ? h.temperature_2m[i] : null;
     const code = h.weather_code ? h.weather_code[i] : null;
     const pop = h.precipitation_probability ? h.precipitation_probability[i] : null;
-    const wind = h.wind_speed_10m ? h.wind_speed_10m[i] : null;
-    const humidity = h.relative_humidity_2m ? h.relative_humidity_2m[i] : null;
-    const precipMm = h.precipitation ? h.precipitation[i] : null;
     // Jour/nuit synchronise avec sunrise/sunset -> meme icone que la meteo en haut
     const isNight = !isHourDay(t, d);
-    // Premiere cellule = heure courante -> "Mtn"
-    const timeLabel = i === fromIdx ? "Mtn" : getHourLabel(t);
-
-    // Fire risk (FWI simplifie) — badge dans l'icone comme avant
-    const fireScore = computeFireRisk(temp, humidity, wind, precipMm, pop);
-    const fire = fireRiskClass(fireScore);
-    const fireBadge = fire.class !== "fire-hidden"
-      ? `<span class="hour-fire ${fire.class}" title="Risque incendie météo (score ${fireScore}/30)">${fire.emoji}</span>`
-      : "";
+    // Premiere cellule = heure courante -> "Maint"
+    const timeLabel = i === fromIdx ? "Maint" : getHourLabel(t);
 
     const popRounded = pop != null ? Math.round(pop / 5) * 5 : 0;
     const popVisible = pop != null && pop >= 5;
@@ -716,7 +705,7 @@ function renderHourly(h, d) {
     cells.push(`
       <div class="hour">
         <div class="hour-time">${timeLabel}</div>
-        <div class="hour-icon">${getWeatherIcon(code, 22, isNight)}${fireBadge}</div>
+        <div class="hour-icon">${getWeatherIcon(code, 22, isNight)}</div>
         <div class="hour-pop ${popClass}">${popVisible ? `${popRounded}%` : "0%"}</div>
         <div class="hour-temp">${fmtTemp(temp)}</div>
       </div>
@@ -986,21 +975,13 @@ function openDayDetail(idx) {
     const hourPop = h.precipitation_probability ? h.precipitation_probability[i] : null;
     const hourTemp = h.temperature_2m ? h.temperature_2m[i] : null;
     const hourCode = h.weather_code ? h.weather_code[i] : null;
-    const hourWind = h.wind_speed_10m ? h.wind_speed_10m[i] : null;
-    const hourHumidity = h.relative_humidity_2m ? h.relative_humidity_2m[i] : null;
-    const hourPrecip = h.precipitation ? h.precipitation[i] : null;
-    const fireScore = computeFireRisk(hourTemp, hourHumidity, hourWind, hourPrecip, hourPop);
-    const fire = fireRiskClass(fireScore);
-    const fireBadge = fire.class !== "fire-hidden"
-      ? `<span class="hour-fire ${fire.class}" title="Risque incendie (score ${fireScore}/30)">${fire.emoji}</span>`
-      : "";
     const popRounded = hourPop != null ? Math.round(hourPop / 5) * 5 : 0;
     const popVisible = hourPop != null && hourPop >= 5;
     // Structure attendue par le CSS : .day-detail-hour-row (grid vertical)
     cells.push(`
       <div class="day-detail-hour-row">
         <span class="ddh-time">${getHourLabel(h.time[i])}</span>
-        <span class="ddh-icon">${getWeatherIcon(hourCode, 20, !isHourDay(h.time[i], d))}${fireBadge}</span>
+        <span class="ddh-icon">${getWeatherIcon(hourCode, 20, !isHourDay(h.time[i], d))}</span>
         <span class="ddh-temp">${fmtTemp(hourTemp)}</span>
         <span class="ddh-pop ${popVisible ? "" : "empty"}">${popVisible ? `${popRounded}%` : "0%"}</span>
       </div>
