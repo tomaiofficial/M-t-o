@@ -88,6 +88,153 @@ function fireRiskClass(score) {
   return { class: "extreme", emoji: "🔥" };
 }
 
+// ============= ARRIERE-PLAN DYNAMIQUE (particules canvas) =============
+// Pluie / neige / etoiles scintillantes selon les conditions meteo.
+// Restaure le systeme d'origine : canvas #bgCanvas au-dessus du gradient CSS.
+let particles = [];
+let particleType = "none";
+let particleRAF = null;
+
+function resizeCanvas() {
+  const bgCanvas = $("bgCanvas");
+  if (!bgCanvas) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  bgCanvas.width = window.innerWidth * dpr;
+  bgCanvas.height = window.innerHeight * dpr;
+  bgCanvas.style.width = window.innerWidth + "px";
+  bgCanvas.style.height = window.innerHeight + "px";
+  const ctx = bgCanvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function initParticles(type) {
+  particles = [];
+  particleType = type;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+
+  if (type === "rain") {
+    const count = Math.min(250, Math.floor(w / 4));
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        len: 12 + Math.random() * 18,
+        speed: 10 + Math.random() * 10,
+        opacity: 0.2 + Math.random() * 0.4,
+        windX: -1.5
+      });
+    }
+  } else if (type === "snow") {
+    const count = Math.min(180, Math.floor(w / 5));
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        r: 1 + Math.random() * 3,
+        speed: 0.4 + Math.random() * 1.2,
+        drift: (Math.random() - 0.5) * 1.5,
+        opacity: 0.4 + Math.random() * 0.5,
+        phase: Math.random() * Math.PI * 2
+      });
+    }
+  } else if (type === "stars") {
+    const count = Math.min(120, Math.floor(w / 6));
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * w,
+        y: Math.random() * h * 0.65,
+        r: 0.5 + Math.random() * 1.5,
+        twinkle: Math.random() * Math.PI * 2,
+        speed: 0.015 + Math.random() * 0.025,
+        baseAlpha: 0.3 + Math.random() * 0.5
+      });
+    }
+  }
+}
+
+function animateParticles() {
+  const bgCanvas = $("bgCanvas");
+  if (!bgCanvas) return;
+  const ctx = bgCanvas.getContext("2d");
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  ctx.clearRect(0, 0, w, h);
+
+  if (particleType === "rain") {
+    ctx.lineWidth = 1.2;
+    for (const p of particles) {
+      ctx.strokeStyle = `rgba(180,210,240,${p.opacity})`;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x + p.windX * 2, p.y + p.len);
+      ctx.stroke();
+      p.y += p.speed;
+      p.x += p.windX;
+      if (p.y > h) { p.y = -p.len; p.x = Math.random() * w; }
+      if (p.x < -20) p.x = w + 20;
+    }
+  } else if (particleType === "snow") {
+    for (const p of particles) {
+      ctx.fillStyle = `rgba(255,255,255,${p.opacity})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+      p.y += p.speed;
+      p.phase += 0.02;
+      p.x += Math.sin(p.phase) * p.drift;
+      if (p.y > h) { p.y = -p.r; p.x = Math.random() * w; }
+      if (p.x < -10) p.x = w + 10;
+      if (p.x > w + 10) p.x = -10;
+    }
+  } else if (particleType === "stars") {
+    for (const p of particles) {
+      p.twinkle += p.speed;
+      const alpha = p.baseAlpha + Math.sin(p.twinkle) * 0.3;
+      ctx.fillStyle = `rgba(255,255,255,${Math.max(0.1, alpha)})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+      if (p.r > 1.2) {
+        ctx.fillStyle = `rgba(200,210,240,${Math.max(0.05, alpha * 0.3)})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  particleRAF = requestAnimationFrame(animateParticles);
+}
+
+function setParticleType(type) {
+  if (type === particleType) return;
+  if (particleRAF) { cancelAnimationFrame(particleRAF); particleRAF = null; }
+  const bgCanvas = $("bgCanvas");
+  if (bgCanvas) {
+    const ctx = bgCanvas.getContext("2d");
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+  }
+  if (type === "none") { particles = []; particleType = "none"; return; }
+  initParticles(type);
+  animateParticles();
+}
+
+// Choisit les particules selon le code meteo + jour/nuit
+function updateBackgroundParticles(code, isNight) {
+  if ([95, 96, 99].includes(code)) {
+    setParticleType("rain"); // Orage = pluie forte
+  } else if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)) {
+    setParticleType("rain");
+  } else if ([71, 73, 75, 77, 85, 86].includes(code)) {
+    setParticleType("snow");
+  } else if (isNight && [0, 1, 2].includes(code)) {
+    setParticleType("stars");
+  } else {
+    setParticleType("none");
+  }
+}
+
 // ============= WMO CODES + ICONS (SVG inline) =============
 const WMO = {
   0:  { label: "Ciel dégagé",            icon: "apple-clear-day",         night: "apple-clear-night" },
@@ -507,6 +654,9 @@ function setTheme(c, d) {
     if (c.temperature_2m >= 30) document.body.classList.add("theme-hot");
     else if (c.temperature_2m <= 5) document.body.classList.add("theme-cold");
   }
+
+  // Particules canvas (pluie / neige / etoiles) selon conditions
+  updateBackgroundParticles(c.weather_code, !isDaytime(c));
 }
 
 function getDayName(dateStr, offset = 0) {
@@ -573,7 +723,7 @@ function renderCity(data) {
   renderDescription(c, d, h);
 
   // Hourly 24h
-  renderHourly(h, d);
+  renderHourly(h, d, c);
 
   // Daily 10 jours
   renderDaily(d, h);
@@ -673,7 +823,7 @@ function renderDescription(c, d, h) {
 }
 
 // ============= RENDER: hourly 24h =============
-function renderHourly(h, d) {
+function renderHourly(h, d, c) {
   const el = $("hourly");
   if (!el) return;
   if (!h.time || !h.time.length) {
@@ -689,13 +839,20 @@ function renderHourly(h, d) {
   const cells = [];
   for (let i = fromIdx; i < toIdx; i++) {
     const t = h.time[i];
-    const temp = h.temperature_2m ? h.temperature_2m[i] : null;
-    const code = h.weather_code ? h.weather_code[i] : null;
+    const isNow = i === fromIdx;
+    // Premiere cellule ("Maint") = temperature et icone ACTUELLES,
+    // synchronisees avec la meteo affichee en haut (sinon 14 vs 13)
+    let temp = h.temperature_2m ? h.temperature_2m[i] : null;
+    let code = h.weather_code ? h.weather_code[i] : null;
+    if (isNow && c) {
+      if (c.temperature_2m != null) temp = c.temperature_2m;
+      if (c.weather_code != null) code = c.weather_code;
+    }
     const pop = h.precipitation_probability ? h.precipitation_probability[i] : null;
     // Jour/nuit synchronise avec sunrise/sunset -> meme icone que la meteo en haut
-    const isNight = !isHourDay(t, d);
+    const isNight = isNow && c ? !isDaytime(c) : !isHourDay(t, d);
     // Premiere cellule = heure courante -> "Maint"
-    const timeLabel = i === fromIdx ? "Maint" : getHourLabel(t);
+    const timeLabel = isNow ? "Maint" : getHourLabel(t);
 
     const popRounded = pop != null ? Math.round(pop / 5) * 5 : 0;
     const popVisible = pop != null && pop >= 5;
@@ -1026,6 +1183,23 @@ function setupSearch() {
       return;
     }
     searchDebounce = setTimeout(() => doSearch(q), 300);
+  });
+
+  // Touche Entree : selectionne le premier resultat directement
+  input && input.addEventListener("keydown", async (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    // Si des resultats sont deja la, cliquer le premier
+    let first = results.querySelector(".search-result .sr-info");
+    if (!first) {
+      // Sinon lancer la recherche immediatement (sans attendre le debounce)
+      const q = input.value.trim();
+      if (q.length < 2) return;
+      clearTimeout(searchDebounce);
+      await doSearch(q);
+      first = results.querySelector(".search-result .sr-info");
+    }
+    if (first) first.click();
   });
 }
 
@@ -1365,6 +1539,13 @@ function startAutomaticGeolocation() {
   }
 
   document.body.classList.remove("loading");
+
+  // Canvas background : taille initiale + resize
+  resizeCanvas();
+  window.addEventListener("resize", () => {
+    resizeCanvas();
+    if (particleType !== "none") initParticles(particleType);
+  });
 
   // Setup UI
   setupSearch();
