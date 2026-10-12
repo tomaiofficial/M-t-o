@@ -90,29 +90,34 @@ function fireRiskClass(score) {
 
 // ============= WMO CODES + ICONS (SVG inline) =============
 const WMO = {
-  0:  { label: "Ciel dégagé", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="5"/><g stroke-linecap="round"><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></g></svg>` },
-  1:  { label: "Plutôt ensoleillé", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="4"/><g stroke-linecap="round"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4l1.4-1.4M17 7l1.4-1.4"/></g></svg>` },
-  2:  { label: "Partiellement nuageux", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="9" r="3"/><path d="M9 2v1M3 9h1M14 5l-1 1M4 4l1 1"/><path d="M7 16a4 4 0 0 1 4-4 5 5 0 0 1 9.6 1.5A4 4 0 1 1 21 19H8a4 4 0 0 1-1-7.9" stroke-linejoin="round"/></svg>` },
-  3:  { label: "Ciel couvert", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M7 18a5 5 0 0 1-1-9.9 6 6 0 0 1 11.7 1.5A4.5 4.5 0 1 1 18 18H7z"/></svg>` },
-  45: { label: "Brouillard", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 9h16M4 13h16M4 17h12M7 5h10"/></svg>` },
-  48: { label: "Brouillard givrant", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 9h16M4 13h16M4 17h12M7 5h10M12 3v1M12 19v1"/></svg>` },
-  51: { label: "Bruine", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M7 14a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 18H7a4 4 0 0 1 0-4"/><path d="M9 19l-1 2M13 19l-1 2M17 19l-1 2"/></svg>` },
-  53: { label: "Bruine", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M7 14a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 18H7a4 4 0 0 1 0-4"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/></svg>` },
-  55: { label: "Bruine dense", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M7 14a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 18H7a4 4 0 0 1 0-4"/><path d="M8 19l-1 2M11 19l-1 2M14 19l-1 2M17 19l-1 2"/></svg>` },
-  61: { label: "Pluie faible", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 17H7a4 4 0 0 1 0-4"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/></svg>` },
-  63: { label: "Pluie", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 17H7a4 4 0 0 1 0-4"/><path d="M8 19l-1 2M11 19l-1 2M14 19l-1 2M17 19l-1 2"/></svg>` },
-  65: { label: "Fortes pluies", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 17H7a4 4 0 0 1 0-4"/><path d="M7 19l-1 2M10 19l-1 2M13 19l-1 2M16 19l-1 2"/></svg>` },
-  71: { label: "Neige faible", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M7 13a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 17H7a4 4 0 0 1 0-4"/><g stroke-linecap="round"><path d="M9 19v3M12 19v3M7 21h10"/></g></svg>` },
-  73: { label: "Neige", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M7 13a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 17H7a4 4 0 0 1 0-4"/><g stroke-linecap="round"><path d="M8 20l.5.5M11 20l.5.5M14 20l.5.5M9 22l.5-.5M12 22l.5-.5"/></g></svg>` },
-  75: { label: "Fortes chutes de neige", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M7 13a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 17H7a4 4 0 0 1 0-4"/><g stroke-linecap="round"><path d="M7 19l1 1M10 19l1 1M13 19l1 1M16 19l1 1M8 21l1-1M11 21l1-1M14 21l1-1"/></g></svg>` },
-  80: { label: "Averses", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 17H7a4 4 0 0 1 0-4"/><path d="M8 19l-1 2M11 19l-1 2M14 19l-1 2"/></svg>` },
-  81: { label: "Averses", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 17H7a4 4 0 0 1 0-4"/><path d="M8 19l-1 2M11 19l-1 2M14 19l-1 2M17 19l-1 2"/></svg>` },
-  82: { label: "Violentes averses", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 17H7a4 4 0 0 1 0-4"/><path d="M7 19l-1 2M10 19l-1 2M13 19l-1 2M16 19l-1 2"/></svg>` },
-  85: { label: "Averses de neige", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M7 13a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 17H7a4 4 0 0 1 0-4"/><g stroke-linecap="round"><path d="M8 19v3M12 19v3M16 19v3"/></g></svg>` },
-  86: { label: "Averses de neige", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M7 13a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 17H7a4 4 0 0 1 0-4"/><g stroke-linecap="round"><path d="M8 19v3M11 19v3M14 19v3"/></g></svg>` },
-  95: { label: "Orages", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 17h-2"/><path d="M13 17l-2 4h3l-2 4"/></svg>` },
-  96: { label: "Orages avec pluie", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 17h-2"/><path d="M13 17l-2 4h3l-2 4"/><path d="M8 19l-1 2M11 19l-1 2"/></svg>` },
-  99: { label: "Orages violents", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13a4 4 0 0 1-1-7.9 5 5 0 0 1 9.6 1.4A4 4 0 1 1 16 17h-2"/><path d="M13 17l-2 4h3l-2 4"/><path d="M7 19l-1 2M10 19l-1 2M13 19l-1 2"/></svg>` }
+  0:  { label: "Ciel dégagé",            icon: "apple-clear-day",         night: "apple-clear-night" },
+  1:  { label: "Plutôt ensoleillé",      icon: "apple-clear-day",         night: "apple-clear-night" },
+  2:  { label: "Partiellement nuageux",  icon: "apple-partly-cloudy-day", night: "apple-partly-cloudy-night" },
+  3:  { label: "Ciel couvert",           icon: "apple-cloudy",            night: "apple-cloudy" },
+  45: { label: "Brouillard",             icon: "apple-fog",               night: "apple-fog" },
+  48: { label: "Brouillard givrant",     icon: "apple-fog",               night: "apple-fog" },
+  51: { label: "Bruine",                 icon: "apple-drizzle",           night: "apple-drizzle" },
+  53: { label: "Bruine",                 icon: "apple-drizzle",           night: "apple-drizzle" },
+  55: { label: "Bruine dense",           icon: "apple-drizzle",           night: "apple-drizzle" },
+  56: { label: "Bruine verglaçante",     icon: "apple-icy",               night: "apple-icy" },
+  57: { label: "Bruine verglaçante",     icon: "apple-icy",               night: "apple-icy" },
+  61: { label: "Pluie faible",           icon: "apple-rain",              night: "apple-rain" },
+  63: { label: "Pluie",                  icon: "apple-rain",              night: "apple-rain" },
+  65: { label: "Fortes pluies",          icon: "apple-heavy-rain",        night: "apple-heavy-rain" },
+  66: { label: "Pluie verglaçante",      icon: "apple-icy",               night: "apple-icy" },
+  67: { label: "Verglas",                icon: "apple-icy",               night: "apple-icy" },
+  71: { label: "Neige faible",           icon: "apple-snow",              night: "apple-snow" },
+  73: { label: "Neige",                  icon: "apple-snow",              night: "apple-snow" },
+  75: { label: "Fortes chutes de neige", icon: "apple-snow",              night: "apple-snow" },
+  77: { label: "Grains de neige",        icon: "apple-snow",              night: "apple-snow" },
+  80: { label: "Averses",                icon: "apple-rain",              night: "apple-rain" },
+  81: { label: "Averses",                icon: "apple-rain",              night: "apple-rain" },
+  82: { label: "Violentes averses",      icon: "apple-heavy-rain",        night: "apple-heavy-rain" },
+  85: { label: "Averses de neige",       icon: "apple-snow",              night: "apple-snow" },
+  86: { label: "Averses de neige",       icon: "apple-snow",              night: "apple-snow" },
+  95: { label: "Orages",                 icon: "apple-thunder",           night: "apple-thunder" },
+  96: { label: "Orages avec pluie",      icon: "apple-thunder",           night: "apple-thunder" },
+  99: { label: "Orages violents",        icon: "apple-thunder",           night: "apple-thunder" }
 };
 
 // ============= STATE =============
@@ -401,10 +406,47 @@ function getCurrentCondition(c) {
   return (WMO[c.weather_code] || { label: "Conditions variables" }).label;
 }
 
-function getWeatherIcon(code, size = 28) {
-  const wmo = WMO[code];
-  if (!wmo) return "";
-  return `<div class="weather-icon" style="width:${size}px;height:${size}px;">${wmo.icon}</div>`;
+function wmoInfo(code, isNight) {
+  const c = WMO[code] || { label: "—", icon: "apple-cloudy" };
+  return { label: c.label, icon: isNight && c.night ? c.night : c.icon };
+}
+
+// Icone Apple haute qualite : reference le sprite SVG dans index.html
+function getWeatherIcon(code, size = 28, isNight = false) {
+  const info = wmoInfo(code, isNight);
+  return `<svg class="wicon" width="${size}" height="${size}" viewBox="0 0 48 48" aria-hidden="true"><use href="#${info.icon}"/></svg>`;
+}
+
+// Jour/nuit timezone-safe pour une heure ISO ("2026-10-12T14:00")
+// Compare en STRING avec les sunrise/sunset du bon jour -> synchronise
+// avec la meteo affichee en haut (soleil la jour, lune la nuit)
+function isHourDay(isoTime, daily) {
+  if (!isoTime || typeof isoTime !== "string") return true;
+  if (!daily || !daily.sunrise || !daily.sunset || daily.sunrise.length === 0) {
+    const m = isoTime.match(/T(\d{2})/);
+    const h = m ? parseInt(m[1], 10) : 12;
+    return h >= 6 && h < 21;
+  }
+  const dateMatch = isoTime.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/);
+  if (!dateMatch) {
+    const h = parseInt((isoTime.match(/T(\d{2})/) || [])[1], 10);
+    return h >= 6 && h < 21;
+  }
+  const dateStr = dateMatch[1];
+  const hm = dateMatch[2];
+  let dayIndex = -1;
+  for (let i = 0; i < daily.sunrise.length; i++) {
+    const sDate = daily.sunrise[i] ? daily.sunrise[i].substring(0, 10) : null;
+    if (sDate === dateStr) { dayIndex = i; break; }
+  }
+  if (dayIndex < 0) dayIndex = daily.sunrise.length - 1;
+  const sunriseHm = (daily.sunrise[dayIndex] || "").substring(11, 16);
+  const sunsetHm = (daily.sunset[dayIndex] || "").substring(11, 16);
+  if (!sunriseHm || !sunsetHm) {
+    const h = parseInt(hm.split(":")[0], 10);
+    return h >= 6 && h < 21;
+  }
+  return hm >= sunriseHm && hm < sunsetHm;
 }
 
 function isDaytime(c) {
@@ -532,7 +574,7 @@ function renderCity(data) {
   renderDescription(c, d, h);
 
   // Hourly 24h
-  renderHourly(h);
+  renderHourly(h, d);
 
   // Daily 10 jours
   renderDaily(d, h);
@@ -632,7 +674,7 @@ function renderDescription(c, d, h) {
 }
 
 // ============= RENDER: hourly 24h =============
-function renderHourly(h) {
+function renderHourly(h, d) {
   const el = $("hourly");
   if (!el) return;
   if (!h.time || !h.time.length) {
@@ -651,10 +693,13 @@ function renderHourly(h) {
     const temp = h.temperature_2m ? h.temperature_2m[i] : null;
     const code = h.weather_code ? h.weather_code[i] : null;
     const pop = h.precipitation_probability ? h.precipitation_probability[i] : null;
-    const isDay = h.is_day ? h.is_day[i] : 1;
     const wind = h.wind_speed_10m ? h.wind_speed_10m[i] : null;
     const humidity = h.relative_humidity_2m ? h.relative_humidity_2m[i] : null;
     const precipMm = h.precipitation ? h.precipitation[i] : null;
+    // Jour/nuit synchronise avec sunrise/sunset -> meme icone que la meteo en haut
+    const isNight = !isHourDay(t, d);
+    // Premiere cellule = heure courante -> "Mtn"
+    const timeLabel = i === fromIdx ? "Mtn" : getHourLabel(t);
 
     // Fire risk (FWI simplifie) — badge dans l'icone comme avant
     const fireScore = computeFireRisk(temp, humidity, wind, precipMm, pop);
@@ -670,8 +715,8 @@ function renderHourly(h) {
     // Structure attendue par le CSS : .hour enfant direct de #hourly (flex horizontal)
     cells.push(`
       <div class="hour">
-        <div class="hour-time">${getHourLabel(t)}</div>
-        <div class="hour-icon">${getWeatherIcon(code, 22)}${fireBadge}</div>
+        <div class="hour-time">${timeLabel}</div>
+        <div class="hour-icon">${getWeatherIcon(code, 22, isNight)}${fireBadge}</div>
         <div class="hour-pop ${popClass}">${popVisible ? `${popRounded}%` : "0%"}</div>
         <div class="hour-temp">${fmtTemp(temp)}</div>
       </div>
@@ -720,7 +765,7 @@ function renderDaily(d, h) {
       <div class="day" data-day-idx="${i}">
         <div class="day-name">${getDayName(d.time[i])}</div>
         <div class="day-icon-wrap">
-          <div class="day-icon">${getWeatherIcon(code, 24)}</div>
+          <div class="day-icon">${getWeatherIcon(code, 24, false)}</div>
           <div class="day-pop ${popClass}">${popDisplay}</div>
         </div>
         <div class="day-low">${fmtTemp(tmin)}</div>
@@ -905,7 +950,7 @@ function openDayDetail(idx) {
 
   setText("dayDetailName", getDayName(d.time[idx]));
   setText("dayDetailDate", getDateLabel(d.time[idx]));
-  $("dayDetailIcon").innerHTML = getWeatherIcon(d.weather_code[idx], 56);
+  $("dayDetailIcon").innerHTML = getWeatherIcon(d.weather_code[idx], 56, false);
   setText("dayDetailLow", fmtTemp(d.temperature_2m_min[idx]));
   setText("dayDetailHigh", fmtTemp(d.temperature_2m_max[idx]));
   setText("dayDetailCondition", getCurrentCondition({ weather_code: d.weather_code[idx] }));
@@ -955,7 +1000,7 @@ function openDayDetail(idx) {
     cells.push(`
       <div class="day-detail-hour-row">
         <span class="ddh-time">${getHourLabel(h.time[i])}</span>
-        <span class="ddh-icon">${getWeatherIcon(hourCode, 20)}${fireBadge}</span>
+        <span class="ddh-icon">${getWeatherIcon(hourCode, 20, !isHourDay(h.time[i], d))}${fireBadge}</span>
         <span class="ddh-temp">${fmtTemp(hourTemp)}</span>
         <span class="ddh-pop ${popVisible ? "" : "empty"}">${popVisible ? `${popRounded}%` : "0%"}</span>
       </div>
