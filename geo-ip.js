@@ -1,10 +1,10 @@
 // ============================================================
 //  GEO-IP — Fallback de geolocalisation par IP quand le GPS
 //  est refuse ou indisponible. Silencieux (zero UI).
-//  API : https://geo.kamero.ai (gratuit, sans cle, CORS OK)
+//  API : https://api.bigdatacloud.net/data/reverse-geocode-client (gratuit, sans cle, CORS OK)
 // ============================================================
 
-const GEO_IP_API = "https://geo.kamero.ai/api/geo";
+const GEO_IP_API = "https://api.bigdatacloud.net/data/reverse-geocode-client";
 const GEO_IP_TIMEOUT_MS = 4000; // 4s max, on ne veut pas bloquer l'app
 const GEO_IP_CACHE_TTL_MS = 24 * 3600 * 1000; // 24h cache (l'IP ne change pas souvent)
 const GEO_IP_CACHE_KEY = "meteo_geoip_cache_v1";
@@ -87,10 +87,10 @@ async function tryIpGeolocation(force = false) {
       const result = {
         lat: lat,
         lon: lon,
-        city: data.city || data.region || "Position detectee",
-        country: data.country || "",
-        region: data.region || data.countryRegion || "",
-        timezone: data.timezone || "",
+        city: data.city || data.locality || data.principalSubdivision || "Position detectee",
+        country: data.countryName || "",
+        region: data.principalSubdivision || "",
+        timezone: "",
         source: "IP"
       };
 

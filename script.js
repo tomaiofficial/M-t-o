@@ -280,7 +280,9 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 const LS_KEY = "meteo_v6";
-const FETCH_TIMEOUT_MS = 8000;
+// 12s : 8s etait trop court sur connexion lente / reveil de l'appareil
+// -> "signal is aborted without reason" au premier chargement
+const FETCH_TIMEOUT_MS = 12000;
 const CACHE_KEY_PREFIX = "meteo_cache_";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 
