@@ -1354,12 +1354,6 @@ function setupSearch() {
     overlay.classList.add("open");
     setTimeout(() => input.focus(), 100);
   }
-  function closeSearch() {
-    overlay.classList.remove("open");
-    input.value = "";
-    results.innerHTML = "";
-  }
-
   btn && btn.addEventListener("click", openSearch);
   cancel && cancel.addEventListener("click", closeSearch);
 
@@ -1389,6 +1383,16 @@ function setupSearch() {
     }
     if (first) first.click();
   });
+}
+
+// Globale : les clics de doSearch() l'appellent (ReferenceError sinon)
+function closeSearch() {
+  const overlay = $("searchOverlay");
+  const input = $("searchInput");
+  const results = $("searchResults");
+  overlay && overlay.classList.remove("open");
+  if (input) input.value = "";
+  if (results) results.innerHTML = "";
 }
 
 async function doSearch(query) {
