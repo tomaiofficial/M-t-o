@@ -542,22 +542,28 @@ function aqiLabel(aqi) {
 // ============= FETCH WEATHER (main entry) =============
 async function fetchWeather(lat, lon) {
   try {
-    const json = await callOpenMeteo(lat, lon);
-    const data = openMeteoToInternal(json);
+    // Course parallele : si Open-Meteo n'a pas repondu au bout de 8s
+    // (panne, timeout), on tente Met.no EN PARALLELE au lieu d'attendre
+    // la fin des 3 retries (~40s) -> affichage quasi immediat meme en panne.
+    let omDone = false;
+    const omPromise = callOpenMeteo(lat, lon).then((json) => {
+      omDone = true;
+      const data = openMeteoToInternal(json);
+      data._source = "Open-Meteo";
+      return data;
+    });
+    const mnPromise = new Promise((resolve, reject) => {
+      setTimeout(() => {
+        if (omDone) return reject(new Error("Open-Meteo a repondu a temps"));
+        callMetNo(lat, lon).then(resolve, reject);
+      }, 8000);
+    });
+    const data = await Promise.any([omPromise, mnPromise]);
     saveToCache(lat, lon, data);
-    return { data, source: "Open-Meteo" };
+    return { data, source: data._source || "Open-Meteo" };
   } catch (e) {
     console.warn("[Meteo] Open-Meteo failed:", e.message || e);
-    // Fallback 1 : Met.no (API norvegienne officielle, gratuite, CORS OK)
-    // -> l'app continue de marcher meme si Open-Meteo est en panne (503)
-    try {
-      const data = await callMetNo(lat, lon);
-      saveToCache(lat, lon, data);
-      return { data, source: "Met.no" };
-    } catch (e2) {
-      console.warn("[Meteo] Met.no failed:", e2.message || e2);
-    }
-    // Fallback 2 : cache local
+    // Les deux APIs ont echoue -> cache local
     const cached = loadFromCache(lat, lon);
     if (cached) {
       console.warn(`[Meteo] Fallback cache (${cached.ageMin} min)`);
@@ -585,6 +591,7 @@ async function callMetNo(lat, lon) {
   if (!res.ok) throw new Error(`Met.no HTTP ${res.status}`);
   const json = await res.json();
   const data = metNoToInternal(json);
+  data._source = "Met.no";
   metNoCache.set(key, { ts: now, data });
   return data;
 }
@@ -1247,7 +1254,8 @@ function hideRainBanner() {
 function renderSourceBadge() {
   const el = $("sourceBadge");
   if (!el) return;
-  el.textContent = `Source : Open-Meteo · ${getRelativeTime(state.lastRefreshMs)}`;
+  const src = (state.lastWeather && state.lastWeather._source) || "Open-Meteo";
+  el.textContent = `Source : ${src} · ${getRelativeTime(state.lastRefreshMs)}`;
 }
 
 // ============= DEMO MODE (test sans geoloc) =============
@@ -1435,7 +1443,7 @@ async function doSearch(query) {
         state.city = { name, lat, lon };
         saveState();
         closeSearch();
-        loadWeather();
+        loadWeather(true); // skeleton instantane : le nouveau lieu s'affiche tout de suite
       });
       const star = row.querySelector(".fav-star");
       star.addEventListener("click", (e) => {
@@ -1634,7 +1642,13 @@ function smoothTemperature(data) {
 async function loadWeather(showSkeleton = false) {
   if (!state.city) return;
   if (showSkeleton) {
-    setText("cityName", "Chargement…");
+    // Feedback instantane : nouveau nom + valeurs en attente,
+    // pour que la selection (recherche/Entree) semble immediate
+    setText("cityName", state.city.name);
+    setText("temp", "--");
+    setText("condition", "Chargement…");
+    setText("hilo", "");
+    setText("descText", "");
   }
   try {
     const { data, source } = await fetchWeather(state.city.lat, state.city.lon);
