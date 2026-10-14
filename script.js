@@ -373,9 +373,13 @@ async function fetchWithRetry(url, options = {}, retries = 3) {
     try {
       const res = await fetchWithTimeout(url, options);
       if (res.ok) return res;
+      // 429 = rate-limit : NE PAS retaper l'API (ca aggrave le blocage).
+      // On sort tout de suite, le fallback Met.no prendra le relais.
+      if (res.status === 429) throw new Error("HTTP 429");
       lastErr = new Error(`HTTP ${res.status}`);
     } catch (e) {
       lastErr = e;
+      if (e && e.message === "HTTP 429") throw e;
     }
     if (i < retries - 1) {
       const jitter = Math.random() * 500;
@@ -386,7 +390,15 @@ async function fetchWithRetry(url, options = {}, retries = 3) {
 }
 
 // ============= OPEN-METEO FETCH + TRANSFORM =============
+// Disjoncteur : apres un 429, on n'appelle plus Open-Meteo pendant 5 min.
+// Sinon chaque refresh (60s) + fastTick (20s) retape dans le rate-limit
+// et prolonge le blocage. Met.no assure le service pendant ce temps.
+let openMeteoBlockedUntil = 0;
+
 async function callOpenMeteo(lat, lon) {
+  if (Date.now() < openMeteoBlockedUntil) {
+    throw new Error("Open-Meteo rate-limite (pause 5 min)");
+  }
   const params = [
     "current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day,visibility",
     "hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,rain,showers,snowfall,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,cloud_cover,relative_humidity_2m,surface_pressure,dew_point_2m,visibility,is_day",
@@ -397,8 +409,16 @@ async function callOpenMeteo(lat, lon) {
   ].join("&");
 
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&${params}`;
-  const res = await fetchWithRetry(url);
-  return await res.json();
+  try {
+    const res = await fetchWithRetry(url);
+    return await res.json();
+  } catch (e) {
+    if (e && e.message === "HTTP 429") {
+      openMeteoBlockedUntil = Date.now() + 5 * 60 * 1000;
+      console.warn("[Meteo] 429 recu -> pause Open-Meteo 5 min, Met.no prend le relais");
+    }
+    throw e;
+  }
 }
 
 function openMeteoToInternal(json) {
@@ -552,11 +572,14 @@ async function fetchWeather(lat, lon) {
       data._source = "Open-Meteo";
       return data;
     });
+    // Delai avant de tenter Met.no en parallele : 0 si le disjoncteur
+    // 429 est actif (inutile d'attendre), sinon 8s
+    const mnDelay = Date.now() < openMeteoBlockedUntil ? 0 : 8000;
     const mnPromise = new Promise((resolve, reject) => {
       setTimeout(() => {
         if (omDone) return reject(new Error("Open-Meteo a repondu a temps"));
         callMetNo(lat, lon).then(resolve, reject);
-      }, 8000);
+      }, mnDelay);
     });
     const data = await Promise.any([omPromise, mnPromise]);
     saveToCache(lat, lon, data);
