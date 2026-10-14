@@ -505,7 +505,31 @@ function openMeteoToInternal(json) {
   const dailyBiased = applySeasonalBiasToDaily(daily);
   const hourlyBiased = applySeasonalBiasToHourly(hourly);
 
-  return { current, hourly: hourlyBiased, daily: dailyBiased };
+  return applyFreshBias({ current, hourly: hourlyBiased, daily: dailyBiased });
+}
+
+// ============= FRESH BIAS (-3°C, demande senpai) =============
+// Decalage d'affichage : l'app affiche les temperatures ~3°C plus
+// fraiches que l'API brute, partout (actuelle + heures + 10 jours +
+// ressenti). Applique a chaque fetch sur les donnees fraiches -> "ca
+// revient" automatiquement des que l'API evolue.
+const FRESH_BIAS = -3;
+function applyFreshBias(data) {
+  const shift = (v) => (typeof v === "number" ? v + FRESH_BIAS : v);
+  const shiftArr = (arr) => (Array.isArray(arr) ? arr.map(shift) : arr);
+  if (data.current) {
+    data.current.temperature_2m = shift(data.current.temperature_2m);
+    data.current.apparent_temperature = shift(data.current.apparent_temperature);
+  }
+  if (data.hourly) {
+    data.hourly.temperature_2m = shiftArr(data.hourly.temperature_2m);
+    data.hourly.apparent_temperature = shiftArr(data.hourly.apparent_temperature);
+  }
+  if (data.daily) {
+    data.daily.temperature_2m_max = shiftArr(data.daily.temperature_2m_max);
+    data.daily.temperature_2m_min = shiftArr(data.daily.temperature_2m_min);
+  }
+  return data;
 }
 
 // ============= AQI FETCH (Open-Meteo Air Quality) =============
@@ -749,7 +773,7 @@ function metNoToInternal(json) {
     dOut.wind_direction_10m_dominant.push(0);
   }
 
-  return { current, hourly: hOut, daily: dOut };
+  return applyFreshBias({ current, hourly: hOut, daily: dOut });
 }
 
 // ============= HELPERS: weather state =============
