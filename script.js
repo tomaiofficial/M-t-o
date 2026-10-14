@@ -548,6 +548,16 @@ async function fetchWeather(lat, lon) {
     return { data, source: "Open-Meteo" };
   } catch (e) {
     console.warn("[Meteo] Open-Meteo failed:", e.message || e);
+    // Fallback 1 : Met.no (API norvegienne officielle, gratuite, CORS OK)
+    // -> l'app continue de marcher meme si Open-Meteo est en panne (503)
+    try {
+      const data = await callMetNo(lat, lon);
+      saveToCache(lat, lon, data);
+      return { data, source: "Met.no" };
+    } catch (e2) {
+      console.warn("[Meteo] Met.no failed:", e2.message || e2);
+    }
+    // Fallback 2 : cache local
     const cached = loadFromCache(lat, lon);
     if (cached) {
       console.warn(`[Meteo] Fallback cache (${cached.ageMin} min)`);
@@ -557,6 +567,159 @@ async function fetchWeather(lat, lon) {
     }
     throw e;
   }
+}
+
+// ============= MET.NO (fallback quand Open-Meteo est en panne) =============
+const metNoCache = new Map();
+const MET_NO_CACHE_TTL_MS = 10 * 60 * 1000;
+
+async function callMetNo(lat, lon) {
+  const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+  const now = Date.now();
+  if (metNoCache.has(key)) {
+    const cached = metNoCache.get(key);
+    if (now - cached.ts < MET_NO_CACHE_TTL_MS) return cached.data;
+  }
+  const url = `https://api.met.no/weatherapi/locationforecast/2.0/complete?lat=${lat}&lon=${lon}&altitude=0`;
+  const res = await fetchWithRetry(url, { headers: { "Accept": "application/json" } }, 2);
+  if (!res.ok) throw new Error(`Met.no HTTP ${res.status}`);
+  const json = await res.json();
+  const data = metNoToInternal(json);
+  metNoCache.set(key, { ts: now, data });
+  return data;
+}
+
+// Codes Met.no -> codes WMO (compatibles avec le reste de l'app)
+function metNoToWmo(symbolCode) {
+  const base = String(symbolCode || "").replace(/_(day|night|polartwilight)$/, "");
+  const m = {
+    clearsky: 0, fair: 1, partlycloudy: 2, cloudy: 3, fog: 45,
+    lightrain: 61, rain: 63, heavyrain: 65,
+    lightsleet: 67, sleet: 67, heavysleet: 67,
+    lightsnow: 71, snow: 73, heavysnow: 75,
+    lightrainandthunder: 95, rainandthunder: 95, heavyrainandthunder: 96,
+    lightsnowandthunder: 95, snowandthunder: 95, heavysnowandthunder: 96,
+    lightrainshowers: 80, rainshowers: 81, heavyrainshowers: 82,
+    lightsleetshowers: 67, sleetshowers: 67, heavysleetshowers: 67,
+    lightsnowshowers: 85, snowshowers: 86, heavysnowshowers: 86
+  };
+  return m[base] != null ? m[base] : 3;
+}
+
+// Convertit la reponse Met.no vers le format interne { current, hourly, daily }
+// Les heures Met.no sont en ISO UTC ("...Z") -> parsees en absolu par JS,
+// donc pas besoin d'utcOffsetSeconds (comparaisons directes avec Date.now()).
+function metNoToInternal(json) {
+  const series = json && json.properties && json.properties.timeseries;
+  if (!series || !series.length) throw new Error("Met.no: timeseries vide");
+  const latest = series[0];
+  const cur = latest.data.instant.details || {};
+  const next1h = latest.data.next_1_hours;
+  const next6h = latest.data.next_6_hours;
+
+  const symbolCode = (next1h && next1h.summary && next1h.summary.symbol_code) ||
+                     (next6h && next6h.summary && next6h.summary.symbol_code) ||
+                     "clearsky";
+  const isDay = cur.shortwave_radiation != null ? cur.shortwave_radiation > 0 : !String(symbolCode).endsWith("_night");
+
+  const current = {
+    time: latest.time,
+    temperature_2m: cur.air_temperature,
+    apparent_temperature: cur.air_temperature,
+    relative_humidity_2m: cur.relative_humidity,
+    dew_point_2m: cur.dew_point_temperature,
+    pressure_msl: cur.air_pressure_at_sea_level,
+    surface_pressure: cur.air_pressure_at_sea_level,
+    wind_speed_10m: cur.wind_speed,
+    wind_direction_10m: cur.wind_from_direction,
+    wind_gusts_10m: cur.wind_speed_of_gust || cur.wind_speed,
+    weather_code: metNoToWmo(symbolCode),
+    is_day: isDay ? 1 : 0,
+    precipitation: (next1h && next1h.details && next1h.details.precipitation_amount) || 0,
+    rain: (next1h && next1h.details && next1h.details.precipitation_amount) || 0,
+    snowfall: 0,
+    showers: 0,
+    cloud_cover: cur.cloud_area_fraction != null ? cur.cloud_area_fraction : 50,
+    visibility: 10
+  };
+
+  // ---- HOURLY (24h) ----
+  const hOut = {
+    time: [], temperature_2m: [], apparent_temperature: [], weather_code: [],
+    precipitation_probability: [], precipitation: [], wind_speed_10m: [],
+    wind_gusts_10m: [], cloud_cover: [], relative_humidity_2m: [],
+    wind_direction_10m: [], dew_point_2m: [], visibility: []
+  };
+  for (const entry of series.slice(0, 24)) {
+    if (!entry.data.instant || !entry.data.instant.details) continue;
+    const det = entry.data.instant.details;
+    const n1 = entry.data.next_1_hours;
+    const sym = (n1 && n1.summary && n1.summary.symbol_code) || "clearsky";
+    const precipMm = (n1 && n1.details && n1.details.precipitation_amount) || 0;
+    hOut.time.push(entry.time);
+    hOut.temperature_2m.push(det.air_temperature);
+    hOut.apparent_temperature.push(det.air_temperature);
+    hOut.weather_code.push(metNoToWmo(sym));
+    hOut.precipitation_probability.push(Math.min(100, Math.round(precipMm * 25)));
+    hOut.precipitation.push(precipMm);
+    hOut.wind_speed_10m.push(det.wind_speed);
+    hOut.wind_gusts_10m.push(det.wind_speed_of_gust || det.wind_speed);
+    hOut.cloud_cover.push(det.cloud_area_fraction != null ? det.cloud_area_fraction : 50);
+    hOut.relative_humidity_2m.push(det.relative_humidity);
+    hOut.wind_direction_10m.push(det.wind_from_direction);
+    hOut.dew_point_2m.push(det.dew_point_temperature);
+    hOut.visibility.push(10);
+  }
+
+  // ---- DAILY (agrege depuis les series horaires, ~9-10 jours) ----
+  const dayMap = new Map();
+  for (const entry of series) {
+    if (!entry.data.instant || !entry.data.instant.details) continue;
+    const dateKey = entry.time.split("T")[0];
+    const det = entry.data.instant.details;
+    const n1 = entry.data.next_1_hours;
+    const sym = (n1 && n1.summary && n1.summary.symbol_code) || "clearsky";
+    if (!dayMap.has(dateKey)) {
+      dayMap.set(dateKey, { temps: [], syms: [], precip: 0, windMax: 0, gustMax: 0 });
+    }
+    const b = dayMap.get(dateKey);
+    if (det.air_temperature != null) b.temps.push(det.air_temperature);
+    b.syms.push(sym);
+    const p = (n1 && n1.details && n1.details.precipitation_amount) || 0;
+    b.precip += p;
+    if (det.wind_speed != null) b.windMax = Math.max(b.windMax, det.wind_speed);
+    if (det.wind_speed_of_gust != null) b.gustMax = Math.max(b.gustMax, det.wind_speed_of_gust);
+  }
+  const dOut = {
+    time: [], weather_code: [], temperature_2m_max: [], temperature_2m_min: [],
+    sunrise: [], sunset: [], daylight_duration: [], uv_index_max: [],
+    precipitation_sum: [], precipitation_hours: [], precipitation_probability_max: [],
+    wind_speed_10m_max: [], wind_gusts_10m_max: [], wind_direction_10m_dominant: []
+  };
+  for (const [dateKey, b] of Array.from(dayMap.entries()).slice(0, 10)) {
+    if (!b.temps.length) continue;
+    const symCounts = {};
+    b.syms.forEach((s) => { symCounts[s] = (symCounts[s] || 0) + 1; });
+    const dominant = Object.entries(symCounts).sort((a, c) => c[1] - a[1])[0][0];
+    dOut.time.push(dateKey);
+    dOut.weather_code.push(metNoToWmo(dominant));
+    dOut.temperature_2m_max.push(Math.max(...b.temps));
+    dOut.temperature_2m_min.push(Math.min(...b.temps));
+    // Pas de sunrise/sunset chez Met.no -> valeurs generiques
+    // (isHourDay les utilise en string HH:MM, suffisant pour jour/nuit)
+    dOut.sunrise.push(`${dateKey}T07:00`);
+    dOut.sunset.push(`${dateKey}T20:00`);
+    dOut.daylight_duration.push(13 * 3600);
+    dOut.uv_index_max.push(0);
+    dOut.precipitation_sum.push(Math.round(b.precip * 10) / 10);
+    dOut.precipitation_hours.push(0);
+    dOut.precipitation_probability_max.push(Math.min(100, Math.round(b.precip * 20)));
+    dOut.wind_speed_10m_max.push(b.windMax);
+    dOut.wind_gusts_10m_max.push(b.gustMax);
+    dOut.wind_direction_10m_dominant.push(0);
+  }
+
+  return { current, hourly: hOut, daily: dOut };
 }
 
 // ============= HELPERS: weather state =============
@@ -1477,8 +1640,16 @@ async function loadWeather(showSkeleton = false) {
   } catch (e) {
     console.warn("loadWeather failed:", e.message || e);
     setText("cityName", state.city.name || "Erreur");
+    // Auto-reessai dans 30s : une panne temporaire (503) ne doit pas
+    // laisser l'app vide jusqu'au prochain refresh manuel
+    clearTimeout(loadWeatherRetryTimer);
+    loadWeatherRetryTimer = setTimeout(() => {
+      console.log("[Meteo] Reessai automatique apres echec...");
+      loadWeather();
+    }, 30000);
   }
 }
+let loadWeatherRetryTimer = null;
 
 // ============= GEOLOCATION =============
 let geoWatchId = null;
