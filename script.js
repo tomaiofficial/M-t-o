@@ -811,8 +811,7 @@ function isDaytime(c) {
 function getHourLabel(timeStr) {
   const d = new Date(timeStr);
   const h = d.getHours();
-  if (h === 0) return "Minuit";
-  return `${h}h`;
+  return `${String(h).padStart(2, "0")}h`;
 }
 
 // Theme : determine le theme CSS en fonction du temps actuel
@@ -1772,39 +1771,40 @@ function startAutomaticGeolocation() {
     saveState();
     loadWeather();
   } else if (hasState) {
-    loadWeather();
-
-    // Geoloc IP des le debut : si la ville sauvegardee est loin de la
-    // position IP (> ~50 km), on bascule dessus sans attendre le GPS.
+    // IP AVANT le premier affichage (~200ms, cachee 24h) : si la ville
+    // sauvegardee est loin de la position IP (> ~50 km), on bascule
+    // directement -> pas de flash "ancienne ville puis ma position".
     if (window.GeoIpModule && state.city) {
-      window.GeoIpModule.tryIpGeolocation().then((ipLoc) => {
-        if (!ipLoc || !state.city) return;
-        const dLat = Math.abs(state.city.lat - ipLoc.lat);
-        const dLon = Math.abs(state.city.lon - ipLoc.lon);
-        if (dLat > 0.5 || dLon > 0.5) {
-          console.log("[Init] Ville sauvegardee loin de l'IP, upgrade:", ipLoc.city);
-          state.city = { name: ipLoc.city, lat: ipLoc.lat, lon: ipLoc.lon };
-          saveState();
-          loadWeather();
+      try {
+        const ipLoc = await window.GeoIpModule.tryIpGeolocation();
+        if (ipLoc && state.city) {
+          const dLat = Math.abs(state.city.lat - ipLoc.lat);
+          const dLon = Math.abs(state.city.lon - ipLoc.lon);
+          if (dLat > 0.5 || dLon > 0.5) {
+            console.log("[Init] Ville sauvegardee loin de l'IP, position directe:", ipLoc.city);
+            state.city = { name: ipLoc.city, lat: ipLoc.lat, lon: ipLoc.lon };
+            saveState();
+          }
         }
-      }).catch(() => {});
+      } catch (e) { /* IP indispo -> on garde la ville sauvegardee */ }
     }
+    loadWeather(true);
   } else {
-    // Première visite : Paris d'abord, IP/GPS en arrière-plan
-    state.city = { name: "Paris", lat: 48.8566, lon: 2.3522 };
-    saveState();
-    loadWeather();
-
+    // Premiere visite : position IP D'ABORD (~200ms, cachee 24h ensuite).
+    // Plus de flash "Paris" : on attend la detection IP avant le 1er
+    // chargement, Paris n'est qu'un secours si l'IP echoue.
+    let ipLoc = null;
     if (window.GeoIpModule) {
-      window.GeoIpModule.tryIpGeolocation().then((ipLoc) => {
-        if (ipLoc && state.city && state.city.name === "Paris") {
-          console.log("[Init] Upgrade IP:", ipLoc.city);
-          state.city = { name: ipLoc.city, lat: ipLoc.lat, lon: ipLoc.lon };
-          saveState();
-          loadWeather();
-        }
-      }).catch(() => {});
+      try { ipLoc = await window.GeoIpModule.tryIpGeolocation(); } catch (e) { /* ignore */ }
     }
+    if (ipLoc) {
+      console.log("[Init] Position IP directe:", ipLoc.city);
+      state.city = { name: ipLoc.city, lat: ipLoc.lat, lon: ipLoc.lon };
+    } else {
+      state.city = { name: "Paris", lat: 48.8566, lon: 2.3522 };
+    }
+    saveState();
+    loadWeather(true);
   }
 
   document.body.classList.remove("loading");
