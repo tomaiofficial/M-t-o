@@ -1710,12 +1710,28 @@ function startAutomaticGeolocation() {
     b.classList.toggle("active", b.dataset.unit === state.unit);
   });
 
+  // IMPORTANT : attacher l'UI AVANT tout chargement meteo.
+  // Pendant une panne Open-Meteo, loadWeather peut prendre 30s+
+  // (timeouts + retries + fallback) -> si la recherche est attachee
+  // apres, le bouton et la touche Entree sont morts pendant tout ce temps.
+  setupSearch();
+  setupSettings();
+  setupDonate();
+  renderFavorites();
+
+  // Canvas background : taille initiale + resize
+  resizeCanvas();
+  window.addEventListener("resize", () => {
+    resizeCanvas();
+    if (particleType !== "none") initParticles(particleType);
+  });
+
   if (state.demoMode) {
     // Force reload sur ville demo
     saveState();
-    await loadWeather();
+    loadWeather();
   } else if (hasState) {
-    await loadWeather();
+    loadWeather();
 
     // Geoloc IP des le debut : si la ville sauvegardee est loin de la
     // position IP (> ~50 km), on bascule dessus sans attendre le GPS.
@@ -1736,7 +1752,7 @@ function startAutomaticGeolocation() {
     // Première visite : Paris d'abord, IP/GPS en arrière-plan
     state.city = { name: "Paris", lat: 48.8566, lon: 2.3522 };
     saveState();
-    await loadWeather();
+    loadWeather();
 
     if (window.GeoIpModule) {
       window.GeoIpModule.tryIpGeolocation().then((ipLoc) => {
@@ -1751,19 +1767,6 @@ function startAutomaticGeolocation() {
   }
 
   document.body.classList.remove("loading");
-
-  // Canvas background : taille initiale + resize
-  resizeCanvas();
-  window.addEventListener("resize", () => {
-    resizeCanvas();
-    if (particleType !== "none") initParticles(particleType);
-  });
-
-  // Setup UI
-  setupSearch();
-  setupSettings();
-  setupDonate();
-  renderFavorites();
 
   // GPS en arrière-plan
   setTimeout(() => {
