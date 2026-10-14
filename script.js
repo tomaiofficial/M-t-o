@@ -237,8 +237,8 @@ function updateBackgroundParticles(code, isNight) {
 
 // ============= WMO CODES + ICONS (SVG inline) =============
 const WMO = {
-  0:  { label: "Ciel dégagé",            icon: "apple-clear-day",         night: "apple-clear-night" },
-  1:  { label: "Plutôt ensoleillé",      icon: "apple-clear-day",         night: "apple-clear-night" },
+  0:  { label: "Ciel dégagé",            nightLabel: "Nuit claire",          icon: "apple-clear-day",         night: "apple-clear-night" },
+  1:  { label: "Plutôt ensoleillé",      nightLabel: "Nuit plutôt claire",   icon: "apple-clear-day",         night: "apple-clear-night" },
   2:  { label: "Partiellement nuageux",  icon: "apple-partly-cloudy-day", night: "apple-partly-cloudy-night" },
   3:  { label: "Ciel couvert",           icon: "apple-cloudy",            night: "apple-cloudy" },
   45: { label: "Brouillard",             icon: "apple-fog",               night: "apple-fog" },
@@ -754,12 +754,17 @@ function metNoToInternal(json) {
 
 // ============= HELPERS: weather state =============
 function getCurrentCondition(c) {
-  return (WMO[c.weather_code] || { label: "Conditions variables" }).label;
+  // La nuit, "Plutot ensoleille" devient "Nuit plutot claire" etc.
+  if (!WMO[c.weather_code]) return "Conditions variables";
+  return wmoInfo(c.weather_code, c.is_day === 0).label;
 }
 
 function wmoInfo(code, isNight) {
   const c = WMO[code] || { label: "—", icon: "apple-cloudy" };
-  return { label: c.label, icon: isNight && c.night ? c.night : c.icon };
+  return {
+    label: isNight && c.nightLabel ? c.nightLabel : c.label,
+    icon: isNight && c.night ? c.night : c.icon
+  };
 }
 
 // Icone Apple haute qualite : reference le sprite SVG dans index.html
