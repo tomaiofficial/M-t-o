@@ -3,12 +3,12 @@
 //  Géolocalisation auto + IP fallback + descriptions stables
 // ============================================================
 
-// ============= SEASONAL BIAS (ajustement long-terme) =============
-// Bias en °C (negatif = plus frais), applique au-dela de J+7 daily
-// et au-dela de 48h hourly, selon le mois du JOUR CIBLE.
+// ============= SEASONAL BIAS DESACTIVE (temperatures reelles) =============
+// Aucun ajustement : on affiche les temperatures API brutes.
+// Valeurs a 0 pour garder la structure sans effet.
 const SEASONAL_BIAS_BY_MONTH = {
-  1: -5, 2: -5, 3: -4, 4: -3, 5: -2, 6: -1,
-  7:  0, 8:  0, 9: -2, 10: -3, 11: -4, 12: -5
+  1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0,
+  7:  0, 8:  0, 9: 0, 10: 0, 11: 0, 12: 0
 };
 const SEASONAL_BIAS_DAILY_MIN_DAYS = 7;
 const SEASONAL_BIAS_HOURLY_MIN_HOURS = 48;
@@ -501,19 +501,17 @@ function openMeteoToInternal(json) {
     visibility: cur.visibility != null ? cur.visibility : (h.visibility ? h.visibility[startIdx] : null)
   };
 
-  // SEASONAL BIAS : ajustement long-terme (J+7+ daily, 48h+ hourly)
+  // Temperatures reelles : pas d'ajustement (bias a 0)
   const dailyBiased = applySeasonalBiasToDaily(daily);
   const hourlyBiased = applySeasonalBiasToHourly(hourly);
 
   return applyFreshBias({ current, hourly: hourlyBiased, daily: dailyBiased });
 }
 
-// ============= FRESH BIAS (-3°C, demande senpai) =============
-// Decalage d'affichage : l'app affiche les temperatures ~3°C plus
-// fraiches que l'API brute, partout (actuelle + heures + 10 jours +
-// ressenti). Applique a chaque fetch sur les donnees fraiches -> "ca
-// revient" automatiquement des que l'API evolue.
-const FRESH_BIAS = -3;
+// ============= FRESH BIAS DESACTIVE (temperatures reelles) =============
+// Aucun decalage : l'app affiche les temperatures API brutes partout
+// (actuelle + heures + 10 jours + ressenti).
+const FRESH_BIAS = 0;
 function applyFreshBias(data) {
   const shift = (v) => (typeof v === "number" ? v + FRESH_BIAS : v);
   const shiftArr = (arr) => (Array.isArray(arr) ? arr.map(shift) : arr);
