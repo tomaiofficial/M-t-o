@@ -931,7 +931,6 @@ function setTheme(c, d) {
   // Particules canvas (pluie / neige / etoiles) selon conditions
   updateBackgroundParticles(c.weather_code, !isDaytime(c, d));
 }
-}
 
 function getDayName(dateStr, offset = 0) {
   const d = new Date(dateStr);
