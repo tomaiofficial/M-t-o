@@ -842,9 +842,26 @@ function isHourDay(isoTime, daily) {
   return hm >= sunriseHm && hm < sunsetHm;
 }
 
-function isDaytime(c) {
-  if (c.is_day === 0 || c.is_day === false) return false;
-  if (c.is_day === 1 || c.is_day === true) return true;
+function isDaytime(c, d) {
+  if (c && (c.is_day === 0 || c.is_day === false)) return false;
+  if (c && (c.is_day === 1 || c.is_day === true)) return true;
+  // Secours : vrai lever/coucher du soleil du jour (pas des heures fixes)
+  try {
+    if (d && d.sunrise && d.sunset && d.sunrise.length && d.sunset.length) {
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      // cherche l'index du jour courant, sinon J+0
+      let idx = 0;
+      if (d.time && d.time.length) {
+        const i = d.time.indexOf(todayStr);
+        if (i >= 0) idx = i;
+      }
+      const sr = new Date(d.sunrise[idx]).getTime();
+      const ss = new Date(d.sunset[idx]).getTime();
+      const t = now.getTime();
+      if (!isNaN(sr) && !isNaN(ss)) return t >= sr && t < ss;
+    }
+  } catch (e) { /* fallback heures */ }
   // fallback: heure locale
   const h = new Date().getHours();
   return h >= 6 && h < 20;
@@ -857,10 +874,15 @@ function getHourLabel(timeStr) {
 }
 
 // Theme : determine le theme CSS en fonction du temps actuel
+// NUIT (selon vrai coucher du soleil / is_day) => fond nuit TOUJOURS,
+// meme sous pluie/nuages/orage (night-cloudy sombre, pas eclaire).
 // Themes : day-clear, partly-cloudy, cloudy, rain, storm, snow, fog, sunset, windy, night-clear, night-cloudy
-function getWeatherTheme(c) {
-  const day = isDaytime(c);
+function getWeatherTheme(c, d) {
+  const day = isDaytime(c, d);
   const code = c.weather_code;
+  const cloudyNight = [2, 3, 45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99].includes(code);
+  // NUIT : fond nuit comme les autres, jamais eclaire
+  if (!day) return cloudyNight ? "night-cloudy" : "night-clear";
   // Pluie / bruine
   if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return "rain";
   // Orages
@@ -869,24 +891,30 @@ function getWeatherTheme(c) {
   if ([71, 73, 75, 85, 86].includes(code)) return "snow";
   // Brouillard
   if ([45, 48].includes(code)) return "fog";
-  // Couvert
-  if (code === 3) return day ? "cloudy" : "night-cloudy";
+  // Couvert (jour uniquement ici, la nuit est geree plus haut)
+  if (code === 3) return "cloudy";
   // Partiellement nuageux
   if (code === 2) return "partly-cloudy";
-  // Ciel degage / peu nuageux
+  // Ciel degage / peu nuageux (jour) : teinte sunset pres du vrai coucher du soleil
   if (code === 0 || code === 1) {
-    if (!day) return "night-clear";
-    // Lever/coucher de soleil ?
+    try {
+      if (d && d.sunset && d.sunset.length) {
+        const ss = new Date(d.sunset[0]).getTime();
+        const t = Date.now();
+        // +-75 min autour du coucher => theme sunset, sinon plein jour
+        if (!isNaN(ss) && Math.abs(t - ss) <= 75 * 60000) return "sunset";
+      }
+    } catch (e) { /* fallback heures */ }
     const hr = new Date().getHours();
     if ((hr >= 18 && hr <= 21) || (hr >= 5 && hr <= 7)) return "sunset";
     return "day-clear";
   }
-  // Defaut
-  return day ? "day-clear" : "night-clear";
+  // Defaut (jour)
+  return "day-clear";
 }
 
 function setTheme(c, d) {
-  const theme = getWeatherTheme(c);
+  const theme = getWeatherTheme(c, d);
   // Retire toutes les classes theme-*
   document.body.className = document.body.className
     .replace(/\btheme-[a-z-]+/g, "")
@@ -901,7 +929,8 @@ function setTheme(c, d) {
   }
 
   // Particules canvas (pluie / neige / etoiles) selon conditions
-  updateBackgroundParticles(c.weather_code, !isDaytime(c));
+  updateBackgroundParticles(c.weather_code, !isDaytime(c, d));
+}
 }
 
 function getDayName(dateStr, offset = 0) {
@@ -1121,7 +1150,7 @@ function renderHourly(h, d, c) {
     }
     const pop = h.precipitation_probability ? h.precipitation_probability[i] : null;
     // Jour/nuit synchronise avec sunrise/sunset -> meme icone que la meteo en haut
-    const isNight = isNow && c ? !isDaytime(c) : !isHourDay(t, d);
+    const isNight = isNow && c ? !isDaytime(c, d) : !isHourDay(t, d);
     // Premiere cellule = heure courante -> "Maint"
     const timeLabel = isNow ? "Maint" : getHourLabel(t);
 
