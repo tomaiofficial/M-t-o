@@ -279,12 +279,27 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
-const LS_KEY = "meteo_v6";
+const LS_KEY = "meteo_v7";
 // 12s : 8s etait trop court sur connexion lente / reveil de l'appareil
 // -> "signal is aborted without reason" au premier chargement
 const FETCH_TIMEOUT_MS = 12000;
-const CACHE_KEY_PREFIX = "meteo_cache_";
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
+const CACHE_KEY_PREFIX = "meteo_cache_v2_";
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h (secours offline uniquement, jamais servi si API OK)
+
+// Purge les anciens caches (donnees biaisees -3°C) : force un refetch reel
+function purgeOldBiasedCaches() {
+  try {
+    const toRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.indexOf("meteo_cache_") === 0 && k.indexOf("meteo_cache_v2_") !== 0)) {
+        toRemove.push(k);
+      }
+    }
+    toRemove.forEach((k) => localStorage.removeItem(k));
+    if (toRemove.length) console.log("[Meteo] Anciens caches biaises purges:", toRemove.length);
+  } catch (e) { /* ignore */ }
+}
 
 // ============= HELPERS =============
 async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
@@ -622,7 +637,7 @@ async function fetchWeather(lat, lon) {
 
 // ============= MET.NO (fallback quand Open-Meteo est en panne) =============
 const metNoCache = new Map();
-const MET_NO_CACHE_TTL_MS = 10 * 60 * 1000;
+const MET_NO_CACHE_TTL_MS = 2 * 60 * 1000; // 2 min : suit le refresh global
 
 async function callMetNo(lat, lon) {
   const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
@@ -1766,6 +1781,7 @@ function startAutomaticGeolocation() {
 
 // ============= INIT =============
 (async function init() {
+  purgeOldBiasedCaches();
   const hasState = loadState();
   document.body.classList.add("loading");
 
@@ -1841,13 +1857,15 @@ function startAutomaticGeolocation() {
     try { startAutomaticGeolocation(); } catch (e) { console.warn(e); }
   }, 1000);
 
-  // Auto-refresh 60s
-  setInterval(tickLive, 60 * 1000);
+  // Auto-refresh 2 min : refetch + rerendu COMPLET
+  // (actuelle + condition + heure par heure + 10 jours + details + AQI + radar)
+  // via tickLive -> fetchWeather -> renderCity
+  setInterval(tickLive, 2 * 60 * 1000);
 
-  // Radar check every 5 min
+  // Radar check toutes les 2 min (aligne sur le refresh global)
   setInterval(async () => {
     if (!state.lastWeather || !window.RadarModule || !state.city) return;
     const c = state.lastWeather.current;
     await renderRadarOverlay(c);
-  }, 5 * 60 * 1000);
+  }, 2 * 60 * 1000);
 })();

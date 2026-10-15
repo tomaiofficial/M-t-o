@@ -39,7 +39,7 @@ const RADAR_COLORS = [
 // Cache pour eviter de re-fetcher le manifest a chaque appel
 let radarMetaCache = null;
 let radarMetaCachedAt = 0;
-const RADAR_META_TTL_MS = 10 * 60 * 1000; // 10 min (le manifest change peu)
+const RADAR_META_TTL_MS = 2 * 60 * 1000; // 2 min : aligne sur le refresh global
 
 // Canvas de decodage des tuiles (reutilise entre les appels)
 let radarDecodeCanvas = null;
