@@ -1040,6 +1040,22 @@ function renderDescription(c, d, h) {
   const parts = [];
   parts.push(getCurrentCondition(c));
 
+  // Style Apple : temperatures du jour meme + du lendemain dans la description
+  // Ex : "Ciel couvert · Aujourd'hui : 11° à 24° · Demain : Pluie faible, 13° à 22°"
+  if (d && d.temperature_2m_max && d.temperature_2m_min) {
+    const tmax0 = d.temperature_2m_max[0];
+    const tmin0 = d.temperature_2m_min[0];
+    if (tmax0 != null && tmin0 != null) {
+      parts.push(`Aujourd'hui : ${fmtTemp(tmin0)} à ${fmtTemp(tmax0)}`);
+    }
+    if (d.time && d.time.length > 1 && d.temperature_2m_max[1] != null && d.temperature_2m_min[1] != null) {
+      const tomCode = d.weather_code ? d.weather_code[1] : null;
+      const tomLabel = tomCode != null ? getCurrentCondition({ weather_code: tomCode, is_day: 1 }) : null;
+      const tomTxt = tomLabel ? `${tomLabel}, ` : "";
+      parts.push(`Demain : ${tomTxt}${fmtTemp(d.temperature_2m_min[1])} à ${fmtTemp(d.temperature_2m_max[1])}`);
+    }
+  }
+
   // UV
   if (d.uv_index_max && d.uv_index_max[0] != null) {
     const uv = d.uv_index_max[0];
