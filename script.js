@@ -282,7 +282,10 @@ const $ = (id) => document.getElementById(id);
 const LS_KEY = "meteo_v7";
 // 12s : 8s etait trop court sur connexion lente / reveil de l'appareil
 // -> "signal is aborted without reason" au premier chargement
-const FETCH_TIMEOUT_MS = 12000;
+// 18s : laisse Open-Meteo finir meme sur connexion lente (source
+// stable, pas de bascule Met.no intempestive). En vraie panne,
+// les erreurs HTTP arrivent vite et Met.no prend le relais.
+const FETCH_TIMEOUT_MS = 18000;
 const CACHE_KEY_PREFIX = "meteo_cache_v2_";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6h (secours offline uniquement, jamais servi si API OK)
 
@@ -613,7 +616,9 @@ async function fetchWeather(lat, lon) {
         data = openMeteoToInternal(json);
         data._source = "Open-Meteo";
       } catch (eOm) {
-        console.warn("[Meteo] Open-Meteo KO, Met.no prend le relais:", eOm.message || eOm);
+        // Situation normale (timeout 8s ou panne) : Met.no assure le
+        // relais, donc info discret plutot que warning rouge.
+        console.info("[Meteo] Open-Meteo lent/KO -> Met.no (", eOm.message || eOm, ")");
         data = await callMetNo(lat, lon);
       }
     }
