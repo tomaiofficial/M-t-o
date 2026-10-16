@@ -1781,8 +1781,20 @@ let lastGeoLat = null;
 let lastGeoLon = null;
 let lastGeoUpdate = 0;
 
-function startAutomaticGeolocation() {
+async function startAutomaticGeolocation() {
   if (geoWatchId !== null || !navigator.geolocation) return;
+  // Ne JAMAIS appeler watchPosition si la permission est refusee :
+  // ca spamme la console ("User denied Geolocation") a chaque visite
+  // et la geoloc IP prend deja le relais silencieusement.
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      const perm = await navigator.permissions.query({ name: "geolocation" });
+      if (perm.state === "denied") {
+        console.info("[Geo] Permission GPS refusee -> geoloc IP uniquement (console propre)");
+        return;
+      }
+    }
+  } catch (e) { /* Permissions API indispo -> on tente normalement */ }
   geoWatchId = navigator.geolocation.watchPosition(
     async (pos) => {
       const { latitude, longitude } = pos.coords;
@@ -1815,7 +1827,9 @@ function startAutomaticGeolocation() {
       }
     },
     (err) => {
-      console.warn("Geolocation unavailable:", err.message || err);
+      // Silencieux : refus GPS = situation normale, l'IP geoloc assure
+      // deja la position. On logge en info, pas en warning rouge.
+      console.info("[Geo] GPS indisponible (", err.message || err, ") -> fallback IP");
     },
     { enableHighAccuracy: true, maximumAge: 60000, timeout: 15000 }
   );
