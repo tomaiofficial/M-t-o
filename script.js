@@ -599,30 +599,28 @@ function aqiLabel(aqi) {
 // ============= FETCH WEATHER (main entry) =============
 async function fetchWeather(lat, lon) {
   try {
-    // Course parallele : si Open-Meteo n'a pas repondu au bout de 8s
-    // (panne, timeout), on tente Met.no EN PARALLELE au lieu d'attendre
-    // la fin des 3 retries (~40s) -> affichage quasi immediat meme en panne.
-    let omDone = false;
-    const omPromise = callOpenMeteo(lat, lon).then((json) => {
-      omDone = true;
-      const data = openMeteoToInternal(json);
-      data._source = "Open-Meteo";
-      return data;
-    });
-    // Delai avant de tenter Met.no en parallele : 0 si le disjoncteur
-    // 429 est actif (inutile d'attendre), sinon 8s
-    const mnDelay = Date.now() < openMeteoBlockedUntil ? 0 : 8000;
-    const mnPromise = new Promise((resolve, reject) => {
-      setTimeout(() => {
-        if (omDone) return reject(new Error("Open-Meteo a repondu a temps"));
-        callMetNo(lat, lon).then(resolve, reject);
-      }, mnDelay);
-    });
-    const data = await Promise.any([omPromise, mnPromise]);
+    // SOURCE STABLE : Open-Meteo d'abord, TOUJOURS quand il repond.
+    // (La course parallele avec Met.no faisait basculer la source d'un
+    // refresh a l'autre, et les deux modeles ne disent pas la meme
+    // chose -> "soleil" puis "nuageux" 5 min apres. Plus de flip-flop.)
+    // Met.no prend le relais seulement en cas d'echec reel ou de 429.
+    let data;
+    if (Date.now() < openMeteoBlockedUntil) {
+      data = await callMetNo(lat, lon); // 429 actif -> Met.no direct
+    } else {
+      try {
+        const json = await callOpenMeteo(lat, lon);
+        data = openMeteoToInternal(json);
+        data._source = "Open-Meteo";
+      } catch (eOm) {
+        console.warn("[Meteo] Open-Meteo KO, Met.no prend le relais:", eOm.message || eOm);
+        data = await callMetNo(lat, lon);
+      }
+    }
     saveToCache(lat, lon, data);
     return { data, source: data._source || "Open-Meteo" };
   } catch (e) {
-    console.warn("[Meteo] Open-Meteo failed:", e.message || e);
+    console.warn("[Meteo] Open-Meteo + Met.no failed:", e.message || e);
     // Les deux APIs ont echoue -> cache local
     const cached = loadFromCache(lat, lon);
     if (cached) {
