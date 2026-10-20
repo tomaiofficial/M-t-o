@@ -600,6 +600,31 @@ function aqiLabel(aqi) {
 }
 
 // ============= FETCH WEATHER (main entry) =============
+// Verifie que les donnees sont COMPLETES avant de les afficher.
+// A l'heure pile, Open-Meteo met a jour son modele et renvoie parfois
+// des tableaux vides/null pendant quelques minutes -> l'app affichait
+// des donnees fausses pour toute la semaine, puis ca revenait.
+// Maintenant : donnees incompletes = refus + bascule Met.no / cache.
+function isWeatherDataValid(data) {
+  if (!data || !data.current || !data.daily || !data.hourly) return false;
+  const t = data.current.temperature_2m;
+  if (typeof t !== "number" || t < -60 || t > 60) return false;
+  const dmax = data.daily.temperature_2m_max;
+  const dmin = data.daily.temperature_2m_min;
+  if (!Array.isArray(dmax) || dmax.length < 7 || !Array.isArray(dmin) || dmin.length < 7) return false;
+  for (let i = 0; i < 7; i++) {
+    if (typeof dmax[i] !== "number" || typeof dmin[i] !== "number") return false;
+    if (dmax[i] < -60 || dmax[i] > 60 || dmin[i] < -60 || dmin[i] > 60) return false;
+  }
+  const ht = data.hourly.temperature_2m;
+  if (!Array.isArray(ht) || ht.length < 24) return false;
+  // Trop de null dans les 48h a venir = mise a jour API en cours
+  if (ht.slice(0, 48).filter((v) => v == null).length > 4) return false;
+  const wc = data.hourly.weather_code;
+  if (Array.isArray(wc) && wc.slice(0, 48).filter((v) => v == null).length > 4) return false;
+  return true;
+}
+
 async function fetchWeather(lat, lon) {
   try {
     // SOURCE STABLE : Open-Meteo d'abord, TOUJOURS quand il repond.
@@ -615,11 +640,16 @@ async function fetchWeather(lat, lon) {
         const json = await callOpenMeteo(lat, lon);
         data = openMeteoToInternal(json);
         data._source = "Open-Meteo";
+        // Heure pile : l'API met a jour son modele et peut renvoyer
+        // des donnees incompletes pendant ~10 min -> on refuse et on
+        // bascule sur Met.no au lieu d'afficher n'importe quoi.
+        if (!isWeatherDataValid(data)) throw new Error("donnees incompletes (maj API en cours)");
       } catch (eOm) {
         // Situation normale (timeout 8s ou panne) : Met.no assure le
         // relais, donc info discret plutot que warning rouge.
         console.info("[Meteo] Open-Meteo lent/KO -> Met.no (", eOm.message || eOm, ")");
         data = await callMetNo(lat, lon);
+        if (!isWeatherDataValid(data)) throw new Error("donnees incompletes (2 sources)");
       }
     }
     saveToCache(lat, lon, data);
@@ -796,7 +826,22 @@ function metNoToInternal(json) {
 function getCurrentCondition(c) {
   // La nuit, "Plutot ensoleille" devient "Nuit plutot claire" etc.
   if (!WMO[c.weather_code]) return "Conditions variables";
+  // Pluie : le label suit l'INTENSITE reelle (precipitations mm/h),
+  // pas seulement le code -> "Pluie faible" peut devenir "Pluie",
+  // "Averses", "Pluie forte"... selon ce qu'il tombe vraiment.
+  if (RAIN_CODES.has(c.weather_code)) return rainLabel(c.weather_code, c.precipitation);
   return wmoInfo(c.weather_code, c.is_day === 0).label;
+}
+
+const RAIN_CODES = new Set([61, 63, 65, 80, 81, 82]);
+function rainLabel(code, precipMm) {
+  const showers = code >= 80; // 80/81/82 = averses, 61/63/65 = pluie continue
+  const p = typeof precipMm === "number" ? precipMm : null;
+  if (p == null) return showers ? "Averses" : "Pluie";
+  if (p < 0.5) return showers ? "Averses faibles" : "Pluie faible";
+  if (p < 2) return showers ? "Averses" : "Pluie";
+  if (p < 7) return showers ? "Fortes averses" : "Pluie forte";
+  return showers ? "Violentes averses" : "Pluie violente";
 }
 
 function wmoInfo(code, isNight) {
@@ -1715,6 +1760,44 @@ async function tickLive() {
   }
 }
 
+// ============= FAST TICK (temperature quasi temps reel) =============
+// Petit appel leger (~1 Ko, "current" uniquement) toutes les 30s :
+// - met a jour la temperature en direct (avec l'animation douce)
+// - si la pluie DEMARRE -> refresh complet immediat (pas besoin
+//   d'attendre le tick de 2 min pour voir la pluie apparaitre)
+async function fastTick() {
+  if (!state.city || !state.lastWeather || !state.lastWeather.current) return;
+  if (document.hidden) return; // onglet cache -> pas la peine
+  if (Date.now() < openMeteoBlockedUntil) return; // 429 actif
+  try {
+    const { lat, lon } = state.city;
+    const url =
+      `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}` +
+      `&longitude=${encodeURIComponent(lon)}` +
+      `&current=temperature_2m,apparent_temperature,precipitation,weather_code,is_day` +
+      `&timezone=auto`;
+    const res = await fetchWithTimeout(url, {}, 8000);
+    if (!res.ok) return;
+    const json = await res.json();
+    const cur = json.current;
+    if (!cur || typeof cur.temperature_2m !== "number") return;
+    const w = state.lastWeather;
+    const oldPrecip = typeof w.current.precipitation === "number" ? w.current.precipitation : 0;
+    // Temperature en direct
+    w.current.temperature_2m = cur.temperature_2m;
+    if (typeof cur.apparent_temperature === "number") w.current.apparent_temperature = cur.apparent_temperature;
+    smoothTemperature(w);
+    // Pluie qui demarre -> refresh complet tout de suite
+    const newPrecip = typeof cur.precipitation === "number" ? cur.precipitation : 0;
+    if (newPrecip >= 0.1 && oldPrecip < 0.1) {
+      console.info("[FastTick] pluie detectee -> refresh complet");
+      tickLive();
+    }
+  } catch (e) {
+    // Silencieux : le refresh 2 min reste la reference
+  }
+}
+
 // ============= TEMPERATURE SMOOTHING (anti-flicker) =============
 // Quand la temperature change (nouveau fetch), on l'anime de l'ancienne
 // vers la nouvelle au lieu d'un saut brutal. Effet subtil 1.5s.
@@ -1921,7 +2004,9 @@ async function startAutomaticGeolocation() {
   // Auto-refresh 2 min : refetch + rerendu COMPLET
   // (actuelle + condition + heure par heure + 10 jours + details + AQI + radar)
   // via tickLive -> fetchWeather -> renderCity
-  setInterval(tickLive, 2 * 60 * 1000);
+setInterval(tickLive, 2 * 60 * 1000);
+// Temperature quasi temps reel + detection pluie instantanee (leger)
+setInterval(fastTick, 30 * 1000);
 
   // Radar check toutes les 2 min (aligne sur le refresh global)
   setInterval(async () => {
