@@ -1024,6 +1024,12 @@ function renderCity(data) {
   const d = data.daily;
   const h = data.hourly;
 
+  // Observations reelles (station Meteo-France) : si une mesure fraiche
+  // existe a moins de 40 km, elle remplace la valeur du modele AVANT le
+  // rendu -> temperature du haut, cellule "Maint", details et description
+  // restent tous coherents (aucun double rendu).
+  applyRealObsToCurrent(c);
+
   // Ville
   setText("cityName", state.city.name);
   document.body.dataset.city = state.city.name;
@@ -1066,6 +1072,9 @@ function renderCity(data) {
 
   // Banners meteo severe (vigilance, thunder)
   renderBanners(c);
+
+  // Observations reelles : rafraichissement async (throttle 5 min)
+  refreshRealObsIfStale();
 }
 
 function renderBanners(c) {
@@ -1411,7 +1420,8 @@ function renderSourceBadge() {
   const el = $("sourceBadge");
   if (!el) return;
   const src = (state.lastWeather && state.lastWeather._source) || "Open-Meteo";
-  el.textContent = `Source : ${src} · ${getRelativeTime(state.lastRefreshMs)}`;
+  const obs = typeof obsBadgeText === "function" ? obsBadgeText() : "";
+  el.textContent = `Source : ${src}${obs ? " · " + obs : ""} · ${getRelativeTime(state.lastRefreshMs)}`;
 }
 
 // ============= DEMO MODE (test sans geoloc) =============
@@ -1785,7 +1795,11 @@ async function fastTick() {
     const oldPrecip = typeof w.current.precipitation === "number" ? w.current.precipitation : 0;
     // Temperature en direct
     w.current.temperature_2m = cur.temperature_2m;
+    w.current._modelTemp = cur.temperature_2m; // valeur modele brute (avant correction station)
     if (typeof cur.apparent_temperature === "number") w.current.apparent_temperature = cur.apparent_temperature;
+    // Si une mesure de station est disponible, elle reste prioritaire
+    // (le modele ne doit pas ecraser la vraie temperature).
+    applyRealObsToCurrent(w.current);
     smoothTemperature(w);
     // Pluie qui demarre -> refresh complet tout de suite
     const newPrecip = typeof cur.precipitation === "number" ? cur.precipitation : 0;
